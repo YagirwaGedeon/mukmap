@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{{ iti.nom }}</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>:root{--bg:#1a1b2e;--bg-card:#232541;--border:#3d4060;--text:#e8e9f3;--text-sec:#a0a3c2;--accent:#60a5fa;--red:#ef4444;--green:#4ade80;--yellow:#eab308}*{font-family:Arial,sans-serif;margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--text);display:flex}.content{flex:1;padding:30px;overflow-y:auto;max-width:600px}#map{width:500px;height:100vh}h2{font-size:1.4rem;margin-bottom:4px}.date{color:var(--text-sec);font-size:0.85rem;margin-bottom:20px}.section{margin-bottom:20px}.section h3{font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;color:#6b6e8a;margin-bottom:8px;border-bottom:1px solid var(--border);padding-bottom:6px}.badge{display:inline-block;padding:4px 12px;border-radius:12px;font-size:0.8rem;font-weight:700;margin:3px}.badge-rouge{background:var(--red);color:#fff}.badge-vert{background:var(--green);color:#fff}.badge-jaune{background:var(--yellow);color:#000}.alerte{background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b;padding:12px;border-radius:8px;margin-bottom:15px;font-size:0.9rem}a{color:var(--accent);text-decoration:none}</style>{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="content">
+    <a href="{% url 'itineraire_list' %}">← <span data-i18n="mes_itineraires">Mes itinéraires</span></a>
+    <h2>{{ iti.nom }}</h2>
+    <div class="date">{{ iti.date_creation|date:"d/m/Y H:i" }} · {{ iti.coordonnees|length }} <span data-i18n="points">points</span></div>
+
+    {% if iti.alerte %}<div class="alerte">⚠️ {{ iti.alerte|linebreaksbr }}</div>{% endif %}
+
+    <div class="section"><h3 data-i18n="analyse_zones">Analyse des zones traversées</h3>
+    {% if iti.analyse %}{% for z in iti.analyse %}
+        <span class="badge badge-{% if z.statut == 'dangereuse' %}rouge{% elif z.statut == 'securisee' %}vert{% else %}jaune{% endif %}">{{ z.zone_nom }}</span>
+    {% endfor %}{% else %}<p style="color:var(--text-sec)" data-i18n="aucune_zone_referencee">Aucune zone référencée.</p>{% endif %}
+    </div>
+</div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const coords = {{ iti.coordonnees|safe }};
+    const map = L.map('map').setView(coords[0] || [-1.67, 29.22], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
+    L.polyline(coords, {color:'#60a5fa',weight:3}).addTo(map);
+    L.circleMarker(coords[0], {radius:6,color:'#4ade80',fillColor:'#4ade80',fillOpacity:1}).addTo(map).bindPopup('Départ');
+    L.circleMarker(coords[coords.length-1], {radius:6,color:'#ef4444',fillColor:'#ef4444',fillOpacity:1}).addTo(map).bindPopup('Arrivée');
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body></html>

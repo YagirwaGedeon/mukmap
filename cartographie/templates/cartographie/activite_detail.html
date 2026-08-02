@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Détail activité - {{ activite.projet.nom }}</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --bg-primary: #1a1b2e; --bg-secondary: #232541; --bg-card: #2a2d4a;
+            --border-color: #3d4060; --text-primary: #e8e9f3; --text-secondary: #a0a3c2; --text-muted: #6b6e8a;
+            --accent-blue: #60a5fa; --accent-green: #4ade80; --accent-orange: #fb923c;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; display: flex; }
+        .content { flex: 1; padding: 30px; overflow-y: auto; max-width: 700px; }
+        #map { width: 500px; height: 100vh; }
+        .topbar a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; }
+        .topbar a:hover { color: var(--accent-blue); }
+        h2 { font-size: 1.5rem; margin: 15px 0 5px; }
+        .projet { color: var(--accent-orange); font-weight: 600; font-size: 0.9rem; margin-bottom: 20px; }
+        .section { margin-bottom: 20px; }
+        .section h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; }
+        .section p { color: var(--text-secondary); line-height: 1.6; font-size: 0.95rem; }
+        .meta { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+        .meta span { color: var(--text-muted); font-size: 0.9rem; }
+        .galerie { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .galerie img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border-color); cursor: pointer; transition: transform 0.2s; }
+        .galerie img:hover { transform: scale(1.02); }
+        .actions { margin-top: 25px; display: flex; gap: 12px; }
+        .actions a { text-decoration: none; padding: 8px 20px; border-radius: 6px; font-weight: 600; font-size: 0.9rem; }
+        .btn-retour { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); }
+        .btn-suppr { background: transparent; color: #f87171; border: 1px solid #f87171; }
+        .map-placeholder { width: 100%; height: 250px; border-radius: 8px; margin-bottom: 20px; }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="content">
+    <div class="topbar">
+        <a href="{% url 'dashboard' %}">← <span data-i18n="retour_tableau_bord">Retour au tableau de bord</span></a>
+    </div>
+
+    <h2>{{ activite.projet.nom }}</h2>
+    <div class="projet">{{ activite.date_creation|date:"d/m/Y H:i" }}</div>
+
+    <div class="meta">
+        <span>📍 {{ activite.latitude|floatformat:6 }}, {{ activite.longitude|floatformat:6 }}</span>
+        <span>👥 {{ activite.nombre_beneficiaires }} <span data-i18n="beneficiaires">bénéficiaires</span></span>
+    </div>
+
+    <div class="section">
+        <h3 data-i18n="rapport_activite">Rapport d'activité</h3>
+        <p>{{ activite.rapport|linebreaksbr }}</p>
+    </div>
+
+    {% if activite.observations %}
+    <div class="section">
+        <h3 data-i18n="observations">Observations</h3>
+        <p>{{ activite.observations|linebreaksbr }}</p>
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <h3 data-i18n="localisation">Localisation</h3>
+        <div id="mini-map" class="map-placeholder"></div>
+    </div>
+
+    {% if activite.photos.all %}
+    <div class="section">
+        <h3><span data-i18n="photos">Photos</span> ({{ activite.photos.count }})</h3>
+        <div class="galerie">
+            {% for photo in activite.photos.all %}
+                <a href="{{ photo.image.url }}" target="_blank">
+                    <img src="{{ photo.image.url }}" alt="Photo {{ forloop.counter }}">
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="actions">
+        <a href="{% url 'dashboard' %}" class="btn-retour" data-i18n="tableau_de_bord">Tableau de bord</a>
+        <a href="{% url 'activite_delete' activite.pk %}" class="btn-suppr" data-i18n="supprimer">Supprimer</a>
+    </div>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const lat = {{ activite.latitude }};
+    const lng = {{ activite.longitude }};
+
+    const map = L.map('map').setView([lat, lng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    L.marker([lat, lng]).addTo(map).bindPopup('<b>{{ activite.projet.nom }}</b>').openPopup();
+
+    const mini = L.map('mini-map', { zoomControl: false }).setView([lat, lng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {}).addTo(mini);
+    L.marker([lat, lng]).addTo(mini);
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

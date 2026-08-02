@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Nouvel itinéraire</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>:root{--bg:#1a1b2e;--bg-card:#232541;--bg-input:#1e2038;--border:#3d4060;--text:#e8e9f3;--text-sec:#a0a3c2;--accent:#60a5fa;--green:#4ade80}[data-theme="light"]{--bg:#f0f2f5;--bg-card:#ffffff;--bg-input:#f9fafb;--border:#d1d5db;--text:#1f2937;--text-sec:#6b7280}*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}body{background:var(--bg);color:var(--text);display:flex}.sidebar{width:380px;background:var(--bg-card);padding:25px;overflow-y:auto;border-right:1px solid var(--border)}#map{flex:1;height:100vh}h1{font-size:1.3rem;margin-bottom:4px}.sub{color:var(--text-sec);font-size:0.85rem;margin-bottom:20px}.form-group{margin-bottom:14px}label{display:block;margin-bottom:5px;color:var(--text-sec);font-weight:600;font-size:0.85rem}input{width:100%;padding:10px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;font-size:0.95rem;color:var(--text)}input:focus{border-color:var(--accent);outline:none}button{width:100%;padding:12px;background:var(--green);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:bold;cursor:pointer;margin-top:8px}.infos{color:var(--text-sec);font-size:0.85rem;margin:10px 0;padding:10px;background:var(--bg-input);border-radius:6px}.lien-retour{color:var(--text-sec);text-decoration:none;font-size:0.85rem}.lien-retour:hover{color:var(--accent)}</style>{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="sidebar">
+    <a href="{% url 'itineraire_list' %}" class="lien-retour">← <span data-i18n="mes_itineraires">Mes itinéraires</span></a>
+    <h1 data-i18n="tracer_itineraire">Tracer un itinéraire</h1>
+    <p class="sub" data-i18n="cliquez_tracer">Cliquez sur la carte pour tracer votre parcours.</p>
+    <form method="POST" id="itineraire-form">
+        {% csrf_token %}
+        <div class="form-group"><label><span data-i18n="nom_itineraire">Nom de l'itinéraire</span> *</label><input type="text" name="nom" required placeholder="Ex: Trajet Goma - Sake" data-i18n-ph="ph_nom_itineraire"></div>
+        <input type="hidden" name="coordonnees" id="coordonnees" value="[]">
+        <div class="infos" id="infos"><span data-i18n="points_traces">Points tracés :</span> <span id="nb-points">0</span></div>
+        <button type="button" id="btn-annuler" style="background:#6b6e8a;margin-top:6px" data-i18n="annuler_trace">Annuler le tracé</button>
+        <button type="submit" data-i18n="enregistrer_itineraire">Enregistrer l'itinéraire</button>
+    </form>
+</div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const map = L.map('map').setView([-1.67, 29.22], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+    const points = [];
+    let polyline = null;
+
+    map.on('click', function(e) {
+        points.push([e.latlng.lat, e.latlng.lng]);
+        L.circleMarker(e.latlng, {radius:5,color:'#60a5fa',fillColor:'#60a5fa',fillOpacity:1}).addTo(map);
+        if (polyline) map.removeLayer(polyline);
+        polyline = L.polyline(points, {color:'#60a5fa',weight:3}).addTo(map);
+        document.getElementById('coordonnees').value = JSON.stringify(points);
+        document.getElementById('nb-points').textContent = points.length;
+    });
+
+    document.getElementById('btn-annuler').onclick = function() {
+        points.length = 0;
+        if (polyline) { map.removeLayer(polyline); polyline = null; }
+        document.getElementById('coordonnees').value = '[]';
+        document.getElementById('nb-points').textContent = '0';
+        map.eachLayer(function(l) { if (l instanceof L.CircleMarker) map.removeLayer(l); });
+    };
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body></html>

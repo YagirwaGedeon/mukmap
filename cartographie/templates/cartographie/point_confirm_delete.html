@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supprimer le point — MUKMAP v1.0</title>
+    <style>
+        :root { --bg:#0f1220; --bg-2:#171a2e; --border:#2a2f52; --text:#eef0ff; --text-2:#a3a9d0; --red:#ef4444; }
+        * { box-sizing:border-box; margin:0; padding:0; font-family:'Inter',Arial,sans-serif; }
+        body { background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; font-size:14px; }
+        .card { background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:34px; max-width:420px; width:90%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.45); }
+        .ico { font-size:2.6rem; margin-bottom:12px; }
+        h1 { font-size:1.05rem; margin-bottom:8px; }
+        p { color:var(--text-2); font-size:.85rem; margin-bottom:22px; }
+        .btn { display:inline-block; padding:10px 20px; border-radius:10px; font-weight:600; font-size:.85rem; text-decoration:none; margin:0 5px; transition:all .2s; border:none; cursor:pointer; font-family:'Inter',Arial,sans-serif; }
+        .btn-danger { background:var(--red); color:#fff; }
+        .btn-danger:hover { opacity:.85; transform:translateY(-1px); }
+        .btn-ghost { background:#1f2340; color:var(--text-2); }
+        .btn-ghost:hover { color:var(--text); }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="card">
+    <div class="ico">🗑️</div>
+    <h1><span data-i18n="supprimer_point">Supprimer le point</span> « {{ point.nom }} » ?</h1>
+    <p data-i18n="supprimer_point_texte">Cette action supprimera définitivement le point, sa photo et sa galerie multimédia.</p>
+    <form method="POST">{% csrf_token %}
+        <button type="submit" class="btn btn-danger" data-i18n="oui_supprimer">Oui, supprimer</button>
+        <a href="{% url 'index_cartographie' %}" class="btn btn-ghost" data-i18n="annuler">Annuler</a>
+    </form>
+</div>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

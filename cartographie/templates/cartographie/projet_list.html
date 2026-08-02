@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projets — MUKMAP v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+
+        #topbar { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px; padding: 12px 22px; background: color-mix(in srgb, var(--bg-2) 88%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .pastille { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+        .titre { font-weight: 800; font-size: 1rem; }
+        .sous-titre { font-size: .7rem; color: var(--text-3); }
+        nav { display: flex; gap: 6px; margin-left: 24px; flex-wrap: wrap; }
+        nav a { text-decoration: none; color: var(--text-2); font-size: .8rem; font-weight: 600; padding: 8px 14px; border-radius: 10px; transition: all .18s; display: flex; align-items: center; gap: 7px; }
+        nav a:hover { background: var(--bg-3); color: var(--text); }
+        nav a.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+        .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+        .conteneur { padding: 22px; max-width: 1200px; margin: 0 auto; }
+        .entete { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+        .entete h2 { font-size: 1.2rem; display: flex; align-items: center; gap: 9px; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: .83rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; cursor: pointer; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-vert { background: rgba(34,197,94,.14); color: var(--green); border-color: rgba(34,197,94,.3); }
+        .btn-rouge { background: rgba(239,68,68,.14); color: var(--red); border-color: rgba(239,68,68,.3); }
+        .btn-sm { padding: 6px 12px; font-size: .74rem; border-radius: 8px; }
+
+        .grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+        .carte { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; display: flex; flex-direction: column; gap: 10px; transition: transform .2s; }
+        .carte:hover { transform: translateY(-3px); }
+        .carte-tete { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .carte-tete h3 { font-size: 1rem; display: flex; align-items: center; gap: 9px; }
+        .badge { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: .66rem; font-weight: 700; }
+        .badge-vert { background: rgba(34,197,94,.15); color: var(--green); }
+        .badge-jaune { background: rgba(245,158,11,.15); color: var(--orange); }
+        .badge-rouge { background: rgba(239,68,68,.15); color: var(--red); }
+        .carte .but { color: var(--text-2); font-size: .8rem; line-height: 1.5; }
+        .carte .meta { color: var(--text-3); font-size: .74rem; display: flex; gap: 14px; flex-wrap: wrap; }
+        .meta span { display: inline-flex; align-items: center; gap: 5px; }
+        .carte-actions { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+        .carte-actions form { display: inline; }
+
+        .section-2 { margin-top: 28px; }
+        .section-2 h3 { font-size: 1rem; margin-bottom: 14px; display: flex; align-items: center; gap: 9px; }
+        .liste-modeles { display: grid; gap: 10px; }
+        .modele { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+        .modele .groupe { font-size: .8rem; font-weight: 700; }
+        .modele .nom { font-size: .8rem; color: var(--text-2); }
+        .modele form { display: inline; }
+        .form-modele { display: flex; gap: 10px; align-items: center; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; flex-wrap: wrap; }
+        .form-modele select, .form-modele input { padding: 9px 12px; border-radius: 9px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); font-size: .82rem; outline: none; }
+        .form-modele select { flex: 1; min-width: 160px; }
+        .form-modele input { flex: 2; min-width: 200px; }
+        .vide { color: var(--text-3); text-align: center; padding: 50px 0; font-size: .85rem; }
+        @media (max-width: 900px) { nav { display: none; } }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<header id="topbar">
+    <div class="logo">
+        <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+        <div>
+            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
+            <div class="sous-titre" data-i18n="gestion_projets_modeles">Gestion des projets et activités modèles</div>
+        </div>
+    </div>
+    <nav>
+        <a href="{% url 'dashboard' %}"><i data-lucide="layout-dashboard"></i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'zone_list' %}"><i data-lucide="shield-alert"></i> <span data-i18n="zones">Zones</span></a>
+        <a href="{% url 'itineraire_list' %}"><i data-lucide="route"></i> <span data-i18n="itineraires">Itinéraires</span></a>
+        <a href="{% url 'audit_list' %}"><i data-lucide="history"></i> <span data-i18n="historique">Historique</span></a>
+        <a href="{% url 'rapport_generer' %}"><i data-lucide="file-text"></i> <span data-i18n="rapports">Rapports</span></a>
+        <a href="{% url 'projet_list' %}" class="actif"><i data-lucide="folder-kanban"></i> <span data-i18n="projets">Projets</span></a>
+    </nav>
+    <div class="droite">
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <button class="btn btn-icon" id="btn-theme" title="Thème" data-i18n-title="theme"><i data-lucide="moon"></i></button>
+        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+    </div>
+</header>
+
+<main class="conteneur">
+    {% if messages %}
+    <div style="display:grid;gap:8px;margin-bottom:16px;">
+        {% for m in messages %}<div style="padding:11px 14px;border-radius:10px;font-size:.8rem;border:1px solid {% if m.tags == 'error' %}var(--red){% else %}var(--green){% endif %};background:{% if m.tags == 'error' %}rgba(239,68,68,.1){% else %}rgba(34,197,94,.1){% endif %};color:{% if m.tags == 'error' %}var(--red){% else %}var(--green){% endif %};">{{ m }}</div>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="entete">
+        <h2><i data-lucide="folder-kanban" style="width:22px;height:22px;color:var(--accent);"></i> <span data-i18n="projets">Projets</span></h2>
+        <a href="{% url 'projet_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> <span data-i18n="nouveau_projet">Nouveau projet</span></a>
+    </div>
+
+    {% if projets %}
+    <div class="grille">
+        {% for p in projets %}
+        <div class="carte">
+            <div class="carte-tete">
+                <h3><i data-lucide="folder" style="width:18px;height:18px;color:var(--accent);"></i> {{ p.nom }}</h3>
+                <span class="badge {% if p.statut == 'archive' %}badge-rouge{% else %}badge-vert{% endif %}">{% if p.statut == 'archive' %}<span data-i18n="badge_archive">ARCHIVÉ</span>{% else %}<span data-i18n="badge_actif">ACTIF</span>{% endif %}</span>
+            </div>
+            {% if p.but %}<div class="but">{{ p.but|truncatewords:24 }}</div>{% endif %}
+            <div class="meta">
+                <span><i data-lucide="calendar" style="width:13px;height:13px;"></i> {{ p.date_creation|date:"d/m/Y" }}</span>
+                <span><i data-lucide="activity" style="width:13px;height:13px;"></i> {{ p.nb_activites }} <span data-i18n="activites_n">activité(s)</span></span>
+                <span><i data-lucide="map-pin" style="width:13px;height:13px;"></i> {{ p.nb_points }} <span data-i18n="points_n">point(s)</span></span>
+            </div>
+            {% if p.cree_par %}<div class="meta"><span data-i18n="cree_par">Créé par</span> {{ p.cree_par.username }}</div>{% endif %}
+            <div class="carte-actions">
+                <a class="btn btn-sm" href="{% url 'index_cartographie' %}?projet={{ p.pk }}" title="Ouvrir sur la carte"><i data-lucide="map" style="width:14px;height:14px;"></i> <span data-i18n="carte">Carte</span></a>
+                <a class="btn btn-sm" href="{% url 'projet_edit' p.pk %}" title="Modifier"><i data-lucide="edit-3" style="width:14px;height:14px;"></i> <span data-i18n="modifier">Modifier</span></a>
+                <form method="POST" action="{% url 'projet_archive' p.pk %}" data-confirm-cle="{% if p.statut == 'archive' %}reactiver_projet_confirm{% else %}archiver_projet_confirm{% endif %}" data-confirm-nom="{{ p.nom }}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm {% if p.statut == 'archive' %}btn-vert{% else %}btn-rouge{% endif %}">
+                        <i data-lucide="{% if p.statut == 'archive' %}rotate-ccw{% else %}archive{% endif %}" style="width:14px;height:14px;"></i>
+                        {% if p.statut == 'archive' %}<span data-i18n="reactiver">Réactiver</span>{% else %}<span data-i18n="archiver">Archiver</span>{% endif %}
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="vide" data-i18n="aucun_projet">Aucun projet pour le moment. Créez votre premier projet.</div>
+    {% endif %}
+
+            <div class="section-2">
+        <h3><i data-lucide="list-checks" style="width:20px;height:20px;color:var(--orange);"></i> <span data-i18n="activites_modeles">Activités modèles</span></h3>
+        <div class="form-modele">
+            <form method="POST" action="{% url 'activite_modele_create' 0 %}" style="display:flex;gap:10px;flex:1;flex-wrap:wrap;" id="form-modele">
+                {% csrf_token %}
+                <select name="projet_choisi" id="select-projet-modele" required>
+                    <option value="" data-i18n="selectionner_projet">— Projet —</option>
+                    {% for p in projets %}<option value="{{ p.pk }}">{{ p.nom }}</option>{% endfor %}
+                </select>
+                <input type="text" name="nom" placeholder="Ex : Supervision GPS des villages" data-i18n-ph="ex_activite" required>
+                <button type="submit" class="btn btn-primary btn-sm"><span data-i18n="ajouter">Ajouter</span></button>
+            </form>
+        </div>
+        <div class="liste-modeles" style="margin-top:12px;">
+            {% for m in activites_modeles %}
+            <div class="modele">
+                <div><span class="groupe">{{ m.projet.nom }}</span> — <span class="nom">{{ m.nom }}</span></div>
+                <form method="POST" action="{% url 'activite_modele_delete' m.pk %}" data-confirm-cle="supprimer_modele_confirm" data-confirm-nom="{{ m.nom }}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-rouge" title="Supprimer"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
+                </form>
+            </div>
+            {% empty %}
+            <div class="vide" style="padding:24px 0;" data-i18n="aucun_modele">Aucune activité modèle. Ajoutez-en pour accélérer la saisie sur le terrain.</div>
+            {% endfor %}
+        </div>
+    </div>
+</main>
+
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+document.getElementById('form-modele').addEventListener('submit', function(e) {
+    const sel = document.getElementById('select-projet-modele');
+    if (!sel.value) { e.preventDefault(); alert(mukmapT('selectionnez_projet')); return; }
+    this.action = this.action.replace('/projet/0/', '/projet/' + sel.value + '/');
+});
+document.querySelectorAll('form[data-confirm-cle]').forEach(f => {
+    f.addEventListener('submit', function(e) {
+        const t = mukmapT(this.dataset.confirmCle).replace('{nom}', this.dataset.confirmNom);
+        if (!confirm(t)) e.preventDefault();
+    });
+});
+document.getElementById('btn-theme').addEventListener('click', () => {
+    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+});
+const t = localStorage.getItem('theme');
+if (t) document.documentElement.dataset.theme = t;
+if (window.lucide) lucide.createIcons();
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

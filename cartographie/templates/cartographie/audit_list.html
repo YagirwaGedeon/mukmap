@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head><meta charset="UTF-8"><title>Journal d'audit</title>
+<style>:root{--bg:#1a1b2e;--bg-card:#232541;--border:#3d4060;--text:#e8e9f3;--text-sec:#a0a3c2;--text-muted:#6b6e8a;--accent:#60a5fa}[data-theme="light"]{--bg:#f0f2f5;--bg-card:#ffffff;--border:#d1d5db;--text:#1f2937;--text-sec:#6b7280}*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}body{background:var(--bg);color:var(--text)}.topbar{background:var(--bg-card);padding:16px 30px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}.topbar h1{font-size:1.3rem}.topbar nav a{color:var(--text-sec);text-decoration:none;margin-left:18px;font-size:0.9rem}.topbar nav a:hover{color:var(--accent)}.container{max-width:1000px;margin:0 auto;padding:30px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border-bottom:1px solid var(--border);font-size:0.85rem;text-align:left}th{color:var(--text-muted);font-weight:600;text-transform:uppercase;font-size:0.75rem}td{color:var(--text-sec)}.filtres{margin-bottom:20px}.filtres select{background:var(--bg-card);color:var(--text);border:1px solid var(--border);padding:8px 14px;border-radius:6px;font-size:0.85rem}.vide{text-align:center;padding:60px;color:var(--text-muted)}</style>{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="topbar"><h1 data-i18n="journal_audit">Journal d'audit</h1><nav>{% include 'cartographie/_selecteur_langue.html' %}<a href="{% url 'zone_list' %}"><span data-i18n="zones">Zones</span></a><a href="{% url 'dashboard' %}"><span data-i18n="tableau_de_bord">Dashboard</span></a><a href="{% url 'index_cartographie' %}"><span data-i18n="carte">Carte</span></a></nav></div>
+<div class="container">
+    <form class="filtres" method="GET"><label style="color:var(--text-sec);margin-right:10px;" data-i18n="filtrer_par_agent">Filtrer par agent :</label>
+        <select name="user" onchange="this.form.submit()"><option value="" data-i18n="tous">Tous</option>{% for u in users %}<option value="{{ u.utilisateur.pk }}" {% if user_filtre == u.utilisateur.pk %}selected{% endif %}>{{ u.utilisateur.username }}</option>{% endfor %}</select>
+    </form>
+    {% if logs %}
+    <table><tr><th data-i18n="date_heure">Date</th><th data-i18n="utilisateur">Utilisateur</th><th data-i18n="action">Action</th><th data-i18n="adresse_ip">IP</th><th data-i18n="details">Détails</th></tr>
+    {% for l in logs %}<tr><td>{{ l.date|date:"d/m/Y H:i" }}</td><td>{{ l.utilisateur.username|default:'-' }}</td><td>{{ l.action }}</td><td>{{ l.adresse_ip|default:'-' }}</td><td>{{ l.details|truncatewords:10 }}</td></tr>{% endfor %}</table>
+    {% else %}<div class="vide" data-i18n="aucune_entree">Aucune entrée.</div>{% endif %}
+</div>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body></html>

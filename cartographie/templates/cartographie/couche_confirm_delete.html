@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supprimer la couche</title>
+    <style>
+        :root {
+            --bg-primary: #1a1b2e; --bg-secondary: #232541; --bg-card: #2a2d4a;
+            --border-color: #3d4060; --text-primary: #e8e9f3; --text-secondary: #a0a3c2;
+            --accent-red: #f87171;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: var(--bg-primary); color: var(--text-primary); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 40px; max-width: 500px; text-align: center; }
+        h2 { margin-bottom: 10px; }
+        p { color: var(--text-secondary); margin-bottom: 25px; }
+        .actions { display: flex; gap: 12px; justify-content: center; }
+        .actions a, .actions button { text-decoration: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; }
+        .btn-confirmer { background: var(--accent-red); color: #0a0a1a; }
+        .btn-annuler { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="card">
+    <h2 data-i18n="confirmer_suppression">Confirmer la suppression</h2>
+    <p><span data-i18n="supprimer_couche_texte">Voulez-vous vraiment supprimer la couche</span> « {{ couche.nom }} » ?<br><span data-i18n="geometries_supprimees">Toutes les géométries associées seront supprimées.</span></p>
+    <form method="POST" class="actions">
+        {% csrf_token %}
+        <button type="submit" class="btn-confirmer" data-i18n="oui_supprimer">Oui, supprimer</button>
+        <a href="{% url 'index_cartographie' %}" class="btn-annuler" data-i18n="annuler">Annuler</a>
+    </form>
+</div>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

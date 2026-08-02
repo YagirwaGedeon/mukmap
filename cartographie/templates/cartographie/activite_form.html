@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nouvelle activité - Encodage Géo</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --bg-primary: #1a1b2e; --bg-secondary: #232541; --bg-card: #2a2d4a; --bg-input: #1e2038;
+            --border-color: #3d4060; --text-primary: #e8e9f3; --text-secondary: #a0a3c2; --text-muted: #6b6e8a;
+            --accent-blue: #60a5fa; --accent-green: #4ade80; --accent-red: #f87171;
+            --success-bg: #064e3b; --success-text: #6ee7b7; --success-border: #065f46;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; display: flex; }
+        #map { flex: 1; height: 100vh; }
+        .sidebar { width: 420px; background: var(--bg-secondary); padding: 30px; overflow-y: auto; border-right: 1px solid var(--border-color); }
+        .sidebar h2 { font-size: 1.3rem; margin-bottom: 5px; }
+        .sidebar .subtitle { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 25px; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-weight: 600; font-size: 0.85rem; }
+        input, textarea, select {
+            width: 100%; padding: 10px 12px; background: var(--bg-input); border: 1px solid var(--border-color);
+            border-radius: 8px; font-size: 0.95rem; color: var(--text-primary); transition: border 0.3s;
+        }
+        input:focus, textarea:focus, select:focus { border-color: var(--accent-blue); outline: none; box-shadow: 0 0 0 3px rgba(96,165,250,0.15); }
+        input[readonly] { background: var(--bg-card); color: var(--text-muted); cursor: not-allowed; }
+        input::placeholder, textarea::placeholder { color: var(--text-muted); }
+        input[type="file"] { padding: 8px; font-size: 0.85rem; }
+        input[type="file"]::file-selector-button {
+            background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color);
+            border-radius: 6px; padding: 6px 14px; margin-right: 12px; cursor: pointer;
+        }
+        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: background 0.2s; margin-top: 10px; }
+        .btn-primary { background: var(--accent-green); color: #0a0a1a; }
+        .btn-primary:hover { background: #22c55e; }
+        .btn-second { background: var(--accent-blue); color: #0a0a1a; }
+        .btn-second:hover { background: #3b82f6; }
+        .alert { padding: 12px 14px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem; }
+        .alert-success { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+        .nav-top { display: flex; gap: 15px; margin-bottom: 20px; }
+        .nav-top a { color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; }
+        .nav-top a:hover { color: var(--accent-blue); }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="sidebar">
+    <div class="nav-top">
+        <a href="{% url 'index_cartographie' %}">← <span data-i18n="carte">Carte</span></a>
+        <a href="{% url 'dashboard' %}"><span data-i18n="tableau_de_bord">Dashboard</span></a>
+    </div>
+    <h2 data-i18n="nouvelle_activite">Nouvelle activité</h2>
+    <p class="subtitle" data-i18n="cliquez_positionner">Cliquez sur la carte pour positionner le point.</p>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-success">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="projet"><span data-i18n="projet">Projet</span> *</label>
+            <select id="projet" name="projet" required>
+                <option value="" data-i18n="selectionnez_projet_option">Sélectionnez un projet</option>
+                {% for p in projets %}
+                    <option value="{{ p.pk }}">{{ p.nom }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if est_admin %}
+        <div class="form-group">
+            <label for="agent"><span data-i18n="assigner_agent">Assigner à l'agent</span> *</label>
+            <select id="agent" name="agent" required>
+                <option value="" data-i18n="selectionnez_agent">Sélectionnez un agent</option>
+                {% for a in agents_list %}
+                    <option value="{{ a.pk }}">{{ a.get_full_name|default:a.username }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        <div class="form-group">
+            <label for="rapport"><span data-i18n="rapport_activite">Rapport d'activité</span> *</label>
+            <textarea id="rapport" name="rapport" rows="4" required placeholder="Ex: J'étais à Sake..." data-i18n-ph="ph_rapport_activite"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="observations" data-i18n="observations">Observations</label>
+            <textarea id="observations" name="observations" rows="3" placeholder="Observations complémentaires..." data-i18n-ph="ph_observations"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="nombre_beneficiaires" data-i18n="nombre_beneficiaires">Nombre de bénéficiaires</label>
+            <input type="number" id="nombre_beneficiaires" name="nombre_beneficiaires" value="0" min="0">
+        </div>
+        <div class="form-group">
+            <label for="latitude"><span data-i18n="latitude">Latitude</span> *</label>
+            <input type="number" step="any" id="latitude" name="latitude" required placeholder="Cliquez sur la carte" data-i18n-ph="cliquez_sur_carte" readonly>
+        </div>
+        <div class="form-group">
+            <label for="longitude"><span data-i18n="longitude">Longitude</span> *</label>
+            <input type="number" step="any" id="longitude" name="longitude" required placeholder="Cliquez sur la carte" data-i18n-ph="cliquez_sur_carte" readonly>
+        </div>
+        <div class="form-group">
+            <label for="photos" data-i18n="photos_jpg_png">Photos (JPG, PNG)</label>
+            <input type="file" id="photos" name="photos" accept="image/*" multiple>
+        </div>
+        <button type="submit" class="btn-primary" data-i18n="enregistrer_activite">Enregistrer l'activité</button>
+    </form>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const map = L.map('map').setView([-1.67, 29.22], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    let marqueur = null;
+    map.on('click', function(e) {
+        document.getElementById('latitude').value = e.latlng.lat.toFixed(6);
+        document.getElementById('longitude').value = e.latlng.lng.toFixed(6);
+        if (marqueur) { marqueur.setLatLng(e.latlng); }
+        else {
+            marqueur = L.marker(e.latlng, {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                })
+            }).addTo(map);
+        }
+    });
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

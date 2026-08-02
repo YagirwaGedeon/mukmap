@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Mes itinéraires</title>
+<style>:root{--bg:#1a1b2e;--bg-card:#232541;--border:#3d4060;--text:#e8e9f3;--text-sec:#a0a3c2;--text-muted:#6b6e8a;--accent:#60a5fa;--green:#4ade80;--red:#ef4444;--yellow:#eab308}[data-theme="light"]{--bg:#f0f2f5;--bg-card:#ffffff;--border:#d1d5db;--text:#1f2937;--text-sec:#6b7280;--text-muted:#9ca3af}*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}body{background:var(--bg);color:var(--text)}.topbar{background:var(--bg-card);padding:16px 30px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}.topbar h1{font-size:1.3rem}.topbar nav a{color:var(--text-sec);text-decoration:none;margin-left:18px;font-size:0.9rem}.topbar nav a:hover{color:var(--accent)}.container{max-width:800px;margin:0 auto;padding:30px}.btn-add{background:var(--green);color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:0.9rem;display:inline-block;margin-bottom:20px}.carte{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}.carte h3{font-size:1rem}.carte .meta{color:var(--text-muted);font-size:0.82rem;margin-top:4px}.carte .actions a{text-decoration:none;margin-left:12px;font-size:0.85rem;font-weight:600}.btn-detail{color:var(--accent)}.btn-del{color:var(--red)}.vide{text-align:center;padding:60px;color:var(--text-muted)}.alerte{background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b;padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.85rem}</style>{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="topbar"><h1 data-i18n="mes_itineraires">Mes itinéraires</h1><nav><a href="{% url 'index_cartographie' %}"><span data-i18n="carte">Carte</span></a><a href="{% url 'dashboard' %}"><span data-i18n="tableau_de_bord">Dashboard</span></a><a href="{% url 'itineraire_create' %}">+ <span data-i18n="nouvel_itineraire">Nouvel itinéraire</span></a></nav></div>
+<div class="container">
+    <a href="{% url 'itineraire_create' %}" class="btn-add">+ <span data-i18n="tracer_nouvel_itineraire">Tracer un nouvel itinéraire</span></a>
+    {% if itineraire %}
+        {% for i in itineraire %}
+        <div class="carte">
+            <div><h3>{{ i.nom }}</h3><div class="meta">{{ i.date_creation|date:"d/m/Y H:i" }} · {{ i.coordonnees|length }} <span data-i18n="points_n">point(s)</span></div>{% if i.alerte %}<div class="alerte">⚠️ {{ i.alerte|linebreaksbr }}</div>{% endif %}</div>
+            <div class="actions"><a href="{% url 'itineraire_detail' i.pk %}" class="btn-detail" data-i18n="detail">Détail</a><a href="{% url 'itineraire_delete' i.pk %}" class="btn-del" data-i18n="supprimer">Supprimer</a></div>
+        </div>
+        {% endfor %}
+    {% else %}<div class="vide" data-i18n="aucun_itineraire">Aucun itinéraire enregistré.</div>{% endif %}
+</div>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body></html>

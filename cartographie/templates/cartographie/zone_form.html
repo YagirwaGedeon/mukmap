@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if edition %}Modifier{% else %}Nouvelle{% endif %} zone - MUKMAP v1.0</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { --bg: #1a1b2e; --bg-card: #232541; --bg-input: #1e2038; --border: #3d4060; --text: #e8e9f3; --text-sec: #a0a3c2; --accent: #60a5fa; --green: #4ade80; }
+        [data-theme="light"] { --bg: #f0f2f5; --bg-card: #ffffff; --bg-input: #f9fafb; --border: #d1d5db; --text: #1f2937; --text-sec: #6b7280; --accent: #2563eb; --green: #16a34a; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); display: flex; }
+        .sidebar { width: 400px; background: var(--bg-card); padding: 25px; overflow-y: auto; border-right: 1px solid var(--border); }
+        #map { flex: 1; height: 100vh; }
+        h1 { font-size: 1.3rem; margin-bottom: 4px; }
+        .sub { color: var(--text-sec); font-size: 0.85rem; margin-bottom: 20px; }
+        .form-group { margin-bottom: 14px; }
+        label { display: block; margin-bottom: 5px; color: var(--text-sec); font-weight: 600; font-size: 0.85rem; }
+        input, textarea, select { width: 100%; padding: 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; color: var(--text); }
+        input:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; }
+        button { width: 100%; padding: 12px; background: var(--green); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; }
+        button:hover { opacity: 0.9; }
+        .lien-retour { color: var(--text-sec); text-decoration: none; font-size: 0.85rem; display: block; margin-bottom: 15px; }
+        .lien-retour:hover { color: var(--accent); }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="sidebar">
+    <a href="{% url 'zone_list' %}" class="lien-retour">← <span data-i18n="retour">Retour</span></a>
+    <h1>{% if edition %}<span data-i18n="modifier_zone">Modifier la zone</span>{% else %}<span data-i18n="nouvelle_zone_securite">Nouvelle zone de sécurité</span>{% endif %}</h1>
+    <p class="sub" data-i18n="cliquez_positionner_zone">Cliquez sur la carte pour positionner ou délimiter la zone.</p>
+    <form method="POST">
+        {% csrf_token %}
+        <div class="form-group"><label><span data-i18n="nom_zone">Nom de la zone</span> *</label><input type="text" name="nom" required value="{{ zone.nom|default:'' }}"></div>
+        <div class="form-group">
+            <label><span data-i18n="statut">Statut</span> *</label>
+            <select name="statut" id="statut" onchange="document.getElementById('motif-group').style.display=this.value==='dangereuse'?'block':'none'">
+                <option value="dangereuse" {% if zone.statut == 'dangereuse' %}selected{% endif %}>🔴 <span data-i18n="option_zone_dangereuse">Zone dangereuse</span></option>
+                <option value="securisee" {% if zone.statut == 'securisee' %}selected{% endif %}>🟢 <span data-i18n="option_zone_securisee">Zone sécurisée</span></option>
+                <option value="indisponible" {% if zone.statut == 'indisponible' %}selected{% endif %}>🟡 <span data-i18n="option_info_indisponible">Information indisponible</span></option>
+            </select>
+        </div>
+        <div class="form-group" id="motif-group" style="display:{% if zone.statut == 'dangereuse' or not zone %}block{% else %}none{% endif %}">
+            <label data-i18n="motif_declaration">Motif de déclaration</label>
+            <textarea name="motif" rows="3" placeholder="Conflit armé, route impraticable, etc." data-i18n-ph="ph_motif">{{ zone.motif|default:'' }}</textarea>
+        </div>
+        <div class="form-group"><label data-i18n="rayon_zone_ponctuelle">Rayon (m) pour zone ponctuelle</label><input type="number" name="rayon" value="{{ zone.rayon|default:'100' }}"></div>
+        <div><label data-i18n="coordonnees_zone">Coordonnées (cliquez sur la carte)</label></div>
+        <input type="hidden" name="coordonnees" id="coordonnees" value='{{ zone.coordonnees|default:"[29.22, -1.67]" }}'>
+        <input type="hidden" name="type_geometrie" id="type_geometrie" value="{{ zone.type_geometrie|default:'Point' }}">
+        <button type="submit">{% if edition %}<span data-i18n="mettre_a_jour">Mettre à jour</span>{% else %}<span data-i18n="declarer_zone">Déclarer la zone</span>{% endif %}</button>
+    </form>
+</div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const map = L.map('map').setView([-1.67, 29.22], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
+    let marker = null;
+    {% if zone and zone.coordonnees %}
+        {% if zone.type_geometrie == 'Point' %}
+            marker = L.marker([{{ zone.coordonnees.1 }}, {{ zone.coordonnees.0 }}]).addTo(map);
+            map.setView([{{ zone.coordonnees.1 }}, {{ zone.coordonnees.0 }}], 13);
+        {% endif %}
+    {% endif %}
+    map.on('click', function(e) {
+        if (marker) map.removeLayer(marker);
+        marker = L.marker(e.latlng).addTo(map);
+        document.getElementById('coordonnees').value = JSON.stringify([e.latlng.lng, e.latlng.lat]);
+    });
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

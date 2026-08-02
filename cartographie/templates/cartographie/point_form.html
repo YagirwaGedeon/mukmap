@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modifier le point — MUKMAP v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        .conteneur { max-width: 900px; margin: 0 auto; padding: 26px 18px; }
+        .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; margin-bottom: 18px; }
+        h1 { font-size: 1.1rem; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+        .sous { color: var(--text-3); font-size: .8rem; margin-bottom: 18px; }
+        label { display: block; font-size: .72rem; font-weight: 600; color: var(--text-2); margin: 12px 0 5px; text-transform: uppercase; letter-spacing: .5px; }
+        input, select, textarea { width: 100%; padding: 10px 12px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: .85rem; outline: none; transition: border .2s; font-family: 'Inter', Arial, sans-serif; }
+        input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(109,93,246,.18); }
+        .grille { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: .85rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; cursor: pointer; font-family: 'Inter', Arial, sans-serif; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-danger { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
+        .galerie { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+        .g-item { position: relative; border-radius: 12px; overflow: hidden; aspect-ratio: 1; background: var(--bg-3); border: 1px solid var(--border); }
+        .g-item img { width: 100%; height: 100%; object-fit: cover; }
+        .g-item .badge-type { position: absolute; top: 6px; left: 6px; font-size: .6rem; font-weight: 700; background: rgba(0,0,0,.6); color: #fff; padding: 3px 8px; border-radius: 999px; }
+        .g-item .del { position: absolute; bottom: 6px; right: 6px; background: rgba(239,68,68,.9); color: #fff; width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: .8rem; }
+        .g-item .fichier { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; font-size: .7rem; color: var(--text-2); }
+        .hint { font-size: .72rem; color: var(--text-3); margin-top: 5px; }
+        @media (max-width: 700px) { .grille { grid-template-columns: 1fr; } }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<main class="conteneur">
+    <div class="card">
+        <h1>✏️ <span data-i18n="modifier_point">Modifier le point</span> « {{ point.nom }} »</h1>
+        <p class="sous" data-i18n="point_form_sub">Éditez les informations et la galerie multimédia, puis enregistrez.</p>
+        <form method="POST" enctype="multipart/form-data">{% csrf_token %}
+            <label><span data-i18n="nom_lieu">Nom du lieu</span> *</label>
+            <input type="text" name="nom" value="{{ point.nom }}" required>
+            <div class="grille">
+                <div>
+                    <label data-i18n="categorie">Catégorie</label>
+                    <select name="categorie">
+                        {% for cle, lib in categories %}<option value="{{ cle }}" {% if point.categorie == cle %}selected{% endif %}>{{ lib }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label data-i18n="etat">État</label>
+                    <select name="statut">
+                        {% for cle, lib in statuts %}<option value="{{ cle }}" {% if point.statut == cle %}selected{% endif %}>{{ lib }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="grille">
+                <div><label data-i18n="province">Province</label><input type="text" name="province" value="{{ point.province }}"></div>
+                <div><label data-i18n="commune">Commune</label><input type="text" name="commune" value="{{ point.commune }}"></div>
+            </div>
+            <label data-i18n="quartier_village">Quartier / Village</label>
+            <input type="text" name="quartier" value="{{ point.quartier }}">
+            <label data-i18n="description">Description</label>
+            <textarea name="description" rows="3">{{ point.description }}</textarea>
+            <div class="grille">
+                <div><label><span data-i18n="latitude">Latitude</span> *</label><input type="number" step="any" name="latitude" value="{{ point.latitude }}" required></div>
+                <div><label><span data-i18n="longitude">Longitude</span> *</label><input type="number" step="any" name="longitude" value="{{ point.longitude }}" required></div>
+            </div>
+            <label data-i18n="photo_principale">Photo principale</label>
+            <input type="file" name="photo" accept="image/*">
+            {% if point.photo %}<div class="hint"><span data-i18n="photo_actuelle">Photo actuelle :</span> {{ point.photo.name }}</div>{% endif %}
+            <label data-i18n="ajouter_medias">Ajouter des médias (photos, vidéos, audio, PDF)</label>
+            <input type="file" name="medias" multiple accept="image/*,video/*,audio/*,.pdf">
+            <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
+                <button type="submit" class="btn btn-primary">💾 <span data-i18n="enregistrer">Enregistrer</span></button>
+                <a class="btn" href="{% url 'index_cartographie' %}" data-i18n="annuler">Annuler</a>
+            </div>
+        </form>
+    </div>
+
+    {% if medias %}
+    <div class="card">
+        <h1>🖼️ <span data-i18n="galerie_multimedia">Galerie multimédia</span> ({{ medias|length }})</h1>
+        <p class="sous" data-i18n="cliquez_corbeille">Cliquez sur la corbeille pour supprimer un média.</p>
+        <div class="galerie">
+            {% for m in medias %}
+            <div class="g-item">
+                <span class="badge-type">{{ m.get_type_display }}</span>
+                {% if m.type == 'photo' %}
+                    <a href="{{ m.fichier.url }}" target="_blank"><img src="{{ m.fichier.url }}"></a>
+                {% elif m.type == 'video' %}
+                    <div class="fichier">🎬<span>{{ m.fichier.name|slice:":28" }}</span></div>
+                {% elif m.type == 'audio' %}
+                    <div class="fichier">🎵<span>{{ m.fichier.name|slice:":28" }}</span></div>
+                {% else %}
+                    <div class="fichier">📄<span>{{ m.fichier.name|slice:":28" }}</span></div>
+                {% endif %}
+                <a class="del" href="{% url 'media_delete' m.pk %}" data-confirm-cle="supprimer_media_confirm" title="Supprimer" data-i18n-title="supprimer">✕</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</main>
+<script>
+document.querySelectorAll('a[data-confirm-cle]').forEach(a => {
+    a.addEventListener('click', function(e) {
+        const t = mukmapT(this.dataset.confirmCle);
+        if (!confirm(t)) e.preventDefault();
+    });
+});
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

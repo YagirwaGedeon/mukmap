@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau de bord — MUKMAP v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+
+        #topbar {
+            position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px;
+            padding: 12px 22px; background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+            backdrop-filter: blur(14px); border-bottom: 1px solid var(--border);
+        }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .pastille { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+        .titre { font-weight: 800; font-size: 1rem; }
+        .sous-titre { font-size: .7rem; color: var(--text-3); }
+        nav { display: flex; gap: 6px; margin-left: 24px; flex-wrap: wrap; }
+        nav a {
+            text-decoration: none; color: var(--text-2); font-size: .8rem; font-weight: 600;
+            padding: 8px 14px; border-radius: 10px; transition: all .18s; display: flex; align-items: center; gap: 7px;
+        }
+        nav a:hover { background: var(--bg-3); color: var(--text); }
+        nav a.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; box-shadow: 0 4px 14px rgba(79,70,229,.35); }
+        .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+        .horloge { font-size: .75rem; font-weight: 600; color: var(--text-2); background: var(--bg-3); border: 1px solid var(--border); padding: 7px 12px; border-radius: 10px; letter-spacing: .5px; }
+
+        #bandeau-session { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; padding: 14px 22px; background: var(--bg-2); border-bottom: 1px solid var(--border); }
+        .bse { display: flex; align-items: center; gap: 10px; }
+        .bse-icone { width: 36px; height: 36px; border-radius: 10px; background: rgba(109,93,246,.15); color: var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .bse-icone.violet { background: rgba(109,93,246,.15); color: var(--accent); }
+        .bse-icone.vert { background: rgba(34,197,94,.15); color: var(--green); }
+        .bse-icone.orange { background: rgba(245,158,11,.15); color: var(--orange); }
+        .bse-lib { font-size: .64rem; color: var(--text-3); text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+        .bse-val { font-size: .85rem; font-weight: 700; }
+        .bse-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+        button { font-family: 'Inter', Arial, sans-serif; cursor: pointer; border: none; background: none; color: var(--text); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: .83rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-icon { width: 38px; height: 38px; padding: 0; border-radius: 10px; }
+
+        .conteneur { padding: 22px; max-width: 1500px; margin: 0 auto; }
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; display: flex; align-items: center; gap: 14px; transition: transform .2s; }
+        .kpi:hover { transform: translateY(-3px); }
+        .kpi .ico { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
+        .kpi .valeur { font-size: 1.5rem; font-weight: 800; }
+        .kpi .libelle { font-size: .72rem; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .6px; }
+        .kpi .ico.violet { background: rgba(109,93,246,.15); }
+        .kpi .ico.bleu { background: rgba(59,130,246,.15); }
+        .kpi .ico.vert { background: rgba(34,197,94,.15); }
+        .kpi .ico.rouge { background: rgba(239,68,68,.15); }
+        .kpi .ico.orange { background: rgba(245,158,11,.15); }
+
+        .filtres { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 20px; box-shadow: var(--shadow); }
+        .filtres label { font-size: .7rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; display: block; }
+        .filtres select { min-width: 200px; padding: 9px 12px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .83rem; }
+
+        .grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+        .carte-chart { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; }
+        .carte-chart h3 { font-size: .85rem; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .chart { height: 300px; }
+        .chart-petit { height: 260px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+        th { text-align: left; color: var(--text-3); font-size: .68rem; text-transform: uppercase; letter-spacing: .8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+        td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+        tr:hover td { background: var(--bg-3); }
+        .badge { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: .68rem; font-weight: 600; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); }
+        .badge-danger { background: rgba(239,68,68,.15); color: var(--red); border-color: rgba(239,68,68,.3); }
+        .badge-vert { background: rgba(34,197,94,.15); color: var(--green); border-color: rgba(34,197,94,.3); }
+        .badge-bleu { background: rgba(59,130,246,.15); color: var(--blue); border-color: rgba(59,130,246,.3); }
+        .badge-jaune { background: rgba(245,158,11,.15); color: var(--orange); border-color: rgba(245,158,11,.3); }
+
+        @media (max-width: 900px) { nav { display: none; } .grille { grid-template-columns: 1fr; } }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<header id="topbar">
+    <div class="logo">
+        <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+        <div>
+            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
+            <div class="sous-titre" data-i18n="sous_titre_dashboard">Tableau de bord analytique — Développé par Ir. Yagirwa Gedeon</div>
+        </div>
+    </div>
+    <nav>
+        <a href="{% url 'dashboard' %}" class="actif"><i data-lucide="layout-dashboard"></i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'points_liste' %}"><i data-lucide="map-pin"></i> <span data-i18n="tous_points">Tous les points</span></a>
+        <a href="{% url 'import_page' %}"><i data-lucide="file-spreadsheet"></i> <span data-i18n="import_donnees">Import de données</span></a>
+        <a href="{% url 'zone_list' %}"><i data-lucide="shield-alert"></i> <span data-i18n="zones_securite">Zones</span></a>
+        <a href="{% url 'itineraire_list' %}"><i data-lucide="route"></i> <span data-i18n="itineraires">Itinéraires</span></a>
+        <a href="{% url 'audit_list' %}"><i data-lucide="history"></i> <span data-i18n="historique">Historique</span></a>
+        <a href="{% url 'rapport_generer' %}"><i data-lucide="file-text"></i> <span data-i18n="rapports">Rapports</span></a>
+        {% if user.is_superuser %}<a href="{% url 'agent_list' %}"><i data-lucide="users"></i> <span data-i18n="agents">Agents</span></a>{% endif %}
+    </nav>
+    <div class="droite">
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <div class="horloge" id="horloge" title="Date et heure" data-i18n-title="date_heure">--/--/---- --:--:--</div>
+        <button class="btn btn-icon" id="btn-theme" title="Thème" data-i18n-title="theme"><i data-lucide="moon"></i></button>
+        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+    </div>
+</header>
+
+<section id="bandeau-session">
+    <div class="bse">
+        <div class="bse-icone"><i data-lucide="user"></i></div>
+        <div><div class="bse-lib" data-i18n="utilisateur">Utilisateur</div><div class="bse-val">{{ user.get_full_name|default:user.username }}</div></div>
+    </div>
+    <div class="bse">
+        <div class="bse-icone violet"><i data-lucide="folder-kanban"></i></div>
+        <div><div class="bse-lib" data-i18n="projet_cours">Projet en cours</div><div class="bse-val">{{ projet_actif.nom|default:'Tous les projets' }}</div></div>
+    </div>
+    <div class="bse">
+        <div class="bse-icone vert"><i data-lucide="activity"></i></div>
+        <div><div class="bse-lib" data-i18n="activite_cours">Activité en cours</div><div class="bse-val">{{ activite_actuelle.nom|default:'Aucune' }}</div></div>
+    </div>
+    <div class="bse">
+        <div class="bse-icone orange"><i data-lucide="calendar-clock"></i></div>
+        <div><div class="bse-lib" data-i18n="date_heure">Date & heure</div><div class="bse-val" id="date-heure">{{ maintenant|date:"d/m/Y H:i:s" }}</div></div>
+    </div>
+    <div class="bse-actions">
+        <a class="btn" href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="ouvrir_carte">Ouvrir la carte</span></a>
+        {% if est_admin %}<a class="btn" href="{% url 'projet_list' %}"><i data-lucide="folder-kanban"></i> <span data-i18n="projets">Projets</span></a>{% endif %}
+        <a class="btn" href="{% url 'rapport_generer' %}"><i data-lucide="file-text"></i> <span data-i18n="rapports">Rapports</span></a>
+    </div>
+</section>
+
+<main class="conteneur">
+    <div class="kpis">
+        <div class="kpi"><div class="ico violet">🗺️</div><div><div class="valeur">{{ total_points }}</div><div class="libelle" data-i18n="kpi_points">Points encodés</div></div></div>
+        <div class="kpi"><div class="ico bleu">📋</div><div><div class="valeur">{{ total_activites }}</div><div class="libelle" data-i18n="kpi_activites">Activités</div></div></div>
+        <div class="kpi"><div class="ico vert">👥</div><div><div class="valeur">{{ total_beneficiaires }}</div><div class="libelle" data-i18n="kpi_beneficiaires">Bénéficiaires</div></div></div>
+        <div class="kpi"><div class="ico rouge">⚠️</div><div><div class="valeur">{{ zones_dangereuses }}</div><div class="libelle" data-i18n="kpi_zones_dangereuses">Zones dangereuses</div></div></div>
+        <div class="kpi"><div class="ico orange">🛡️</div><div><div class="valeur">{{ total_zones }}</div><div class="libelle" data-i18n="kpi_zones_securite">Zones de sécurité</div></div></div>
+    </div>
+
+    <form class="filtres" method="GET" action="{% url 'dashboard' %}">
+        <div>
+            <label data-i18n="projet">Projet</label>
+            <select name="projet">
+                <option value="" data-i18n="tous_projets">Tous les projets</option>
+                {% for p in projets %}<option value="{{ p.pk }}" {% if projet_selectionne == p.pk %}selected{% endif %}>{{ p.nom }}</option>{% endfor %}
+            </select>
+        </div>
+        <div>
+            <label data-i18n="agent_role">Agent</label>
+            <select name="agent">
+                <option value="" data-i18n="tous_agents">Tous les agents</option>
+                {% for a in agents %}<option value="{{ a.utilisateur.pk }}" {% if agent_selectionne == a.utilisateur.pk %}selected{% endif %}>{{ a.utilisateur.get_full_name|default:a.utilisateur.username }}</option>{% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary" data-i18n="filtrer">Filtrer</button>
+    </form>
+
+    {% if user.is_superuser %}
+    <div class="grille" style="margin-bottom:16px;">
+        <div class="carte-chart">
+            <h3><i data-lucide="shield-alert"></i> <span data-i18n="zones_securite">Zones de sécurité</span> <span style="margin-left:auto"><a class="btn btn-primary" style="padding:6px 12px;font-size:.72rem;" href="{% url 'zone_create' %}">+ <span data-i18n="nouvelle_zone">Nouvelle zone</span></a></span></h3>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead><tr><th data-i18n="zone">Zone</th><th data-i18n="statut">Statut</th><th data-i18n="motif">Motif</th><th data-i18n="date_declaration">Date</th><th></th></tr></thead>
+                    <tbody>
+                    {% for z in zones %}
+                        <tr>
+                            <td><b>{{ z.nom }}</b></td>
+                            <td><span class="badge {% if z.statut == 'dangereuse' %}badge-danger{% elif z.statut == 'securisee' %}badge-vert{% else %}badge-jaune{% endif %}">{{ z.get_statut_display }}</span></td>
+                            <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ z.motif }}</td>
+                            <td>{{ z.date_declaration|date:"d/m/Y" }}</td>
+                            <td><a href="{% url 'zone_edit' z.pk %}" class="btn btn-sm" style="padding:4px 10px;font-size:.7rem;" data-i18n="modifier">Modifier</a> <a href="{% url 'zone_delete' z.pk %}" class="btn btn-sm" style="padding:4px 10px;font-size:.7rem;color:var(--red);" data-i18n="supprimer">Supprimer</a></td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:24px;" data-i18n="aucune_zone">Aucune zone déclarée.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                <a class="btn" style="font-size:.75rem;" href="{% url 'zone_list' %}"><i data-lucide="list"></i> <span data-i18n="voir_toutes_zones">Voir toutes les zones</span></a>
+                <a class="btn" style="font-size:.75rem;" href="{% url 'zone_list' %}?statut=dangereuse"><i data-lucide="alert-triangle"></i> <span data-i18n="zones_dangereuses">Zones dangereuses</span></a>
+            </div>
+        </div>
+        <div class="carte-chart">
+            <h3><i data-lucide="file-text"></i> <span data-i18n="rapports_activites">Rapport d'activités</span></h3>
+            <p style="font-size:.8rem;color:var(--text-2);margin-bottom:14px;" data-i18n="rapport_texte">Générez le rapport de suivi du projet (activités, bénéficiaires, agents, zones de sécurité) pour la période choisie, puis téléchargez-le en PDF ou Word.</p>
+            <form class="filtres" method="GET" action="{% url 'rapport_generer' %}" style="margin-bottom:14px;box-shadow:none;padding:12px 14px;">
+                <div>
+                    <label data-i18n="periode">Période</label>
+                    <select name="periode" style="min-width:160px;">
+                        <option value="journalier" data-i18n="journalier">Journalier</option>
+                        <option value="hebdomadaire" data-i18n="hebdomadaire">Hebdomadaire</option>
+                        <option value="mensuel" selected data-i18n="mensuel">Mensuel</option>
+                        <option value="trimestriel" data-i18n="trimestriel">Trimestriel</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary"><i data-lucide="eye"></i> <span data-i18n="voir_rapport">Voir le rapport</span></button>
+            </form>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <a class="btn" style="background:rgba(239,68,68,.15);color:var(--red);" href="{% url 'rapport_telecharger' 'pdf' %}?periode=mensuel"><i data-lucide="file-down"></i> <span data-i18n="telecharger_pdf">Télécharger PDF</span></a>
+                <a class="btn" style="background:rgba(109,93,246,.15);color:var(--accent);" href="{% url 'rapport_telecharger' 'docx' %}?periode=mensuel"><i data-lucide="file-down"></i> <span data-i18n="telecharger_word">Télécharger Word</span></a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grille">
+        <div class="carte-chart">
+            <h3><span>📊</span> <span data-i18n="repartition_categories">Répartition par catégorie</span></h3>
+            <div class="chart" id="chart-categories"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>📅</span> <span data-i18n="points_par_mois">Points par mois</span></h3>
+            <div class="chart" id="chart-mois"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>🛡️</span> <span data-i18n="zones_securite">Zones de sécurité</span></h3>
+            <div class="chart chart-petit" id="chart-zones"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>🏢</span> <span data-i18n="activites_par_projet">Activités par projet</span></h3>
+            <div class="chart chart-petit" id="chart-projets"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>📍</span> <span data-i18n="points_par_province">Points par province</span></h3>
+            <div class="chart chart-petit" id="chart-provinces"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>👥</span> <span data-i18n="beneficiaires_mois">Bénéficiaires par mois</span></h3>
+            <div class="chart chart-petit" id="chart-benef"></div>
+        </div>
+    </div>
+
+    <div class="carte-chart" style="margin-top:16px;">
+        <h3><span>📋</span> <span data-i18n="activites_recentes">Dernières activités</span></h3>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th data-i18n="date_declaration">Date</th><th data-i18n="projet">Projet</th><th data-i18n="agent_role">Agent</th><th data-i18n="rapport">Rapport</th><th data-i18n="beneficiaires">Bénéficiaires</th><th data-i18n="securite">Sécurité</th><th></th></tr></thead>
+                <tbody>
+                {% for a in activites|slice:":15" %}
+                    <tr>
+                        <td>{{ a.date_creation|date:"d/m/Y H:i" }}</td>
+                        <td><b>{{ a.projet.nom }}</b></td>
+                        <td>{% if a.agent %}{{ a.agent.get_full_name|default:a.agent.username }}{% else %}—{% endif %}</td>
+                        <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ a.rapport }}</td>
+                        <td>{{ a.nombre_beneficiaires }}</td>
+                        <td>
+                            {% if a.niveau_securite %}<span class="badge {% if 'dangereuse' in a.niveau_securite %}badge-danger{% elif 'sécurisée' in a.niveau_securite %}badge-vert{% else %}badge-bleu{% endif %}">{{ a.niveau_securite }}</span>{% else %}—{% endif %}
+                        </td>
+                        <td><a href="{% url 'activite_detail' a.pk %}" class="btn btn-sm" style="padding:5px 12px;font-size:.72rem;" data-i18n="voir">Voir</a></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" style="text-align:center;color:var(--text-3);padding:30px;" data-i18n="aucun_activite">Aucune activité pour la période et les filtres sélectionnés.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+const theme = localStorage.getItem('theme') || 'dark';
+document.documentElement.dataset.theme = theme;
+const ETHEME = theme === 'dark' ? {bg:'#171a2e', text:'#a3a9d0', titre:'#eef0ff', bord:'#2a2f52'} : {bg:'#ffffff', text:'#4b5278', titre:'#1a1f36', bord:'#e3e5f2'};
+document.getElementById('btn-theme').addEventListener('click', () => {
+    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+    location.reload();
+});
+
+const catCouleurs = {Hôpital:'#ef4444',École:'#3b82f6',Église:'#8b5cf6',Police:'#1d4ed8',Marché:'#f59e0b',Projet:'#10b981',Incident:'#dc2626',Village:'#84cc16',Ville:'#0ea5e9',Pont:'#64748b',Route:'#a16207',Entreprise:'#6366f1','Zone rouge':'#b91c1c','Zone verte':'#16a34a','Zone orange':'#ea580c',Autre:'#78716c'};
+
+const pointsCategories = {{ points_categories_json|safe }};
+const pointsMois = {{ points_par_mois_json|safe }};
+const zonesStats = [
+    {nom:'Dangereuses', valeur: {{ zones_dangereuses }}, couleur:'#ef4444'},
+    {nom:'Sécurisées', valeur: {{ zones_securisees }}, couleur:'#22c55e'},
+    {nom:'Indisponibles', valeur: {{ zones_indisponibles }}, couleur:'#eab308'}
+];
+const activitesProjets = {{ activites_par_projet_json|safe }};
+const pointsProvinces = {{ points_par_province_json|safe }};
+const benefMois = {{ benef_par_mois_json|safe }};
+const pointsStatuts = {{ points_par_statut_json|safe }};
+
+const baseText = {color: ETHEME.text, fontFamily:'Inter'};
+const tooltip = {backgroundColor: ETHEME.bg, borderColor: ETHEME.bord, textStyle: {color: ETHEME.titre}};
+
+echarts.init(document.getElementById('chart-categories'), null, {renderer:'canvas'}).setOption({
+    tooltip, legend:{textStyle:baseText, bottom:0},
+    series:[{type:'pie', radius:['42%','68%'], itemStyle:{borderRadius:8, borderColor:ETHEME.bg, borderWidth:3},
+        data: pointsCategories.map(c => ({name:c.nom, value:c.valeur, itemStyle:{color:catCouleurs[c.nom] || '#6d5df6'}})),
+        label:{color:ETHEME.titre, fontFamily:'Inter', fontSize:11}}]
+});
+
+echarts.init(document.getElementById('chart-mois'), null, {renderer:'canvas'}).setOption({
+    tooltip, grid:{left:40, right:16, top:24, bottom:28},
+    xAxis:{type:'category', data: pointsMois.map(m => m.mois), axisLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+    yAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+    series:[{type:'line', smooth:true, data: pointsMois.map(m => m.valeur), symbolSize:7,
+        lineStyle:{color:'#6d5df6', width:3}, itemStyle:{color:'#6d5df6'},
+        areaStyle:{color:'rgba(109,93,246,.18)'}}]
+});
+
+echarts.init(document.getElementById('chart-zones'), null, {renderer:'canvas'}).setOption({
+    tooltip, legend:{textStyle:baseText, bottom:0},
+    series:[{type:'pie', radius:'68%', itemStyle:{borderRadius:8, borderColor:ETHEME.bg, borderWidth:3},
+        data: zonesStats.filter(z => z.valeur > 0), label:{color:ETHEME.titre, fontFamily:'Inter', fontSize:11}}]
+});
+
+echarts.init(document.getElementById('chart-projets'), null, {renderer:'canvas'}).setOption({
+    tooltip, grid:{left:40, right:16, top:24, bottom:60},
+    xAxis:{type:'category', data: activitesProjets.map(a => a.nom), axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:9, rotate:25}, axisLine:{lineStyle:{color:ETHEME.bord}}},
+    yAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+    series:[{type:'bar', data: activitesProjets.map(a => a.valeur), itemStyle:{color:'#3b82f6', borderRadius:[6,6,0,0]}, barWidth:'45%'}]
+});
+
+echarts.init(document.getElementById('chart-provinces'), null, {renderer:'canvas'}).setOption({
+    tooltip, grid:{left:90, right:20, top:14, bottom:24},
+    xAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+    yAxis:{type:'category', data: pointsProvinces.map(p => p.nom).reverse(), axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}, axisLine:{lineStyle:{color:ETHEME.bord}}},
+    series:[{type:'bar', data: pointsProvinces.map(p => p.valeur).reverse(), itemStyle:{color:'#10b981', borderRadius:[0,6,6,0]}, barWidth:'55%'}]
+});
+
+echarts.init(document.getElementById('chart-benef'), null, {renderer:'canvas'}).setOption({
+    tooltip, grid:{left:40, right:16, top:24, bottom:28},
+    xAxis:{type:'category', data: benefMois.map(m => m.mois), axisLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+    yAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+    series:[{type:'bar', data: benefMois.map(m => m.valeur), itemStyle:{color:'#f59e0b', borderRadius:[6,6,0,0]}, barWidth:'50%'}]
+});
+
+function majHorloge() {
+    const n = new Date();
+    const p2 = v => String(v).padStart(2, '0');
+    const d = `${p2(n.getDate())}/${p2(n.getMonth() + 1)}/${n.getFullYear()} ${p2(n.getHours())}:${p2(n.getMinutes())}:${p2(n.getSeconds())}`;
+    const h = document.getElementById('horloge');
+    const dh = document.getElementById('date-heure');
+    if (h) h.textContent = d;
+    if (dh) dh.textContent = d;
+}
+majHorloge();
+setInterval(majHorloge, 1000);
+
+if (window.lucide) lucide.createIcons();
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

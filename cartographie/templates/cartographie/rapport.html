@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapports d'activités — MUKMAP v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+
+        #topbar {
+            position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px;
+            padding: 12px 22px; background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+            backdrop-filter: blur(14px); border-bottom: 1px solid var(--border);
+        }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .pastille { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+        .titre { font-weight: 800; font-size: 1rem; }
+        .sous-titre { font-size: .7rem; color: var(--text-3); }
+        nav { display: flex; gap: 6px; margin-left: 24px; flex-wrap: wrap; }
+        nav a {
+            text-decoration: none; color: var(--text-2); font-size: .8rem; font-weight: 600;
+            padding: 8px 14px; border-radius: 10px; transition: all .18s; display: flex; align-items: center; gap: 7px;
+        }
+        nav a:hover { background: var(--bg-3); color: var(--text); }
+        nav a.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; box-shadow: 0 4px 14px rgba(79,70,229,.35); }
+        .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+        button { font-family: 'Inter', Arial, sans-serif; cursor: pointer; border: none; background: none; color: var(--text); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: .83rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-icon { width: 38px; height: 38px; padding: 0; border-radius: 10px; }
+        .btn-pdf { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; }
+        .btn-pdf:hover { color: #fff; box-shadow: 0 6px 20px rgba(239,68,68,.4); }
+        .btn-docx { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-docx:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+
+        .conteneur { padding: 22px; max-width: 1400px; margin: 0 auto; }
+
+        .entete-rapport {
+            background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: var(--shadow); padding: 20px 22px; margin-bottom: 20px;
+            display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+        }
+        .entete-rapport h2 { font-size: 1.05rem; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+        .entete-rapport .periode { font-size: .78rem; color: var(--text-3); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+        .entete-rapport form { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-left: auto; }
+        .entete-rapport label { font-size: .68rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; display: block; }
+        .entete-rapport select {
+            min-width: 180px; padding: 9px 12px; border-radius: 10px; background: var(--bg-3); color: var(--text);
+            border: 1px solid var(--border); outline: none; font-size: .83rem; font-weight: 600;
+        }
+        .actions-dl { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; display: flex; align-items: center; gap: 14px; transition: transform .2s; }
+        .kpi:hover { transform: translateY(-3px); }
+        .kpi .ico { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+        .kpi .valeur { font-size: 1.4rem; font-weight: 800; }
+        .kpi .libelle { font-size: .7rem; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+        .kpi .ico.violet { background: rgba(109,93,246,.15); color: var(--accent); }
+        .kpi .ico.bleu { background: rgba(59,130,246,.15); color: var(--blue); }
+        .kpi .ico.vert { background: rgba(34,197,94,.15); color: var(--green); }
+        .kpi .ico.rouge { background: rgba(239,68,68,.15); color: var(--red); }
+        .kpi .ico.orange { background: rgba(245,158,11,.15); color: var(--orange); }
+
+        .section { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; margin-bottom: 20px; }
+        .section h3 { font-size: .85rem; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 9px; color: var(--text); }
+        .section h3 .compte { margin-left: auto; font-size: .7rem; color: var(--text-3); background: var(--bg-3); border: 1px solid var(--border); padding: 3px 10px; border-radius: 999px; font-weight: 600; }
+
+        table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+        th { text-align: left; color: var(--text-3); font-size: .66rem; text-transform: uppercase; letter-spacing: .8px; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+        tr:hover td { background: var(--bg-3); }
+        .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: .68rem; font-weight: 700; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); white-space: nowrap; }
+        .badge-danger { background: rgba(239,68,68,.15); color: var(--red); border-color: rgba(239,68,68,.3); }
+        .badge-vert { background: rgba(34,197,94,.15); color: var(--green); border-color: rgba(34,197,94,.3); }
+        .badge-jaune { background: rgba(245,158,11,.15); color: var(--orange); border-color: rgba(245,158,11,.3); }
+        .badge-bleu { background: rgba(59,130,246,.15); color: var(--blue); border-color: rgba(59,130,246,.3); }
+
+        .grille-agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+        .agent { display: flex; align-items: center; gap: 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; transition: all .18s; }
+        .agent:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: .9rem; flex-shrink: 0; }
+        .agent .nom { font-size: .82rem; font-weight: 700; }
+        .agent .meta { font-size: .7rem; color: var(--text-3); margin-top: 2px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+
+        .activite { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-3); padding: 14px 16px; margin-bottom: 12px; }
+        .activite .tete { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+        .activite .tete .projet { font-weight: 800; font-size: .88rem; }
+        .activite .infos { display: flex; gap: 14px; flex-wrap: wrap; font-size: .74rem; color: var(--text-2); margin-bottom: 8px; }
+        .activite .infos span { display: inline-flex; align-items: center; gap: 5px; }
+        .activite .texte { font-size: .78rem; color: var(--text-2); line-height: 1.55; }
+        .activite .texte b { color: var(--text); }
+        .photos { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        .photos img { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); transition: transform .18s; }
+        .photos img:hover { transform: scale(1.06); }
+
+        .vide { text-align: center; padding: 40px 20px; color: var(--text-3); font-size: .82rem; }
+        .vide i { display: block; margin: 0 auto 8px; }
+
+        @media (max-width: 900px) { nav { display: none; } .grille { grid-template-columns: 1fr; } }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<header id="topbar">
+    <div class="logo">
+        <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+        <div>
+            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
+            <div class="sous-titre" data-i18n="rapports">Rapports d'activités</div>
+        </div>
+    </div>
+    <nav>
+        <a href="{% url 'dashboard' %}"><i data-lucide="layout-dashboard"></i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'import_page' %}"><i data-lucide="file-spreadsheet"></i> <span data-i18n="import_donnees">Import de données</span></a>
+        <a href="{% url 'zone_list' %}"><i data-lucide="shield-alert"></i> <span data-i18n="zones">Zones</span></a>
+        <a href="{% url 'itineraire_list' %}"><i data-lucide="route"></i> <span data-i18n="itineraires">Itinéraires</span></a>
+        <a href="{% url 'audit_list' %}"><i data-lucide="history"></i> <span data-i18n="historique">Historique</span></a>
+        <a href="{% url 'rapport_generer' %}" class="actif"><i data-lucide="file-text"></i> <span data-i18n="rapports">Rapports</span></a>
+        {% if user.is_superuser %}<a href="{% url 'agent_list' %}"><i data-lucide="users"></i> <span data-i18n="agents">Agents</span></a>{% endif %}
+    </nav>
+    <div class="droite">
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <button class="btn btn-icon" id="btn-theme" title="Thème" data-i18n-title="theme"><i data-lucide="moon"></i></button>
+        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+    </div>
+</header>
+
+<main class="conteneur">
+    <div class="entete-rapport">
+        <div>
+            <h2><i data-lucide="file-text" style="color:var(--accent);"></i> <span data-i18n="rapport_periode">Rapport d'activités de la période</span></h2>
+            <div class="periode"><i data-lucide="calendar-range" style="width:14px;height:14px;"></i> <span data-i18n="du">Du</span> {{ debut|date:"d/m/Y" }} <span data-i18n="au">au</span> {{ fin|date:"d/m/Y" }}</div>
+        </div>
+        <form method="GET" action="{% url 'rapport_generer' %}">
+            <div>
+                <label data-i18n="periode">Période</label>
+                <select name="periode" onchange="this.form.submit()">
+                    <option value="journalier" {% if periode == 'journalier' %}selected{% endif %} data-i18n="journalier">Journalier</option>
+                    <option value="hebdomadaire" {% if periode == 'hebdomadaire' %}selected{% endif %} data-i18n="hebdomadaire">Hebdomadaire</option>
+                    <option value="mensuel" {% if periode == 'mensuel' %}selected{% endif %} data-i18n="mensuel">Mensuel</option>
+                    <option value="trimestriel" {% if periode == 'trimestriel' %}selected{% endif %} data-i18n="trimestriel">Trimestriel</option>
+                </select>
+            </div>
+        </form>
+        <div class="actions-dl">
+            <a class="btn btn-pdf" href="{% url 'rapport_telecharger' 'pdf' %}?periode={{ periode }}"><i data-lucide="file-down"></i> <span data-i18n="telecharger_pdf">Télécharger PDF</span></a>
+            <a class="btn btn-docx" href="{% url 'rapport_telecharger' 'docx' %}?periode={{ periode }}"><i data-lucide="file-down"></i> <span data-i18n="telecharger_word">Télécharger Word</span></a>
+        </div>
+    </div>
+
+    <div class="kpis">
+        <div class="kpi"><div class="ico violet"><i data-lucide="clipboard-list"></i></div><div><div class="valeur">{{ total }}</div><div class="libelle" data-i18n="activites">Activités</div></div></div>
+        <div class="kpi"><div class="ico bleu"><i data-lucide="users"></i></div><div><div class="valeur">{{ total_beneficiaires }}</div><div class="libelle" data-i18n="beneficiaires">Bénéficiaires</div></div></div>
+        <div class="kpi"><div class="ico rouge"><i data-lucide="shield-alert"></i></div><div><div class="valeur">{{ zones_dangereuses }}</div><div class="libelle" data-i18n="zones_dangereuses">Zones dangereuses</div></div></div>
+        <div class="kpi"><div class="ico vert"><i data-lucide="shield-check"></i></div><div><div class="valeur">{{ zones_securisees }}</div><div class="libelle" data-i18n="zones_securisees">Zones sécurisées</div></div></div>
+        <div class="kpi"><div class="ico orange"><i data-lucide="shield-question"></i></div><div><div class="valeur">{{ zones_indisponibles }}</div><div class="libelle" data-i18n="sans_information">Sans information</div></div></div>
+    </div>
+
+    <div class="section">
+        <h3><i data-lucide="shield-alert" style="color:var(--red);"></i> <span data-i18n="zones">Zones de sécurité</span> <span class="compte">{{ zones|length }}</span></h3>
+        {% if zones %}
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th data-i18n="zone">Zone</th><th data-i18n="statut">Statut</th><th data-i18n="motif">Motif</th><th data-i18n="declaree_le">Déclarée le</th><th data-i18n="par">Par</th></tr></thead>
+                <tbody>
+                {% for z in zones %}
+                    <tr>
+                        <td><b>{{ z.nom }}</b></td>
+                        <td><span class="badge {% if z.statut == 'dangereuse' %}badge-danger{% elif z.statut == 'securisee' %}badge-vert{% else %}badge-jaune{% endif %}">{% if z.statut == 'dangereuse' %}<i data-lucide="alert-triangle" style="width:11px;height:11px;"></i>{% elif z.statut == 'securisee' %}<i data-lucide="shield-check" style="width:11px;height:11px;"></i>{% else %}<i data-lucide="help-circle" style="width:11px;height:11px;"></i>{% endif %}{{ z.get_statut_display }}</span></td>
+                        <td style="max-width:280px;">{{ z.motif|default:'—' }}</td>
+                        <td>{{ z.date_declaration|date:"d/m/Y H:i" }}</td>
+                        <td>{% if z.auteur %}{{ z.auteur.get_full_name|default:z.auteur.username }}{% else %}—{% endif %}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="vide"><i data-lucide="shield"></i><span data-i18n="aucune_zone_periode">Aucune zone déclarée sur cette période.</span></div>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h3><i data-lucide="users" style="color:var(--blue);"></i> <span data-i18n="agents">Agents</span> <span class="compte">{{ profils|length }}</span></h3>
+        {% if profils %}
+        <div class="grille-agents">
+            {% for p in profils %}
+            <div class="agent">
+                <div class="avatar">{{ p.utilisateur.get_full_name|default:p.utilisateur.username|slice:":1"|upper }}</div>
+                <div>
+                    <div class="nom">{{ p.utilisateur.get_full_name|default:p.utilisateur.username }}</div>
+                    <div class="meta">
+                        <span><i data-lucide="phone" style="width:11px;height:11px;"></i> {{ p.telephone|default:'—' }}</span>
+                        <span><i data-lucide="briefcase" style="width:11px;height:11px;"></i> {{ p.fonction|default:'Agent de terrain' }}</span>                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="vide"><i data-lucide="user-x"></i><span data-i18n="aucun_agent">Aucun agent enregistré.</span></div>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h3><i data-lucide="terminal" style="color:var(--orange);"></i> <span data-i18n="activites_administrateurs">Activités des administrateurs</span> <span class="compte">{{ audits|length }}</span></h3>
+        {% if audits %}
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th data-i18n="date_heure">Date et heure</th><th data-i18n="administrateur">Administrateur</th><th data-i18n="action">Action</th><th data-i18n="adresse_ip">Adresse IP</th></tr></thead>
+                <tbody>
+                {% for l in audits %}
+                    <tr>
+                        <td style="white-space:nowrap;"><i data-lucide="clock" style="width:11px;height:11px;color:var(--text-3);vertical-align:-1px;"></i> {{ l.date|date:"d/m/Y H:i" }}</td>
+                        <td><b>{{ l.utilisateur.get_full_name|default:l.utilisateur.username }}</b></td>
+                        <td>{{ l.action }}</td>
+                        <td>{{ l.adresse_ip|default:'—' }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="vide"><i data-lucide="terminal-square"></i><span data-i18n="aucune_admin_periode">Aucune activité d'administration sur cette période.</span></div>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h3><i data-lucide="map-pin" style="color:var(--green);"></i> <span data-i18n="activites_agents">Activités des agents</span> <span class="compte">{{ total }}</span></h3>
+        {% if activites %}
+        {% for a in activites %}
+        <div class="activite">
+            <div class="tete">
+                <span class="badge badge-bleu"><i data-lucide="folder" style="width:11px;height:11px;"></i> {{ a.projet.nom }}</span>
+                <span class="badge"><i data-lucide="clock" style="width:11px;height:11px;"></i> {{ a.date_creation|date:"d/m/Y H:i" }}</span>
+                <span class="badge"><i data-lucide="user" style="width:11px;height:11px;"></i> {% if a.agent %}{{ a.agent.get_full_name|default:a.agent.username }}{% else %}N/A{% endif %}</span>
+                {% if a.niveau_securite %}
+                <span class="badge {% if 'dangereuse' in a.niveau_securite %}badge-danger{% elif 'sécurisée' in a.niveau_securite %}badge-vert{% else %}badge-jaune{% endif %}"><i data-lucide="shield" style="width:11px;height:11px;"></i> {{ a.niveau_securite }}</span>
+                {% endif %}
+            </div>
+            <div class="infos">
+                <span><i data-lucide="map-pin" style="width:12px;height:12px;color:var(--text-3);"></i> {{ a.zone_visitee|default:'Zone non précisée' }}</span>
+                <span><i data-lucide="navigation" style="width:12px;height:12px;color:var(--text-3);"></i> {{ a.latitude|floatformat:5 }}, {{ a.longitude|floatformat:5 }}</span>
+                <span><i data-lucide="users" style="width:12px;height:12px;color:var(--text-3);"></i> {{ a.nombre_beneficiaires }} <span data-i18n="beneficiaires">bénéficiaires</span></span>
+            </div>
+            <div class="texte">{{ a.rapport|linebreaksbr }}</div>
+            {% if a.photos.all %}
+            <div class="photos">
+                {% for ph in a.photos.all|slice:":8" %}
+                <img src="{{ ph.image.url }}" alt="Photo de l'activité" loading="lazy">
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="vide"><i data-lucide="activity"></i><span data-i18n="aucune_activite_periode">Aucune activité enregistrée sur cette période.</span></div>
+        {% endif %}
+    </div>
+</main>
+
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+const theme = localStorage.getItem('theme') || 'dark';
+document.documentElement.dataset.theme = theme;
+document.getElementById('btn-theme').addEventListener('click', () => {
+    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+    location.reload();
+});
+if (window.lucide) lucide.createIcons();
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

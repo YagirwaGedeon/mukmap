@@ -1,0 +1,2239 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUKMAP v1.0 — Cartographie</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5; --accent-hover: #8278ff;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body, html { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-size: 14px; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+
+        button { font-family: 'Inter', Arial, sans-serif; cursor: pointer; border: none; background: none; color: var(--text); }
+        input, select, textarea {
+            width: 100%; padding: 9px 12px; background: var(--bg-2); color: var(--text);
+            border: 1px solid var(--border); border-radius: 10px; font-size: .85rem;
+            outline: none; transition: border .2s, box-shadow .2s; font-family: 'Inter', Arial, sans-serif;
+        }
+        input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(109,93,246,.18); }
+        label { display: block; font-size: .72rem; font-weight: 600; color: var(--text-2); margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .5px; }
+
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: .83rem;
+            background: var(--bg-3); color: var(--text); border: 1px solid var(--border);
+            transition: all .2s; position: relative; overflow: hidden; white-space: nowrap;
+        }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn:active { transform: scale(.97); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-danger { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
+        .btn-ghost { background: transparent; border-color: transparent; }
+        .btn-sm { padding: 6px 12px; font-size: .78rem; }
+        .btn-icon { width: 36px; height: 36px; padding: 0; border-radius: 10px; flex-shrink: 0; }
+        .btn-tool { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--bg-2); border: 1px solid var(--border); transition: all .15s; }
+        .btn-tool:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-tool.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; box-shadow: 0 4px 16px rgba(79,70,229,.4); }
+
+        .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+        .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: .7rem; font-weight: 600; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); }
+        .badge-cat { color: #fff; border: none; }
+        .titre-section { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-3); margin: 16px 0 8px; display: flex; align-items: center; justify-content: space-between; }
+        .separateur { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+        #topbar {
+            position: fixed; top: 0; left: 0; right: 0; height: 62px; z-index: 1001;
+            display: flex; align-items: center; gap: 16px; padding: 0 18px;
+            background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+            backdrop-filter: blur(14px); border-bottom: 1px solid var(--border);
+        }
+        #topbar .logo { display: flex; align-items: center; gap: 10px; min-width: 250px; }
+        #topbar .logo .pastille { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 1rem; box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+        #topbar .titre { font-weight: 800; font-size: .95rem; letter-spacing: .3px; }
+        #topbar .sous-titre { font-size: .68rem; color: var(--text-3); font-weight: 500; }
+
+        #recherche-wrap { position: relative; flex: 1; max-width: 480px; }
+        #recherche {
+            padding-left: 38px; border-radius: 999px; height: 40px; font-size: .85rem;
+            background: var(--bg-3); border-color: transparent;
+        }
+        #recherche:focus { background: var(--bg-2); }
+        #recherche-wrap .icone { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
+        #resultats-recherche {
+            position: absolute; top: 48px; left: 0; right: 0; max-height: 340px; overflow-y: auto;
+            background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px;
+            box-shadow: var(--shadow); display: none; z-index: 50;
+        }
+        #resultats-recherche .res-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background .15s; }
+        #resultats-recherche .res-item:hover { background: var(--bg-3); }
+        #resultats-recherche .res-item img { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; }
+        #resultats-recherche .res-emoji { width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; background: var(--bg-3); }
+
+        #topbar .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+        .notif-wrap { position: relative; }
+        #dropdown-notif {
+            position: absolute; right: 0; top: 46px; width: 300px; max-height: 380px; overflow-y: auto;
+            background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px;
+            box-shadow: var(--shadow); display: none; z-index: 60; padding: 6px;
+        }
+        #dropdown-notif .n-item { display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px; font-size: .8rem; }
+        #dropdown-notif .n-item:hover { background: var(--bg-3); }
+        #badge-notif { position: absolute; top: -3px; right: -3px; background: var(--red); color: #fff; font-size: .62rem; font-weight: 700; border-radius: 999px; min-width: 17px; height: 17px; display: none; align-items: center; justify-content: center; padding: 0 4px; }
+
+        #conteneur { position: fixed; top: 62px; left: 0; right: 0; bottom: 0; display: flex; }
+        #sidebar {
+            width: 330px; height: 100%; overflow-y: auto; z-index: 1000; padding: 16px 16px 24px;
+            background: color-mix(in srgb, var(--bg-2) 92%, transparent); backdrop-filter: blur(14px);
+            border-right: 1px solid var(--border); transition: margin-left .25s ease;
+        }
+        #sidebar.fermee { margin-left: -330px; }
+        #map { flex: 1; height: 100%; background: var(--bg); }
+        .maplibregl-ctrl-group { border-radius: 10px !important; border: 1px solid var(--border) !important; overflow: hidden; box-shadow: var(--shadow) !important; }
+
+        #basemaps { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .bm-btn {
+            padding: 7px 8px; border-radius: 9px; font-size: .74rem; font-weight: 600;
+            background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border);
+            transition: all .15s; display: flex; align-items: center; gap: 6px;
+        }
+        .bm-btn:hover { color: var(--text); border-color: var(--border-2); }
+        .bm-btn.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
+        .bm-btn .sw { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; background-size: cover; }
+
+        #outils-dessin { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        #mesure-barre {
+            position: absolute; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 1002;
+            display: none; align-items: center; gap: 12px; padding: 10px 18px;
+            background: var(--bg-2); border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow);
+            font-size: .85rem; font-weight: 600;
+        }
+        #coords-barre {
+            position: absolute; left: 14px; bottom: 16px; z-index: 1002;
+            background: color-mix(in srgb, var(--bg-2) 88%, transparent); backdrop-filter: blur(8px);
+            border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px;
+            font-size: .74rem; font-family: monospace; color: var(--text-2); pointer-events: none;
+        }
+        #minimap { position: absolute; right: 14px; bottom: 16px; width: 200px; height: 140px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; z-index: 1001; }
+        #minimap .maplibregl-canvas-container { pointer-events: none; }
+
+        #tooltip {
+            position: absolute; z-index: 1500; pointer-events: none; display: none;
+            background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px;
+            box-shadow: var(--shadow); padding: 10px; min-width: 170px; max-width: 240px;
+        }
+        #tooltip img { width: 100%; height: 90px; object-fit: cover; border-radius: 8px; margin-bottom: 7px; }
+        #tooltip .tt-nom { font-weight: 700; font-size: .82rem; }
+        #tooltip .tt-zone { font-size: .72rem; color: var(--accent); margin-top: 3px; }
+
+        #panel-droit {
+            position: fixed; top: 74px; right: 14px; bottom: 14px; width: 360px; z-index: 1003;
+            overflow-y: auto; padding: 18px; display: none;
+            transform: translateX(20px); opacity: 0; transition: all .25s ease;
+        }
+        #panel-droit.ouvert { display: block; transform: translateX(0); opacity: 1; }
+        #panel-droit .photo-principale { width: 100%; height: 190px; object-fit: cover; border-radius: 12px; margin-bottom: 12px; }
+        #panel-droit .galerie { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+        #panel-droit .galerie .g-item { position: relative; border-radius: 9px; overflow: hidden; cursor: pointer; aspect-ratio: 1; background: var(--bg-3); }
+        #panel-droit .galerie img { width: 100%; height: 100%; object-fit: cover; }
+        #panel-droit .galerie .g-item .type-badge { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; background: rgba(0,0,0,.45); color: #fff; }
+        .ligne-info { display: flex; justify-content: space-between; gap: 10px; font-size: .78rem; padding: 7px 0; border-bottom: 1px dashed var(--border); }
+        .ligne-info .lib { color: var(--text-3); }
+        .ligne-info .val { font-weight: 600; text-align: right; }
+
+        #legende { display: flex; flex-direction: column; gap: 5px; max-height: 240px; overflow-y: auto; padding-right: 4px; }
+        .leg-item { display: flex; align-items: center; gap: 8px; font-size: .76rem; color: var(--text-2); padding: 4px 6px; border-radius: 7px; }
+        .leg-item:hover { background: var(--bg-3); }
+        .leg-item .puces { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+        .leg-item .compte { margin-left: auto; font-size: .7rem; color: var(--text-3); font-weight: 600; }
+
+        #filtres select, #filtres input { margin-bottom: 6px; }
+        .filtre-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+        /* ── MUKMAP : splash ── */
+        #splash {
+            position: fixed; inset: 0; z-index: 4000; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 12px;
+            background: radial-gradient(1200px 600px at 30% 20%, #0d2a4a, var(--bg-1) 60%);
+            transition: opacity .5s ease, visibility .5s;
+        }
+        #splash.fini { opacity: 0; visibility: hidden; pointer-events: none; }
+        .logo-splash {
+            width: 74px; height: 74px; border-radius: 20px; display: flex; align-items: center; justify-content: center;
+            font-size: 2.4rem; font-weight: 900; color: #fff;
+            background: linear-gradient(135deg, var(--accent), #0e7490);
+            box-shadow: 0 0 44px rgba(34,211,238,.35);
+            animation: pulseSplash 1.6s ease-in-out infinite;
+        }
+        @keyframes pulseSplash { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+        .nom-splash { font-size: 2.1rem; font-weight: 900; letter-spacing: 6px; }
+        .version-splash { font-size: .66rem; letter-spacing: 5px; color: var(--orange); font-weight: 800; }
+        .dev-splash { font-size: .76rem; color: var(--texte-faible); margin-top: 18px; }
+        .chargement { display: flex; gap: 7px; margin-top: 6px; }
+        .chargement i { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: bounceDot 1.2s infinite; }
+        .chargement i:nth-child(2) { animation-delay: .15s; } .chargement i:nth-child(3) { animation-delay: .3s; }
+        @keyframes bounceDot { 0%,100% { transform: translateY(0); opacity:.5; } 50% { transform: translateY(-7px); opacity:1; } }
+
+        /* ── MUKMAP : bannière invité ── */
+        #banniere-invite {
+            display: flex; align-items: center; gap: 10px; padding: 9px 18px;
+            background: linear-gradient(90deg, #7c2d12, #9a3412); color: #fde8d8;
+            font-size: .8rem; position: relative; z-index: 5;
+        }
+        #banniere-invite a { color: #fff; font-weight: 700; text-decoration: underline; margin-left: auto; white-space: nowrap; }
+
+        /* ── MUKMAP : badge version / bloc projet ── */
+        .badge-v { font-size: .58rem; color: var(--orange); border: 1px solid var(--orange); border-radius: 6px; padding: 1px 6px; vertical-align: 2px; letter-spacing: 1px; }
+        .projet-actif { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; }
+        .pa-icone { width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), #0e7490); display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
+        .pa-texte { flex: 1; min-width: 0; }
+        .pa-nom { font-weight: 700; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pa-act { font-size: .7rem; color: var(--texte-faible); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* ── MUKMAP : carte verrou invité ── */
+        .carte-verrou { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 18px 14px; background: var(--bg-2); border: 1px dashed var(--border); border-radius: 14px; font-size: .78rem; }
+        .carte-verrou p { color: var(--texte-faible); line-height: 1.5; margin: 6px 0 0; }
+
+        /* ── MUKMAP : modales ── */
+        .selecteur-langue { display: flex; align-items: center; gap: 7px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-3); color: var(--texte); padding: 0 9px; height: 34px; transition: all .18s; }
+        .selecteur-langue:hover { border-color: var(--accent); }
+        .selecteur-langue select { background: transparent; border: none; color: var(--texte); font-size: .7rem; font-weight: 700; outline: none; cursor: pointer; font-family: inherit; }
+        .selecteur-langue select option { background: var(--bg-2); color: var(--texte); }
+        .overlay {
+            position: fixed; inset: 0; z-index: 3000; background: rgba(0,0,0,.65);
+            backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        .modale-projet { width: 460px; max-width: 100%; }
+        .modale { background: var(--bg-2); border: 1px solid var(--border); border-radius: 16px; padding: 22px; box-shadow: var(--shadow); }
+        .modale-tete { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .modale-titre { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 1rem; }
+        .modale-titre [data-lucide] { width: 19px; height: 19px; color: var(--accent); }
+        .modale-version { font-size: .62rem; color: var(--orange); letter-spacing: 2px; font-weight: 800; }
+        .modale-desc { font-size: .8rem; color: var(--texte-faible); line-height: 1.5; margin-bottom: 14px; }
+        .modale-label { font-size: .78rem; font-weight: 700; display: block; margin: 12px 0 6px; }
+        .obligatoire { color: var(--red); }
+        .modale-select { width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--border); color: var(--texte); font-size: .86rem; }
+        .modale-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+        .suggestion { padding: 9px 12px; font-size: .8rem; cursor: pointer; border-bottom: 1px solid var(--border); }
+        .suggestion:hover { background: var(--bg-3); color: var(--accent); }
+        #liste-suggestions { max-height: 170px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; margin-top: 6px; background: var(--bg-2); }
+
+        #lightbox {
+            position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 2000; display: none;
+            align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+        }
+        #lightbox img, #lightbox video { max-width: 90vw; max-height: 82vh; border-radius: 12px; }
+        #lightbox audio { width: 70vw; }
+
+        #toasts { position: fixed; top: 74px; right: 14px; z-index: 2100; display: flex; flex-direction: column; gap: 8px; }
+        .toast {
+            padding: 11px 16px; border-radius: 11px; font-size: .82rem; font-weight: 500;
+            background: var(--bg-2); border: 1px solid var(--border); box-shadow: var(--shadow);
+            animation: slideIn .3s ease; max-width: 340px;
+        }
+        .toast.success { border-left: 4px solid var(--green); }
+        .toast.error { border-left: 4px solid var(--red); }
+        .toast.warning { border-left: 4px solid var(--orange); }
+        @keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        .maplibregl-popup-content { border-radius: 14px !important; background: var(--bg-2) !important; color: var(--text) !important; box-shadow: var(--shadow) !important; padding: 14px !important; }
+        .maplibregl-popup-tip { border-top-color: var(--bg-2) !important; }
+        .maplibregl-popup-close-button { color: var(--text-2) !important; font-size: 1.1rem !important; }
+
+        #titre-sidebar { display: flex; align-items: center; gap: 8px; font-size: .9rem; font-weight: 800; margin-bottom: 4px; }
+        #btn-sidebar { position: fixed; top: 72px; left: 14px; z-index: 1004; border-radius: 10px; width: 40px; height: 40px; background: var(--bg-2); border: 1px solid var(--border); box-shadow: var(--shadow); display: flex; align-items: center; justify-content: center; }
+        #btn-sidebar:hover { color: var(--accent); border-color: var(--accent); }
+        #btn-sidebar.actif { left: 344px; }
+
+        .input-fichier { padding: 8px; font-size: .78rem; }
+        .input-fichier::-webkit-file-upload-button { background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; margin-right: 10px; font-weight: 600; cursor: pointer; }
+        .hint { font-size: .72rem; color: var(--text-3); margin-top: 4px; }
+
+        /* ── MUKMAP : Identifier (style QGIS) ── */
+        .btn-identify-ctrl {
+            width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            background: var(--bg-2); border: 1px solid var(--border); color: var(--text-2);
+            box-shadow: var(--shadow); cursor: pointer; transition: all .15s;
+        }
+        .btn-identify-ctrl:hover { color: var(--accent); border-color: var(--accent); }
+        .btn-identify-ctrl.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; box-shadow: 0 4px 16px rgba(79,70,229,.4); }
+        #identify-liste {
+            position: fixed; z-index: 1500; min-width: 240px; max-width: 340px; display: none;
+            background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px;
+            box-shadow: var(--shadow); padding: 8px; max-height: 320px; overflow-y: auto;
+        }
+        #identify-liste .il-titre { font-size: .72rem; font-weight: 800; color: var(--text-2); padding: 4px 8px 8px; text-transform: uppercase; letter-spacing: .6px; }
+        #identify-liste .il-item {
+            display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 9px;
+            background: none; border: none; color: var(--text); font-size: .82rem; text-align: left; cursor: pointer;
+        }
+        #identify-liste .il-item:hover { background: var(--bg-3); }
+        #identify-liste .il-puce { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        #identify-liste .il-src { margin-left: auto; font-size: .68rem; color: var(--text-3); white-space: nowrap; }
+        #identify-panel {
+            position: fixed; right: 14px; top: 74px; width: 400px; max-width: 94vw; z-index: 1005;
+            display: none; flex-direction: column; background: var(--bg-2); border: 1px solid var(--border);
+            border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; min-width: 300px;
+        }
+        #identify-panel .ip-head {
+            display: flex; align-items: center; gap: 8px; padding: 12px 14px; cursor: move; user-select: none;
+            background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 20%, var(--bg-2)), var(--bg-2));
+            border-bottom: 1px solid var(--border);
+        }
+        #identify-panel .ip-titre { font-weight: 800; font-size: .85rem; flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+        #identify-panel .ip-corps { overflow-y: auto; padding: 12px 14px; max-height: calc(100vh - 280px); min-height: 120px; }
+        #identify-panel .ip-infos { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+        #identify-panel .ip-nom { font-weight: 700; font-size: .9rem; margin-bottom: 4px; word-break: break-word; }
+        #identify-panel .ip-actions { display: flex; gap: 6px; flex-wrap: wrap; border-top: 1px solid var(--border); padding: 10px 14px; }
+        #identify-panel .ip-actions .btn { flex: 1; min-width: 88px; }
+        #identify-panel .ip-tab { width: 100%; border-collapse: collapse; font-size: .78rem; }
+        #identify-panel .ip-tab th { text-align: left; font-size: .66rem; text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); padding: 5px 8px; border-bottom: 1px solid var(--border); }
+        #identify-panel .ip-tab td { padding: 6px 8px; border-bottom: 1px dashed var(--border); vertical-align: top; word-break: break-word; }
+        #identify-panel .ip-tab td.ip-cle { color: var(--text-2); font-weight: 600; width: 42%; }
+        #identify-panel .ip-tab tr:last-child td { border-bottom: none; }
+        #identify-panel .ip-tab td .iv-vide { color: var(--text-3); }
+        #identify-panel .ip-tab td a { color: var(--accent); font-weight: 600; }
+        #identify-panel .ip-tab td img.iv-img { max-width: 130px; max-height: 90px; border-radius: 8px; object-fit: cover; margin-top: 4px; display: block; }
+        #identify-panel .ip-tab td code { color: var(--text-2); font-family: monospace; font-size: .7rem; }
+        #identify-panel .ip-section {
+            font-size: .64rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
+            color: var(--text-3); margin: 14px 0 6px; display: flex; align-items: center; gap: 8px;
+        }
+        #identify-panel .ip-section::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        #identify-panel .ip-msg { font-size: .8rem; color: var(--text-2); text-align: center; padding: 18px 10px; }
+        #identify-panel .ip-resize {
+            position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize;
+            background: linear-gradient(135deg, transparent 50%, var(--border-2) 50%, var(--border-2) 62%, transparent 62%);
+        }
+
+        /* ── MUKMAP : import coordonnées (info-bulle / popover / rapport) ── */
+        #info-bulle-coord {
+            position: fixed; z-index: 1400; display: none; pointer-events: none;
+            background: rgba(10, 10, 20, .88); color: #fff; font-size: .72rem; line-height: 1.55;
+            padding: 6px 10px; border-radius: 8px; box-shadow: var(--shadow); max-width: 240px;
+        }
+        #coords-popover {
+            position: fixed; right: 14px; top: 74px; z-index: 1006; width: 250px; padding: 12px 14px;
+            background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
+        }
+        #coords-popover .co-pop-titre { font-weight: 800; font-size: .8rem; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+        #coords-popover .co-pop-lbl { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .74rem; color: var(--text-2); font-weight: 600; margin: 6px 0; }
+        #coords-popover .co-pop-lbl input {
+            width: 118px; background: var(--bg-1); border: 1px solid var(--border); color: var(--text);
+            border-radius: 8px; padding: 5px 8px; font-size: .76rem;
+        }
+        #coords-popover .btn { width: 100%; margin-top: 8px; }
+        #rapport-modal .rapport-corps { padding: 12px 18px; max-height: 60vh; overflow-y: auto; }
+        #rapport-modal .rapport-corps .rp-ligne { display: flex; gap: 8px; align-items: baseline; font-size: .82rem; padding: 5px 0; }
+        #rapport-modal .rapport-corps .rp-ligne .rp-ico { width: 20px; text-align: center; }
+        #rapport-modal .rapport-corps .rp-sep { border: none; border-top: 1px dashed var(--border); margin: 10px 0; }
+        #rapport-modal .rapport-corps .rp-titre { font-size: .64rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); margin: 10px 0 4px; }
+        #rapport-modal .rapport-corps .rp-cle { color: var(--text-2); font-weight: 600; }
+        #rapport-modal .rapport-corps .rp-val { color: var(--text); word-break: break-word; }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+
+<div id="splash">
+    <div class="logo-splash"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:24px;background:#fff"></div>
+    <div class="nom-splash">MUK<span>MAP</span></div>
+    <div class="version-splash">VERSION 1.0</div>
+    <div class="chargement"><i></i><i></i><i></i></div>
+    <div class="dev-splash">Développé par <b>Ir. Yagirwa Gedeon</b></div>
+</div>
+
+{% if est_invite %}
+<div id="banniere-invite">
+    <i data-lucide="eye"></i>
+    <span data-i18n="banniere_invite_1">Vous utilisez actuellement MUKMAP en Mode Invité (Accès limité). Connectez-vous pour accéder à toutes les fonctionnalités.</span>
+    <a href="{% url 'connexion' %}" data-i18n="banniere_invite_2">Se connecter pour débloquer toutes les fonctionnalités</a>
+</div>
+{% endif %}
+
+<header id="topbar">
+    <div class="logo">
+        <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+        <div>
+            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span class="badge-v">v1.0</span></div>
+            <div class="sous-titre">Plateforme SIG professionnelle — collecte, suivi et sécurité</div>
+        </div>
+    </div>
+    <div id="recherche-wrap">
+        <span class="icone" data-lucide="search"></span>
+        <input id="recherche" placeholder="Rechercher un lieu, une commune, une province… ou « lat, lng »" data-i18n-ph="recherche_lieu">
+        <div id="resultats-recherche"></div>
+    </div>
+    <div class="droite">
+        <div class="notif-wrap">
+            <button class="btn btn-icon" id="btn-notif" title="Notifications" data-i18n-title="notifications"><span data-lucide="bell"></span></button>
+            <span id="badge-notif">0</span>
+            <div id="dropdown-notif"></div>
+        </div>
+        <button class="btn btn-icon" id="btn-apropos" title="À propos" data-i18n-title="a_propos"><span data-lucide="info"></span></button>
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <button class="btn btn-icon" id="btn-theme" title="Changer de thème" data-i18n-title="theme"><span data-lucide="moon"></span></button>
+        <button class="btn btn-icon" id="btn-plein-ecran" title="Plein écran" data-i18n-title="plein_ecran"><span data-lucide="maximize"></span></button>
+        <a class="btn btn-primary btn-sm" href="{% url 'deconnexion' %}">
+            <span data-lucide="log-out"></span> {{ user.username|default:'Déconnexion' }}
+        </a>
+    </div>
+</header>
+
+<button id="btn-sidebar" title="Panneau latéral" data-i18n-title="panneau_lateral"><span data-lucide="panel-left"></span></button>
+
+<div id="conteneur">
+    <aside id="sidebar">
+        <div id="titre-sidebar"><span>🔧</span> <span data-i18n="outils_donnees">Outils & données</span></div>
+
+        {% if not est_invite %}
+        <div class="titre-section" data-i18n="projet_activite_cours">Projet & activité en cours</div>
+        <div id="bloc-projet">
+            <div class="projet-actif">
+                <div class="pa-icone"><span data-lucide="folder-kanban"></span></div>
+                <div class="pa-texte">
+                    <div class="pa-nom">{{ projet_actif.nom|default:'' }}</div>
+                    <div class="pa-act">{{ activite_actuelle.nom|default:'' }}</div>
+                </div>
+                <button class="btn btn-sm btn-ghost" id="btn-changer-projet" title="Changer" data-i18n-title="changer" style="color:var(--accent);"><span data-lucide="refresh-cw"></span></button>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="titre-section" data-i18n="points_geographiques">Points</div>
+        <div style="display:grid;gap:8px;">
+            <a class="btn" href="{% url 'points_liste' %}"><span data-lucide="table-2"></span> <span data-i18n="tous_points">Tous les points</span></a>
+        </div>
+
+        <div class="titre-section" data-i18n="fond_carte">Fond de carte</div>
+        <div id="basemaps"></div>
+
+        <hr class="separateur">
+        <div class="titre-section"><span data-i18n="filtres">Filtres dynamiques</span> <button class="btn btn-sm btn-ghost" onclick="reinitialiserFiltres()" style="color:var(--accent);font-size:.72rem;" data-i18n="reinitialiser">Réinitialiser</button></div>
+        <div id="filtres">
+            <select id="f-categorie"><option value="" data-i18n="toutes_categories">Toutes les catégories</option></select>
+            <select id="f-statut"><option value="" data-i18n="tous_etats">Tous les états</option></select>
+            <select id="f-province"><option value="" data-i18n="toutes_provinces">Toutes les provinces</option></select>
+            <select id="f-agent"><option value="" data-i18n="tous_agents">Tous les agents</option></select>
+            <div class="filtre-row">
+                <input type="date" id="f-debut" title="Du" data-i18n-title="du">
+                <input type="date" id="f-fin" title="Au" data-i18n-title="au">
+            </div>
+        </div>
+
+        <hr class="separateur">
+        {% if est_invite %}
+        <div class="carte-verrou">
+            <i data-lucide="lock" style="width:20px;height:20px;color:var(--orange);margin-bottom:8px;"></i>
+            <b data-i18n="mode_invite_titre">Mode Invité — lecture seule</b>
+            <p data-i18n="mode_invite_texte">La saisie de points, le dessin, les imports, les exports et les rapports sont réservés aux utilisateurs authentifiés.</p>
+            <a class="btn btn-primary btn-sm" href="{% url 'connexion' %}" style="margin-top:10px;width:100%;"><span data-lucide="log-in"></span> <span data-i18n="se_connecter">Se connecter</span></a>
+        </div>
+        {% else %}
+        <div class="titre-section" data-i18n="dessiner_mesurer">Dessiner & mesurer</div>
+        <div id="outils-dessin">
+            <button class="btn-tool" data-mode="point" title="Point" data-i18n-title="point"><span data-lucide="map-pin"></span></button>
+            <button class="btn-tool" data-mode="line" title="Ligne" data-i18n-title="ligne"><span data-lucide="route"></span></button>
+            <button class="btn-tool" data-mode="polygon" title="Polygone" data-i18n-title="polygone"><span data-lucide="hexagon"></span></button>
+            <button class="btn-tool" data-mode="circle" title="Cercle" data-i18n-title="cercle"><span data-lucide="circle"></span></button>
+            <button class="btn-tool" data-mode="rectangle" title="Rectangle" data-i18n-title="rectangle"><span data-lucide="square"></span></button>
+            <button class="btn-tool" data-mode="distance" title="Mesurer une distance" data-i18n-title="mesurer_distance"><span data-lucide="ruler"></span></button>
+            <button class="btn-tool" data-mode="area" title="Mesurer une surface" data-i18n-title="mesurer_surface"><span data-lucide="scan-line"></span></button>
+            <button class="btn-tool" data-mode="erase" title="Supprimer un dessin" data-i18n-title="supprimer_dessin"><span data-lucide="eraser"></span></button>
+        </div>
+        <div class="hint" id="hint-dessin" data-i18n="hint_dessin">Sélectionnez un outil. Double-clic pour terminer un tracé.</div>
+
+        <hr class="separateur">
+        <div class="titre-section" data-i18n="nouveau_point">Nouveau point</div>
+        <form method="POST" action="{% url 'index_cartographie' %}" enctype="multipart/form-data">{% csrf_token %}
+            <label data-i18n="nom_lieu">Nom du lieu</label>
+            <input type="text" name="nom" required placeholder="Ex: Marché central">
+            <div class="filtre-row">
+                <div>
+                    <label data-i18n="categorie">Catégorie</label>
+                    <select name="categorie" id="nv-categorie">
+                        <option value="autre" data-i18n="cat_autre">Autre</option><option value="hopital" data-i18n="cat_hopital">Hôpital</option>
+                        <option value="ecole" data-i18n="cat_ecole">École</option><option value="eglise" data-i18n="cat_eglise">Église</option>
+                        <option value="police" data-i18n="cat_police">Police</option><option value="marche" data-i18n="cat_marche">Marché</option>
+                        <option value="projet" data-i18n="cat_projet">Projet</option><option value="incident" data-i18n="cat_incident">Incident</option>
+                        <option value="village" data-i18n="cat_village">Village</option><option value="ville" data-i18n="cat_ville">Ville</option>
+                        <option value="pont" data-i18n="cat_pont">Pont</option><option value="route" data-i18n="cat_route">Route</option>
+                        <option value="entreprise" data-i18n="cat_entreprise">Entreprise</option><option value="zone_rouge" data-i18n="cat_zone_rouge">Zone rouge</option>
+                        <option value="zone_verte" data-i18n="cat_zone_verte">Zone verte</option><option value="zone_orange" data-i18n="cat_zone_orange">Zone orange</option>
+                    </select>
+                </div>
+                <div>
+                    <label data-i18n="etat">État</label>
+                    <select name="statut">
+                        <option value="actif" data-i18n="statut_actif">Actif</option><option value="inactif" data-i18n="statut_inactif">Inactif</option>
+                        <option value="en_cours" data-i18n="statut_en_cours">En cours</option><option value="termine" data-i18n="statut_termine">Terminé</option>
+                    </select>
+                </div>
+            </div>
+            <div class="filtre-row">
+                <input type="text" name="province" placeholder="Province" data-i18n-ph="province">
+                <input type="text" name="commune" placeholder="Commune" data-i18n-ph="commune">
+            </div>
+            <input type="text" name="quartier" placeholder="Quartier / Village" data-i18n-ph="quartier_village">
+            <label data-i18n="description">Description</label>
+            <textarea name="description" rows="2" placeholder="Description..." data-i18n-ph="description"></textarea>
+            <div class="filtre-row">
+                <input type="number" step="any" id="lat-input" name="latitude" required placeholder="Latitude" data-i18n-ph="latitude">
+                <input type="number" step="any" id="lng-input" name="longitude" required placeholder="Longitude" data-i18n-ph="longitude">
+            </div>
+            <div class="hint" data-i18n="cliquez_carte_coords">Cliquez sur la carte pour remplir automatiquement les coordonnées.</div>
+            <label data-i18n="photo_principale">Photo principale</label>
+            <input type="file" name="photo" accept="image/*" class="input-fichier">
+            <label data-i18n="galerie_multimedia">Galerie multimédia</label>
+            <input type="file" name="medias" multiple accept="image/*,video/*,audio/*,.pdf" class="input-fichier">
+            <div class="hint" data-i18n="type_detecte">Photos, vidéos, audio, PDF — le type est détecté automatiquement.</div>
+            <button type="submit" class="btn btn-primary" style="width:100%;margin-top:12px;">
+                <span data-lucide="plus-circle"></span> <span data-i18n="enregistrer_point">Enregistrer le point</span>
+            </button>
+        </form>
+
+        <hr class="separateur">
+        <div class="titre-section" data-i18n="imports">Imports</div>
+        <div style="display:grid;gap:8px;">
+            <a class="btn" href="{% url 'import_page' %}"><span data-lucide="file-spreadsheet"></span> <span data-i18n="import_donnees">Import de données</span></a>
+            <form method="POST" action="{% url 'importer_fichier' %}" enctype="multipart/form-data">{% csrf_token %}
+                <input type="file" name="fichier_import" accept=".geojson,.kml" class="input-fichier">
+                <button type="submit" class="btn btn-sm" style="width:100%;margin-top:6px;"><span data-i18n="importer_geojson_kml">Importer GeoJSON/KML</span></button>
+            </form>
+            <form method="POST" action="{% url 'importer_geometrie' %}" enctype="multipart/form-data">{% csrf_token %}
+                <input type="text" name="nom_couche" placeholder="Nom de la couche SIG" style="margin-bottom:6px;" data-i18n-ph="nom_couche_sig">
+                <input type="file" name="fichier_geom" accept=".zip,.kml,.kmz,.gpx,.geojson,.json,.csv" class="input-fichier">
+                <button type="submit" class="btn btn-sm" style="width:100%;margin-top:6px;">Importer couche SIG</button>
+            </form>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                <a class="btn btn-sm" href="{% url 'export_points' 'geojson' %}" title="Exporter GeoJSON">GeoJSON</a>
+                <a class="btn btn-sm" href="{% url 'export_points' 'kml' %}" title="Exporter KML">KML</a>
+                <a class="btn btn-sm" href="{% url 'export_points' 'gpx' %}" title="Exporter GPX">GPX</a>
+            </div>
+        </div>
+
+        {% if user.is_superuser %}
+        <hr class="separateur">
+        <div class="titre-section" data-i18n="administration">Administration</div>
+        <div style="display:grid;gap:8px;">
+            <a class="btn" href="{% url 'dashboard' %}"><span data-lucide="layout-dashboard"></span> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+            <a class="btn" href="{% url 'zone_list' %}"><span data-lucide="shield-alert"></span> <span data-i18n="zones_securite">Zones de sécurité</span></a>
+            <a class="btn" href="{% url 'rapport_generer' %}"><span data-lucide="file-text"></span> <span data-i18n="rapports">Rapports</span></a>
+            <a class="btn" href="{% url 'itineraire_list' %}"><span data-lucide="route"></span> <span data-i18n="itineraires">Itinéraires</span></a>
+            <a class="btn" href="{% url 'audit_list' %}"><span data-lucide="history"></span> <span data-i18n="historique">Historique</span></a>
+            <a class="btn" href="{% url 'agent_list' %}"><span data-lucide="users"></span> <span data-i18n="agents">Agents</span></a>
+        </div>
+        {% endif %}
+
+        {% if couches %}
+        <hr class="separateur">
+        <div class="titre-section" data-i18n="couches_chargees">Couches chargées</div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+        {% for c in couches %}
+            <div style="display:flex;align-items:center;gap:8px;font-size:.78rem;padding:6px 8px;background:var(--bg-3);border-radius:8px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:{{ c.style_couleur }};flex-shrink:0;"></span>
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.nom }}</span>
+                <a href="{% url 'couche_delete' c.pk %}" style="color:var(--red);text-decoration:none;" title="Supprimer" data-i18n-title="supprimer">✕</a>
+            </div>
+        {% endfor %}
+        </div>
+        {% endif %}
+
+        <hr class="separateur">
+        <div class="titre-section" data-i18n="legende_categories">Légende des catégories</div>
+        <div id="legende"></div>
+        {% endif %}
+    </aside>
+
+    <div id="map"></div>
+    <div id="minimap"></div>
+    <div id="coords-barre">— , —</div>
+    <div id="tooltip"></div>
+    <div id="mesure-barre">
+        <span data-lucide="ruler" style="color:var(--accent);"></span>
+        <span id="mesure-valeur">0 m</span>
+        <button class="btn btn-sm" id="btn-finir-mesure" data-i18n="terminer">Terminer</button>
+        <button class="btn btn-sm btn-danger" id="btn-effacer-mesure" data-i18n="effacer">Effacer</button>
+    </div>
+    <aside id="panel-droit" class="card"></aside>
+    <div id="identify-liste"></div>
+    <aside id="identify-panel">
+        <div class="ip-head">
+            <span class="ip-titre">🔍 <span data-i18n="informations_element">Informations sur l'élément</span></span>
+            <button class="btn btn-icon btn-sm" id="btn-fermer-identify" title="Fermer" data-i18n-title="fermer">✕</button>
+        </div>
+        <div class="ip-corps" id="identify-corps"></div>
+        <div class="ip-actions" id="identify-actions"></div>
+        <div class="ip-resize" id="identify-resize"></div>
+    </aside>
+    <div id="info-bulle-coord"></div>
+    <div id="coords-popover" class="card" style="display:none;">
+        <div class="co-pop-titre">🎯 <span data-i18n="recherche_coordonnees">Localiser par coordonnées</span></div>
+        <label class="co-pop-lbl"><span data-i18n="longitude">Longitude</span> <input type="number" step="any" id="rc-lon" placeholder="29.32145"></label>
+        <label class="co-pop-lbl"><span data-i18n="latitude">Latitude</span> <input type="number" step="any" id="rc-lat" placeholder="-1.23456"></label>
+        <label class="co-pop-lbl"><span data-i18n="altitude">Altitude</span> (m) <input type="number" step="any" id="rc-alt" placeholder="—"></label>
+        <button class="btn btn-primary btn-sm" id="rc-localiser"><span data-lucide="crosshair"></span> <span data-i18n="localiser">Localiser</span></button>
+    </div>
+    <div id="rapport-modal" class="overlay" style="display:none;">
+        <div class="modale modale-projet">
+            <div class="modale-tete">
+                <div class="modale-titre">✅ <span data-i18n="importation_terminee">Importation terminée</span></div>
+                <div class="modale-version" id="rapport-fichier"></div>
+            </div>
+            <div class="rapport-corps" id="rapport-corps"></div>
+            <div class="modale-actions">
+                <button type="button" class="btn" id="rapport-fermer" data-i18n="fermer">Fermer</button>
+                <button type="button" class="btn btn-primary" id="rapport-voir"><span data-lucide="scan"></span> <span data-i18n="voir_couche">Voir la couche</span></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="lightbox"></div>
+<div id="toasts"></div>
+
+<div id="overlay-modale" class="overlay" style="display:none;">
+    <div class="modale modale-projet">
+        <div class="modale-tete">
+            <div class="modale-titre">
+                <span data-lucide="folder-kanban"></span>
+                <span data-i18n="titre_modale_projet">Projet & activité en cours</span>
+            </div>
+            <div class="modale-version">MUKMAP v1.0</div>
+        </div>
+        <p class="modale-desc" data-i18n="texte_modale_projet">Toutes les données collectées seront rattachées au projet et à l'activité sélectionnés.</p>
+        <label class="modale-label"><span data-i18n="projet">Projet</span> <span class="obligatoire">*</span></label>
+        <select id="select-projet" class="modale-select">
+            <option value="">— Sélectionner un projet —</option>
+        </select>
+        <label class="modale-label"><span data-i18n="activite">Activité</span> <span class="obligatoire">*</span></label>
+        <input type="text" id="input-activite" class="modale-select" autocomplete="off"
+               placeholder="Ex : Supervision GPS des villages" data-i18n-ph="ex_activite" required>
+        <div id="liste-suggestions" style="display:none;"></div>
+        <div class="hint" data-i18n="suggestions_auto">Saisissez l'activité en cours — suggestions automatiques depuis l'historique.</div>
+        <div class="modale-actions">
+            <button type="button" class="btn btn-primary" id="btn-valider-selection"><span data-lucide="check"></span> <span data-i18n="valider_continuer">Valider et continuer</span></button>
+        </div>
+        <div id="erreur-selection" style="color:var(--red);font-size:.8rem;margin-top:8px;display:none;"></div>
+    </div>
+</div>
+
+<div id="overlay-apropos" class="overlay" style="display:none;">
+    <div class="modale modale-projet">
+        <div class="modale-tete">
+            <div class="modale-titre"><span data-lucide="info"></span><span data-i18n="titre_apropos">À propos de MUKMAP</span></div>
+        </div>
+        <div style="text-align:center;margin:6px 0 4px;">
+            <div style="font-size:2.4rem;font-weight:900;letter-spacing:2px;">MUK<span style="color:var(--accent);">MAP</span></div>
+            <div style="font-size:.72rem;letter-spacing:4px;color:var(--orange);font-weight:700;">VERSION 1.0</div>
+        </div>
+        <p style="font-size:.8rem;line-height:1.6;text-align:center;margin:10px 0 0;" data-i18n="texte_apropos">
+            MUKMAP est une plateforme SIG professionnelle de collecte, de suivi, de gestion des risques et de sécurité.
+            Elle permet la cartographie des points d'intérêt, la délimitation des zones de sécurité, le suivi des itinéraires
+            et la génération de rapports d'activités pour la supervision de projet.
+        </p>
+        <hr class="separateur">
+        <p style="font-size:.78rem;text-align:center;color:var(--texte-faible);" data-i18n="auteurs">Développé par <b>Ir. Yagirwa Gedeon</b> — Consultant SIG & Développeur Web<br>&copy; 2026 MUKMAP — Tous droits réservés</p>
+        <div class="modale-actions">
+            <button type="button" class="btn btn-primary" id="btn-fermer-apropos"><span data-lucide="x"></span> <span data-i18n="fermer">Fermer</span></button>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_token }}';
+
+// ─── THÈME ────────────────────────────────────────────────────
+function appliquerTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('theme', theme);
+    lucideIcon('btn-theme', theme === 'dark' ? 'sun' : 'moon');
+}
+function lucideIcon(id, nom) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = `<span data-lucide="${nom}"></span>`;
+// ─── MUKMAP : SPLASH / PROJET / INVITÉ ────────────────────────
+const SESSION_PROJET_ID = {{ session_projet_id|default:0 }};
+const EST_INVITE = {{ est_invite|yesno:'true,false' }};
+
+window.addEventListener('load', () => {
+    setTimeout(() => { const s = document.getElementById('splash'); if (s) s.classList.add('fini'); }, 900);
+    if (!EST_INVITE && !SESSION_PROJET_ID) ouvrirSelectionProjet();
+    if (EST_INVITE && window.lucide) lucide.createIcons();
+});
+
+function ouvrirSelectionProjet(force) {
+    if (force === false && SESSION_PROJET_ID) return;
+    document.getElementById('overlay-modale').style.display = 'flex';
+    chargerProjets();
+}
+
+function chargerProjets() {
+    fetch('/api/projets/')
+        .then(r => r.json())
+        .then(projets => {
+            const sel = document.getElementById('select-projet');
+            sel.innerHTML = '<option value="">— Sélectionner un projet —</option>';
+            projets.forEach(p => {
+                const o = document.createElement('option');
+                o.value = p.id;
+                o.textContent = `${p.nom}${p.statut === 'archive' ? ' (' + ((mukmapT && mukmapT('archive')) || 'archivé') + ')' : ''}`;
+                if (p.id === SESSION_PROJET_ID) o.selected = true;
+                sel.appendChild(o);
+            });
+        })
+        .catch(() => toast((mukmapT && mukmapT('erreur_charger_projets')) || 'Impossible de charger les projets.'));
+}
+
+function chargerSuggestions(projetId, q) {
+    if (!projetId) return;
+    fetch(`/api/activites/?projet=${projetId}${q ? '&q=' + encodeURIComponent(q) : ''}`)
+        .then(r => r.json())
+        .then(items => {
+            const box = document.getElementById('liste-suggestions');
+            if (!items.length) { box.style.display = 'none'; return; }
+            box.innerHTML = '';
+            items.forEach(it => {
+                const d = document.createElement('div');
+                d.className = 'suggestion';
+                d.textContent = it;
+                d.onclick = () => { document.getElementById('input-activite').value = it; box.style.display = 'none'; };
+                box.appendChild(d);
+            });
+            box.style.display = 'block';
+        })
+        .catch(() => {});
+}
+
+const btnChangerProjet = document.getElementById('btn-changer-projet');
+if (btnChangerProjet) btnChangerProjet.addEventListener('click', () => ouvrirSelectionProjet());
+document.getElementById('select-projet').addEventListener('change', e => {
+    document.getElementById('liste-suggestions').style.display = 'none';
+    chargerSuggestions(parseInt(e.target.value, 10) || 0, '');
+});
+let debounceActivite;
+document.getElementById('input-activite').addEventListener('input', e => {
+    clearTimeout(debounceActivite);
+    debounceActivite = setTimeout(() =>
+        chargerSuggestions(parseInt(document.getElementById('select-projet').value, 10) || 0, e.target.value.trim()), 200);
+});
+
+document.getElementById('btn-valider-selection').addEventListener('click', () => {
+    const projetId = document.getElementById('select-projet').value;
+    const activite = document.getElementById('input-activite').value.trim();
+    const err = document.getElementById('erreur-selection');
+    err.style.display = 'none';
+    if (!projetId) { err.textContent = 'Veuillez sélectionner un projet.'; err.style.display = 'block'; return; }
+    if (!activite) { err.textContent = "Veuillez saisir l'activité en cours."; err.style.display = 'block'; return; }
+    fetch('{% url "selection_projet" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF },
+        body: `projet_id=${projetId}&nom_activite=${encodeURIComponent(activite)}`
+    })
+        .then(r => r.ok ? location.reload() : Promise.reject())
+        .catch(() => { err.textContent = 'Erreur lors de la sélection. Réessayez.'; err.style.display = 'block'; });
+});
+
+document.getElementById('btn-apropos').addEventListener('click', () => {
+    document.getElementById('overlay-apropos').style.display = 'flex';
+});
+document.getElementById('btn-fermer-apropos').addEventListener('click', () => {
+    document.getElementById('overlay-apropos').style.display = 'none';
+});
+['overlay-modale', 'overlay-apropos'].forEach(id => {
+    document.getElementById(id).addEventListener('click', e => {
+        if (e.target === e.currentTarget && id !== 'overlay-modale') e.currentTarget.style.display = 'none';
+    });
+});
+
+if (window.lucide) lucide.createIcons();
+}
+appliquerTheme(localStorage.getItem('theme') || 'dark');
+document.getElementById('btn-theme').addEventListener('click', () => {
+    appliquerTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+});
+document.getElementById('btn-plein-ecran').addEventListener('click', () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+});
+
+// ─── TOASTS (messages Django) ─────────────────────────────────
+function toast(msg, type) {
+    const t = document.createElement('div');
+    t.className = 'toast ' + (type || 'success');
+    t.textContent = msg;
+    document.getElementById('toasts').appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .4s'; setTimeout(() => t.remove(), 400); }, 4200);
+}
+{% for m in messages %}toast('{{ m.message|escapejs }}', '{{ m.tags|default:"success" }}');{% endfor %}
+
+// ─── CATÉGORIES ───────────────────────────────────────────────
+const CATS = {
+    hopital:{emoji:'🏥',couleur:'#ef4444'}, ecole:{emoji:'🏫',couleur:'#3b82f6'}, eglise:{emoji:'⛪',couleur:'#8b5cf6'},
+    police:{emoji:'👮',couleur:'#1d4ed8'}, marche:{emoji:'🛒',couleur:'#f59e0b'}, projet:{emoji:'📌',couleur:'#10b981'},
+    incident:{emoji:'⚠️',couleur:'#dc2626'}, village:{emoji:'🏘️',couleur:'#84cc16'}, ville:{emoji:'🏙️',couleur:'#0ea5e9'},
+    pont:{emoji:'🌉',couleur:'#64748b'}, route:{emoji:'🛣️',couleur:'#a16207'}, entreprise:{emoji:'🏢',couleur:'#6366f1'},
+    zone_rouge:{emoji:'🔴',couleur:'#b91c1c'}, zone_verte:{emoji:'🟢',couleur:'#16a34a'}, zone_orange:{emoji:'🟠',couleur:'#ea580c'},
+    autre:{emoji:'📍',couleur:'#78716c'}
+};
+const ZONE_STATUTS = {
+    dangereuse:{couleur:'#ef4444', lib:'Dangereuse'}, securisee:{couleur:'#22c55e', lib:'Sécurisée'},
+    indisponible:{couleur:'#eab308', lib:'Indisponible'}
+};
+const libZone = (s) => (mukmapT && mukmapT('zone_' + s)) || (ZONE_STATUTS[s]?.lib || s);
+const matchCategorie = (champ) => ['match', ['get', champ],
+    'hopital','#ef4444','ecole','#3b82f6','eglise','#8b5cf6','police','#1d4ed8','marche','#f59e0b',
+    'projet','#10b981','incident','#dc2626','village','#84cc16','ville','#0ea5e9','pont','#64748b',
+    'route','#a16207','entreprise','#6366f1','zone_rouge','#b91c1c','zone_verte','#16a34a',
+    'zone_orange','#ea580c','#78716c'];
+const matchEmoji = (champ) => ['match', ['get', champ],
+    'hopital','emoji-hopital','ecole','emoji-ecole','eglise','emoji-eglise','police','emoji-police',
+    'marche','emoji-marche','projet','emoji-projet','incident','emoji-incident','village','emoji-village',
+    'ville','emoji-ville','pont','emoji-pont','route','emoji-route','entreprise','emoji-entreprise',
+    'zone_rouge','emoji-zone_rouge','zone_verte','emoji-zone_verte','zone_orange','emoji-zone_orange',
+    'emoji-autre'];
+
+// ─── CHARGEMENT DES ICÔNES (Twemoji) ─────────────────────────
+function cpEmoji(e) {
+    const pts = [];
+    for (const ch of e) pts.push(ch.codePointAt(0).toString(16));
+    return pts.filter(p => p !== 'fe0f').join('-');
+}
+async function chargerEmoji(id, e) {
+    try {
+        const url = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/${cpEmoji(e)}.png`;
+        const res = await map.loadImage(url);
+        const img = res && res.data ? res.data : res;
+        if (!map.hasImage(id)) map.addImage(id, img);
+    } catch (err) { /* icône indisponible : le point reste visible en cercle coloré */ }
+}
+function chargerTousEmojis() {
+    const attentes = Object.keys(CATS).map(c => chargerEmoji('emoji-' + c, CATS[c].emoji));
+    attentes.push(chargerEmoji('emoji-agent', '👤'), chargerEmoji('emoji-activite', '📋'));
+    return Promise.all(attentes);
+}
+
+// ─── FONDS DE CARTE ───────────────────────────────────────────
+const BASEMAPS = {
+    osm:  {nom:'OSM',   sw:'linear-gradient(135deg,#7dd3fc,#2563eb)', tiles:'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution:'© OpenStreetMap'},
+    sat:  {nom:'Satellite', sw:'linear-gradient(135deg,#334155,#0f172a)', tiles:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution:'© Esri'},
+    topo: {nom:'Topo',  sw:'linear-gradient(135deg,#d6f5d6,#a7d8a7)', tiles:'https://{a-c}.tile.opentopomap.org/{z}/{x}/{y}.png', attribution:'© OpenTopoMap'},
+    relief:{nom:'Relief', sw:'linear-gradient(135deg,#cbd5e1,#94a3b8)', tiles:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}', attribution:'© Esri'},
+    dark: {nom:'Dark',  sw:'linear-gradient(135deg,#1e293b,#0f172a)', tiles:'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attribution:'© CARTO'},
+    light:{nom:'Light', sw:'linear-gradient(135deg,#f8fafc,#e2e8f0)', tiles:'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attribution:'© CARTO'},
+    hot:  {nom:'Humanitaire', sw:'linear-gradient(135deg,#fbbf24,#d97706)', tiles:'https://tile-{s}.openstreetmap.fr/hot/{z}/{x}/{y}.png', attribution:'© OSM HOT'},
+};
+let basemapActif = 'osm';
+function styleComplet() {
+    const sources = {}, layers = [];
+    Object.keys(BASEMAPS).forEach(k => {
+        sources['bm-' + k] = {type:'raster', tiles:[BASEMAPS[k].tiles], tileSize:256, attribution:BASEMAPS[k].attribution};
+        layers.push({id:'bm-' + k, type:'raster', source:'bm-' + k, layout:{visibility: k === basemapActif ? 'visible' : 'none'}});
+    });
+    return {version:8, glyphs:'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf', sources, layers};
+}
+const FONT = ['Open Sans Regular'];
+const conteneurBasemaps = document.getElementById('basemaps');
+Object.keys(BASEMAPS).forEach(k => {
+    const b = document.createElement('button');
+    b.className = 'bm-btn' + (k === basemapActif ? ' active' : '');
+    b.dataset.bm = k;
+    b.innerHTML = `<span class="sw" style="background:${BASEMAPS[k].sw}"></span>${BASEMAPS[k].nom}`;
+    b.addEventListener('click', () => {
+        basemapActif = k;
+        document.querySelectorAll('.bm-btn').forEach(x => x.classList.toggle('active', x.dataset.bm === k));
+        Object.keys(BASEMAPS).forEach(m => map.setLayoutProperty('bm-' + m, 'visibility', m === k ? 'visible' : 'none'));
+        if (mini) mini.setStyle(styleMinimap());
+    });
+    conteneurBasemaps.appendChild(b);
+});
+
+// ─── DONNÉES ──────────────────────────────────────────────────
+const donneesPoints = {{ points_json|safe }};
+const agents = {{ agents_json|safe }};
+const activites = {{ activites_json|safe }};
+const zones = {{ zones_json|safe }};
+const rapportImport = {% if rapport_import %}{{ rapport_import|safe }}{% else %}null{% endif %};
+let coucheImporteeCible = '{{ couche_importee }}';
+
+// ─── INITIALISATION CARTE ─────────────────────────────────────
+const map = new maplibregl.Map({container:'map', style:styleComplet(), center:[29.22, -1.67], zoom:9});
+map.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'top-right');
+map.addControl(new maplibregl.ScaleControl({maxWidth:120, unit:'metric'}), 'bottom-left');
+map.addControl(new maplibregl.FullscreenControl());
+
+let mini = null;
+function styleMinimap() {
+    return {version:8, sources:{bm:{type:'raster', tiles:[BASEMAPS.osm.tiles], tileSize:256}}, layers:[{id:'bm', type:'raster', source:'bm'}]};
+}
+
+// ─── SOURCES ET COUCHES ───────────────────────────────────────
+const sourcePoints = {type:'geojson', data:{type:'FeatureCollection', features:[]}, cluster:true, clusterMaxZoom:13, clusterRadius:46};
+
+map.on('load', () => {
+    chargerTousEmojis();
+    // Points avec clusters
+    map.addSource('points', sourcePoints);
+    map.addLayer({id:'clusters', type:'circle', source:'points', filter:['has','point_count'], paint:{
+        'circle-color':['step',['get','point_count'],'#6d5df6',12,'#4f46e5',40,'#ef4444'],
+        'circle-radius':['step',['get','point_count'],18,12,22,40,28],
+        'circle-stroke-color':'#fff','circle-stroke-width':2,'circle-opacity':.92}});
+    map.addLayer({id:'clusters-texte', type:'symbol', source:'points', filter:['has','point_count'], layout:{
+        'text-field':['get','point_count_abbreviated'],'text-size':12,'text-font':FONT},
+        paint:{'text-color':'#ffffff'}});
+    map.addLayer({id:'points', type:'circle', source:'points', filter:['!',['has','point_count']], paint:{
+        'circle-color':matchCategorie('categorie'),
+        'circle-radius':['case',['boolean',['feature-state','hover'],false],10,7],
+        'circle-stroke-color':'#ffffff','circle-stroke-width':2,
+        'circle-opacity':['case',['boolean',['feature-state','hover'],false],1,.9]}});
+    map.addLayer({id:'points-icones', type:'symbol', source:'points', filter:['!',['has','point_count']], layout:{
+        'icon-image':matchEmoji('categorie'),'icon-size':0.62,'icon-allow-overlap':false}});
+
+    // Agents
+    map.addSource('agents', {type:'geojson', data:{type:'FeatureCollection', features:agents.map(a => ({
+        type:'Feature', properties:a,
+        geometry:{type:'Point', coordinates:[a.longitude, a.latitude]}}))}});
+    map.addLayer({id:'agents', type:'circle', source:'agents', paint:{
+        'circle-color':'#3b82f6','circle-radius':7,'circle-stroke-color':'#fff','circle-stroke-width':2}});
+    map.addLayer({id:'agents-icones', type:'symbol', source:'agents', layout:{'icon-image':'emoji-agent','icon-size':0.5}});
+
+    // Activités
+    map.addSource('activites', {type:'geojson', data:{type:'FeatureCollection', features:activites.map(a => ({
+        type:'Feature', properties:a,
+        geometry:{type:'Point', coordinates:[a.longitude, a.latitude]}}))}});
+    map.addLayer({id:'activites', type:'circle', source:'activites', paint:{
+        'circle-color':'#f97316','circle-radius':6.5,'circle-stroke-color':'#fff','circle-stroke-width':2}});
+    map.addLayer({id:'activites-icones', type:'symbol', source:'activites', layout:{'icon-image':'emoji-activite','icon-size':0.5}});
+
+    // Zones de sécurité (points + polygones)
+    const featuresZones = [];
+    zones.forEach(z => {
+        if (z.type === 'Polygon') {
+            featuresZones.push({type:'Feature', properties:{...z, z_type:'poly'}, geometry:{type:'Polygon', coordinates:z.coordonnees}});
+        } else if (z.type === 'Point') {
+            featuresZones.push({type:'Feature', properties:{...z, z_type:'point'}, geometry:{type:'Point', coordinates:z.coordonnees}});
+            featuresZones.push({type:'Feature', properties:{...z, z_type:'rayon'}, geometry:turf.circle(z.coordonnees, z.rayon || 100, {units:'meters'}).geometry});
+        }
+    });
+    map.addSource('zones', {type:'geojson', data:{type:'FeatureCollection', features:featuresZones}});
+    map.addLayer({id:'zones-fill', type:'fill', source:'zones', filter:['in',['get','z_type'],['literal',['poly','rayon']]], paint:{
+        'fill-color':['match',['get','statut'],'dangereuse','#ef4444','securisee','#22c55e','indisponible','#eab308','#888'],
+        'fill-opacity':['case',['==',['get','z_type'],'rayon'],0.12,0.28]}});
+    map.addLayer({id:'zones-line', type:'line', source:'zones', filter:['in',['get','z_type'],['literal',['poly','rayon']]], paint:{
+        'line-color':['match',['get','statut'],'dangereuse','#ef4444','securisee','#22c55e','indisponible','#eab308','#888'],
+        'line-width':2, 'line-dasharray':[4,2]}});
+    map.addLayer({id:'zones-point', type:'circle', source:'zones', filter:['==',['get','z_type'],'point'], paint:{
+        'circle-color':['match',['get','statut'],'dangereuse','#ef4444','securisee','#22c55e','indisponible','#eab308','#888'],
+        'circle-radius':8,'circle-stroke-color':'#fff','circle-stroke-width':2}});
+
+    // Couches SIG + dessins
+    rechargerCouches();
+
+    // Sources temporaires (dessin / mesure)
+    map.addSource('temp-points', {type:'geojson', data:{type:'FeatureCollection', features:[]}});
+    map.addSource('temp-line', {type:'geojson', data:{type:'FeatureCollection', features:[]}});
+    map.addSource('temp-poly', {type:'geojson', data:{type:'FeatureCollection', features:[]}});
+    map.addLayer({id:'temp-points', type:'circle', source:'temp-points', paint:{'circle-color':'#6d5df6','circle-radius':5,'circle-stroke-color':'#fff','circle-stroke-width':2}});
+    map.addLayer({id:'temp-line', type:'line', source:'temp-line', paint:{'line-color':'#6d5df6','line-width':3,'line-dasharray':[5,3]}});
+    map.addLayer({id:'temp-poly', type:'fill', source:'temp-poly', paint:{'fill-color':'#6d5df6','fill-opacity':.25}});
+
+    // Surbrillance de l'élément identifié
+    map.addSource('identify-highlight', {type:'geojson', data:{type:'FeatureCollection', features:[]}});
+    map.addLayer({id:'identify-hl-fill', type:'fill', source:'identify-highlight', paint:{'fill-color':'#f59e0b','fill-opacity':.35}});
+    map.addLayer({id:'identify-hl-line', type:'line', source:'identify-highlight', paint:{'line-color':'#f59e0b','line-width':4,'line-dasharray':[6,3]}});
+    map.addLayer({id:'identify-hl-point', type:'circle', source:'identify-highlight', paint:{'circle-color':'#f59e0b','circle-radius':13,'circle-stroke-color':'#ffffff','circle-stroke-width':3}});
+    map.addControl(ControleIdentifier, 'top-right');
+
+    majSourcePoints();
+    peuplerFiltres();
+    construireLegende();
+    initMiniMap();
+    initialiserInteractions();
+
+    const pidPoint = new URLSearchParams(location.search).get('point');
+    if (pidPoint) {
+        const p = donneesPoints.find(x => String(x.id) === String(pidPoint));
+        if (p) setTimeout(() => afficherPoint(p, true), 700);
+    }
+});
+
+let couchePointLayers = [];
+function rechargerCouches() {
+    fetch('{% url "geometrie_donnees" %}').then(r => r.json()).then(data => {
+        map.getStyle().layers.forEach(l => { if (l.id.startsWith('couche-')) map.removeLayer(l.id); });
+        Object.keys(map.getStyle().sources).forEach(s => { if (s.startsWith('couche-')) map.removeSource(s); });
+        couchesDonnees.length = 0;
+        couchePointLayers.length = 0;
+        data.forEach(c => {
+            couchesDonnees.push(c);
+            const srcId = 'couche-' + c.id;
+            map.addSource(srcId, {type:'geojson', data:c.geojson});
+            map.addLayer({id:'couche-ligne-' + c.id, type:'line', source:srcId, paint:{'line-color':c.couleur,'line-width':2}});
+            map.addLayer({id:'couche-fill-' + c.id, type:'fill', source:srcId, paint:{'fill-color':c.couleur,'fill-opacity':.15}});
+            map.addLayer({id:'couche-point-' + c.id, type:'circle', source:srcId, paint:{'circle-color':c.couleur,'circle-radius':6,'circle-stroke-color':'#fff','circle-stroke-width':2}});
+            couchePointLayers.push('couche-point-' + c.id);
+            map.addLayer({id:'couche-symbole-' + c.id, type:'symbol', source:srcId, layout:{'text-field':['get','nom'],'text-size':11,'text-offset':[0,-1.4],'text-font':FONT}, paint:{'text-color':c.couleur,'text-halo-color':'#ffffff','text-halo-width':1.5}});
+        });
+        remonterHighlight();
+        initialiserCouchesClic();
+        zoomerApresImport();
+    }).catch(() => {});
+}
+function zoomerApresImport() {
+    if (!coucheImporteeCible) return;
+    const idCible = String(coucheImporteeCible);
+    coucheImporteeCible = '';
+    const c = couchesDonnees.find(x => String(x.id) === idCible);
+    if (!c || !c.geojson || !c.geojson.features || !c.geojson.features.length) return;
+    try {
+        const bbox = turf.bbox(c.geojson);
+        if (bbox && isFinite(bbox[0]) && isFinite(bbox[2])) map.fitBounds(bbox, {padding: 70, maxZoom: 16, duration: 900});
+    } catch (e) {}
+}
+function remonterHighlight() {
+    ['identify-hl-fill','identify-hl-line','identify-hl-point'].forEach(id => {
+        if (map.getLayer(id)) map.moveLayer(id);
+    });
+}
+
+// ─── GÉOCODAGE INVERSÉ (Pays / Région) ────────────────────────
+const geoCache = {};
+async function paysRegion(lat, lng) {
+    const key = lat.toFixed(3) + '|' + lng.toFixed(3);
+    if (geoCache[key] !== undefined) return geoCache[key];
+    try {
+        const rep = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&accept-language=fr`);
+        const data = await rep.json();
+        const addr = data.address || {};
+        geoCache[key] = [addr.region || addr.state || addr.province || addr.county, addr.country || ''].filter(Boolean).join(', ');
+    } catch (e) { geoCache[key] = ''; }
+    return geoCache[key];
+}
+
+// ─── FILTRES + CLUSTERS ───────────────────────────────────────
+let filtres = {categorie:'', statut:'', province:'', agent:'', debut:'', fin:''};
+function datePoint(p) {
+    const [jour, heure] = p.date.split(' ');
+    const [j, m, a] = jour.split('/');
+    const hms = heure ? heure.split(':').map(Number) : [0, 0];
+    return new Date(+a, +m - 1, +j, hms[0] || 0, hms[1] || 0).getTime();
+}
+function pointsFiltres() {
+    return donneesPoints.filter(p => {
+        if (filtres.categorie && p.categorie !== filtres.categorie) return false;
+        if (filtres.statut && p.statut !== filtres.statut) return false;
+        if (filtres.province && p.province !== filtres.province) return false;
+        if (filtres.agent && p.auteur !== filtres.agent) return false;
+        if (filtres.debut && datePoint(p) < new Date(filtres.debut).getTime()) return false;
+        if (filtres.fin && datePoint(p) > new Date(filtres.fin).getTime() + 86399000) return false;
+        return true;
+    });
+}
+function majSourcePoints() {
+    const src = map.getSource('points');
+    if (!src) return;
+    src.setData({type:'FeatureCollection', features:pointsFiltres().map(p => ({
+        id:p.id, type:'Feature', properties:p,
+        geometry:{type:'Point', coordinates:[p.longitude, p.latitude]}}))});
+}
+function peuplerFiltres() {
+    const cats = new Set(donneesPoints.map(p => p.categorie));
+    const prov = new Set(donneesPoints.map(p => p.province).filter(Boolean));
+    const agentsSet = new Set(donneesPoints.map(p => p.auteur).filter(Boolean));
+    const selCat = document.getElementById('f-categorie');
+    cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = (CATS[c]?.emoji || '📍') + ' ' + (mukmapT ? mukmapT('cat_' + c) || (CATS[c]?.nom || c) : (CATS[c]?.nom || c)); selCat.appendChild(o); });
+    prov.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; document.getElementById('f-province').appendChild(o); });
+    agentsSet.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; document.getElementById('f-agent').appendChild(o); });
+    ['f-categorie','f-statut','f-province','f-agent','f-debut','f-fin'].forEach(id => {
+        document.getElementById(id).addEventListener('change', e => {
+            const champs = {f_categorie:'categorie', f_statut:'statut', f_province:'province', f_agent:'agent', f_debut:'debut', f_fin:'fin'};
+            filtres[champs[id]] = e.target.value;
+            majSourcePoints();
+        });
+    });
+}
+function reinitialiserFiltres() {
+    filtres = {categorie:'', statut:'', province:'', agent:'', debut:'', fin:''};
+    ['f-categorie','f-statut','f-province','f-agent','f-debut','f-fin'].forEach(id => document.getElementById(id).value = '');
+    majSourcePoints();
+}
+function construireLegende() {
+    const leg = document.getElementById('legende');
+    const comptes = {};
+    donneesPoints.forEach(p => comptes[p.categorie] = (comptes[p.categorie] || 0) + 1);
+    Object.keys(CATS).forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'leg-item';
+        div.innerHTML = `<span class="puces" style="background:${CATS[c].couleur}"></span> ${CATS[c].emoji} ${(mukmapT && mukmapT('cat_' + c)) || CATS[c].nom || c} <span class="compte">${comptes[c] || 0}</span>`;
+        leg.appendChild(div);
+    });
+}
+
+// ─── RECHERCHE INTELLIGENTE ───────────────────────────────────
+const inpRecherche = document.getElementById('recherche');
+const zoneResultats = document.getElementById('resultats-recherche');
+let marqueurRecherche = null;
+let debounceGeo = null;
+
+function rechercherEnLigne(q) {
+    zoneResultats.innerHTML = `<div class="res-item" style="cursor:default;color:var(--text-3);"><div class="res-emoji">⏳</div><div>${(mukmapT && mukmapT('recherche_en_ligne')) || 'Recherche en ligne…'}</div></div>`;
+    zoneResultats.style.display = 'block';
+    debounceGeo = setTimeout(async () => {
+        try {
+            const rep = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&accept-language=fr`);
+            const data = await rep.json();
+            if (inpRecherche.value.trim().toLowerCase() !== q) return;
+            if (!data.length) { afficherResultats([]); return; }
+            afficherResultats(data.map(d => ({
+                type:'geo', lat:parseFloat(d.lat), lng:parseFloat(d.lon),
+                nom:d.display_name.split(',').slice(0, 3).join(','), sous:d.display_name
+            })));
+        } catch { afficherResultats([]); }
+    }, 350);
+}
+
+function afficherResultats(res) {
+    if (!res.length) {
+        const q = inpRecherche.value.trim();
+        zoneResultats.innerHTML = `<div class="res-item" style="cursor:default;color:var(--text-3);"><div class="res-emoji">🔍</div><div>${(mukmapT && mukmapT('aucun_resultat')) || 'Aucun résultat'} « ${q} »</div></div>`;
+        zoneResultats.style.display = 'block';
+        return;
+    }
+    zoneResultats.innerHTML = res.map(r => {
+        if (r.type === 'coord') return `<div class="res-item" data-type="coord" data-lat="${r.lat}" data-lng="${r.lng}"><div class="res-emoji">📍</div><div><b>${r.nom}</b></div></div>`;
+        if (r.type === 'geo') return `<div class="res-item" data-type="geo" data-lat="${r.lat}" data-lng="${r.lng}"><div class="res-emoji">🌍</div><div><b>${r.nom}</b><br><span style="font-size:.72rem;color:var(--text-3)">${r.sous || ''}</span></div></div>`;
+        return `<div class="res-item" data-type="point" data-id="${r.p.id}">${r.p.photo ? `<img src="${r.p.photo}">` : `<div class="res-emoji">${CATS[r.p.categorie]?.emoji || '📍'}</div>`}<div><b>${r.p.nom}</b><br><span style="font-size:.72rem;color:var(--text-3)">${r.p.province || ''} ${r.p.commune ? '· ' + r.p.commune : ''}</span></div></div>`;
+    }).join('');
+    zoneResultats.style.display = 'block';
+}
+
+inpRecherche.addEventListener('input', () => {
+    const q = inpRecherche.value.trim().toLowerCase();
+    clearTimeout(debounceGeo);
+    if (!q) { zoneResultats.style.display = 'none'; return; }
+    const coords = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (coords) {
+        afficherResultats([{type:'coord', lat:parseFloat(coords[1]), lng:parseFloat(coords[2]), nom:`${(mukmapT && mukmapT('aller_coordonnees')) || 'Aller aux coordonnées'} ${coords[1]}, ${coords[2]}`}]);
+        return;
+    }
+    const locaux = pointsFiltres().filter(p =>
+        (p.nom||'').toLowerCase().includes(q) || (p.province||'').toLowerCase().includes(q) ||
+        (p.commune||'').toLowerCase().includes(q) || (p.quartier||'').toLowerCase().includes(q) ||
+        (p.categorie||'').toLowerCase().includes(q) || (p.auteur||'').toLowerCase().includes(q))
+        .slice(0, 8).map(p => ({type:'point', p}));
+    if (locaux.length) { afficherResultats(locaux); return; }
+    rechercherEnLigne(q);
+});
+inpRecherche.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const premier = zoneResultats.querySelector('.res-item[data-type]');
+    if (premier) { premier.click(); return; }
+    const q = inpRecherche.value.trim().toLowerCase();
+    if (q && !zoneResultats.querySelector('.res-item')) rechercherEnLigne(q);
+});
+zoneResultats.addEventListener('click', e => {
+    const item = e.target.closest('.res-item');
+    if (!item || !item.dataset.type) return;
+    zoneResultats.style.display = 'none';
+    inpRecherche.value = '';
+    const lat = parseFloat(item.dataset.lat), lng = parseFloat(item.dataset.lng);
+    if (item.dataset.type === 'coord') {
+        map.flyTo({center:[lng, lat], zoom:15});
+        return;
+    }
+    if (item.dataset.type === 'geo') {
+        if (marqueurRecherche) marqueurRecherche.remove();
+        marqueurRecherche = new maplibregl.Marker({color:'#f59e0b'}).setLngLat([lng, lat]).addTo(map);
+        map.flyTo({center:[lng, lat], zoom:12});
+        toast(item.querySelector('b').textContent);
+        return;
+    }
+    const p = donneesPoints.find(x => x.id === parseInt(item.dataset.id));
+    if (p) afficherPoint(p, true);
+});
+document.addEventListener('click', e => { if (!e.target.closest('#recherche-wrap')) zoneResultats.style.display = 'none'; });
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────
+const messagesDjango = [];
+{% for m in messages %}messagesDjango.push({texte: '{{ m.message|escapejs }}', tags: '{{ m.tags|default:"success" }}'});{% endfor %}
+const btnNotif = document.getElementById('btn-notif');
+const dropdownNotif = document.getElementById('dropdown-notif');
+const badgeNotif = document.getElementById('badge-notif');
+function majNotifs() {
+    const items = [...messagesDjango, {texte:'Connexion sécurisée établie.', tags:'success'}, {texte:'Vérifiez les zones dangereuses avant vos trajets.', tags:'warning'}];
+    badgeNotif.textContent = items.length;
+    badgeNotif.style.display = items.length ? 'flex' : 'none';
+    dropdownNotif.innerHTML = items.map((n, i) =>
+        `<div class="n-item"><span style="font-size:1.1rem;">${n.tags === 'warning' ? '⚠️' : n.tags === 'error' ? '❌' : '✅'}</span><span>${n.texte}</span></div>`).join('');
+}
+btnNotif.addEventListener('click', () => { dropdownNotif.style.display = dropdownNotif.style.display === 'block' ? 'none' : 'block'; });
+document.addEventListener('click', e => { if (!e.target.closest('.notif-wrap')) dropdownNotif.style.display = 'none'; });
+majNotifs();
+
+// ─── TOOLTIP SURVOL (nom + pays/région + image) ───────────────
+const tooltip = document.getElementById('tooltip');
+let timerTooltip = null;
+function afficherTooltip(p, point) {
+    tooltip.innerHTML = `${p.photo ? `<img src="${p.photo}">` : ''}<div class="tt-nom">${CATS[p.categorie]?.emoji || ''} ${p.nom}</div><div class="tt-zone">…</div>`;
+    tooltip.style.left = (point.x + 14) + 'px';
+    tooltip.style.top = (point.y - 10) + 'px';
+    tooltip.style.display = 'block';
+    clearTimeout(timerTooltip);
+    paysRegion(p.latitude, p.longitude).then(zone => {
+        const elZone = tooltip.querySelector('.tt-zone');
+        if (elZone) elZone.textContent = zone ? '🌍 ' + zone : (p.province ? p.province : '');
+    });
+}
+function masquerTooltip() { clearTimeout(timerTooltip); timerTooltip = setTimeout(() => tooltip.style.display = 'none', 250); }
+
+// ─── POPUPS ───────────────────────────────────────────────────
+function gallerieHTML(p, limit) {
+    const medias = (p.medias || []).slice(0, limit || 6);
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px;">${medias.map(m => {
+        const url = m.url;
+        if (m.type === 'video') return `<div onclick="ouvrirMedia('${url}','video')" style="aspect-ratio:1;background:#000;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;color:#fff;">🎬</div>`;
+        if (m.type === 'pdf') return `<a href="${url}" target="_blank" style="aspect-ratio:1;background:#f97316;display:flex;align-items:center;justify-content:center;border-radius:8px;text-decoration:none;color:#fff;font-size:.65rem;font-weight:700;">PDF</a>`;
+        if (m.type === 'audio') return `<div onclick="ouvrirMedia('${url}','audio')" style="aspect-ratio:1;background:#22c55e;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;color:#fff;">🎵</div>`;
+        return `<img src="${url}" style="width:100%;height:100%;object-fit:cover;cursor:pointer;" onclick="ouvrirMedia('${url}','photo')">`;
+    }).join('')}</div>`;
+}
+function ouvrirMedia(url, type) {
+    const lb = document.getElementById('lightbox');
+    if (type === 'video') lb.innerHTML = `<video src="${url}" controls autoplay></video>`;
+    else if (type === 'audio') lb.innerHTML = `<audio src="${url}" controls autoplay></audio>`;
+    else lb.innerHTML = `<img src="${url}">`;
+    lb.style.display = 'flex';
+}
+document.getElementById('lightbox').addEventListener('click', () => document.getElementById('lightbox').style.display = 'none');
+
+function popupPoint(p) {
+    const extrasObj = extraireDonnees(p);
+    const extras = extrasObj ? Object.entries(extrasObj) : [];
+    return `<div style="min-width:230px;max-height:420px;overflow-y:auto;font-family:'Inter',sans-serif;">
+        ${p.photo ? `<img src="${p.photo}" style="width:100%;height:150px;object-fit:cover;border-radius:10px;margin-bottom:10px;">` : ''}
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <b style="font-size:.95rem;">${p.nom}</b>
+            <span class="badge badge-cat" style="background:${CATS[p.categorie]?.couleur}">${CATS[p.categorie]?.emoji} ${(mukmapT && mukmapT('cat_' + p.categorie)) || CATS[p.categorie]?.nom || p.categorie}</span>
+            <span class="badge">${(mukmapT && mukmapT('statut_' + p.statut)) || p.statut}</span>
+        </div>
+        ${p.projet ? `<div style="font-size:.72rem;color:var(--accent);margin-top:4px;">📁 ${p.projet}</div>` : ''}
+        ${p.province ? `<div style="font-size:.75rem;color:var(--text-2);margin-top:4px;">📍 ${[p.province, p.commune, p.quartier].filter(Boolean).join(' · ')}</div>` : ''}
+        ${p.description ? `<div style="font-size:.8rem;color:var(--text-2);margin-top:6px;">${p.description}</div>` : ''}
+        ${extras.length ? `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">${htmlSectionsCompactes(extrasObj)}</div>` : ''}
+        <div style="font-size:.72rem;color:var(--text-3);margin-top:6px;">👤 ${p.auteur} · 📅 ${p.date}<br>🌐 ${p.latitude}, ${p.longitude}</div>
+        ${(p.medias || []).length ? gallerieHTML(p) : ''}
+        <div style="display:flex;gap:6px;margin-top:10px;">
+            <a href="#" class="btn btn-sm btn-primary popup-edit" style="flex:1;text-decoration:none;color:#fff;">${(mukmapT && mukmapT('modifier')) || 'Modifier'}</a>
+            <a href="/point/${p.id}/supprimer/" class="btn btn-sm btn-danger" style="flex:1;text-decoration:none;">${(mukmapT && mukmapT('supprimer')) || 'Supprimer'}</a>
+        </div>
+    </div>`;
+}
+
+function colonnesSupplementaires(p) {
+    const dObj = extraireDonnees(p);
+    return dObj ? Object.entries(dObj) : [];
+}
+
+function afficherPoint(p, voler) {
+    if (voler) map.flyTo({center:[p.longitude, p.latitude], zoom:15});
+    const pop = new maplibregl.Popup({offset:[0,-16], maxWidth:'360px'});
+    pop.setLngLat([p.longitude, p.latitude]).setHTML(popupPoint(p)).addTo(map);
+    const lienEdit = pop.getElement().querySelector('.popup-edit');
+    if (lienEdit) lienEdit.href = '/point/' + p.id + '/edit/';
+    afficherPanelPoint(p);
+}
+function afficherPanelPoint(p) {
+    const panel = document.getElementById('panel-droit');
+    const medias = p.medias || [];
+    const galerie = medias.length ? `<div class="galerie">${medias.map(m => {
+        if (m.type === 'video') return `<div class="g-item" onclick="ouvrirMedia('${m.url}','video')"><div class="type-badge">🎬</div></div>`;
+        if (m.type === 'pdf') return `<a class="g-item" href="${m.url}" target="_blank"><div class="type-badge" style="font-size:.7rem;font-weight:700;">PDF</div></a>`;
+        if (m.type === 'audio') return `<div class="g-item" onclick="ouvrirMedia('${m.url}','audio')"><div class="type-badge">🎵</div></div>`;
+        return `<div class="g-item" onclick="ouvrirMedia('${m.url}','photo')"><img src="${m.url}"></div>`;
+    }).join('')}</div>` : '';
+    const extras = colonnesSupplementaires(p);
+    const extrasObj = extraireDonnees(p);
+    const sourceHtml = (p.source_fichier ? `<div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('fichier_source')) || 'Fichier source'}</span><span class="val">${echapper(p.source_fichier)}</span></div>` : '') +
+        (p.source_fichier ? `<div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('format_import')) || 'Format'}</span><span class="val">${echapper(p.source_format || '—')}</span></div>` : '');
+    const extrasHtml = extras.length ? `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">
+        <div class="titre-section" style="margin-bottom:8px;">${(mukmapT && mukmapT('donnees_fichier')) || 'Colonnes du fichier importé'}</div>
+        ${htmlSectionsCompactes(extrasObj)}
+    </div>` : '';
+    panel.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <b style="font-size:.95rem;">📍 ${p.nom}</b>
+            <button class="btn btn-icon btn-sm" onclick="document.getElementById('panel-droit').classList.remove('ouvert')" title="Fermer" data-i18n-title="fermer">✕</button>
+        </div>
+        ${p.photo ? `<img src="${p.photo}" class="photo-principale">` : ''}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+            <span class="badge badge-cat" style="background:${CATS[p.categorie]?.couleur}">${CATS[p.categorie]?.emoji} ${(mukmapT && mukmapT('cat_' + p.categorie)) || CATS[p.categorie]?.nom || p.categorie}</span>
+            <span class="badge">${(mukmapT && mukmapT('statut_' + p.statut)) || p.statut}</span>
+        </div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('province')) || 'Province'}</span><span class="val">${p.province || '—'}</span></div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('commune')) || 'Commune'}</span><span class="val">${p.commune || '—'}</span></div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('quartier_village')) || 'Quartier / Village'}</span><span class="val">${p.quartier || '—'}</span></div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('latitude')) || 'Latitude'}</span><span class="val">${p.latitude}</span></div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('longitude')) || 'Longitude'}</span><span class="val">${p.longitude}</span></div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('agent_role')) || 'Agent'}</span><span class="val">${p.auteur}</span></div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('date_heure')) || 'Date'}</span><span class="val">${p.date}</span></div>
+        ${p.projet ? `<div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('projet')) || 'Projet'}</span><span class="val">📁 ${p.projet}</span></div>` : ''}
+        ${sourceHtml}
+        ${p.description ? `<p style="font-size:.8rem;color:var(--text-2);margin-top:10px;">${p.description}</p>` : ''}
+        ${galerie}
+        ${extrasHtml}
+        <div style="display:flex;gap:8px;margin-top:14px;">
+            <a class="btn btn-primary btn-sm" href="/point/${p.id}/edit/" style="flex:1;text-decoration:none;color:#fff;">${(mukmapT && mukmapT('modifier')) || 'Modifier'}</a>
+            <a class="btn btn-danger btn-sm" href="/point/${p.id}/supprimer/" style="flex:1;text-decoration:none;">${(mukmapT && mukmapT('supprimer')) || 'Supprimer'}</a>
+        </div>`;
+    panel.classList.add('ouvert');
+}
+
+// ─── INTERACTIONS CARTE ───────────────────────────────────────
+function initialiserInteractions() {
+    // Coordonnées en temps réel
+    map.on('mousemove', e => {
+        document.getElementById('coords-barre').textContent = `${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)}`;
+        if (mini) { mini.setCenter(e.lngLat); }
+    });
+    // Remplissage automatique du formulaire
+    map.on('click', e => {
+        if (mode && mode !== 'erase' || identifyPanel.style.display !== 'none') return;
+        const latInput = document.getElementById('lat-input');
+        const lngInput = document.getElementById('lng-input');
+        if (latInput) latInput.value = e.lngLat.lat.toFixed(6);
+        if (lngInput) lngInput.value = e.lngLat.lng.toFixed(6);
+    });
+
+    // Tooltip points
+    let dernierSurvol = null;
+    map.on('mousemove', 'points', e => {
+        if (mode) return;
+        map.getCanvas().style.cursor = 'pointer';
+        if (e.features.length) {
+            const f = e.features[0];
+            if (dernierSurvol !== null && dernierSurvol !== f.id) {
+                map.setFeatureState({source:'points', id:dernierSurvol}, {hover:false});
+            }
+            dernierSurvol = f.id;
+            map.setFeatureState({source:'points', id:f.id}, {hover:true});
+            afficherTooltip(f.properties, e.point);
+        }
+    });
+    map.on('mouseleave', 'points', () => {
+        map.getCanvas().style.cursor = '';
+        if (dernierSurvol !== null) {
+            map.setFeatureState({source:'points', id:dernierSurvol}, {hover:false});
+            dernierSurvol = null;
+        }
+        masquerTooltip();
+    });
+    map.on('mousemove', 'clusters', e => { if (e.features.length) map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'clusters', () => map.getCanvas().style.cursor = '');
+
+    // Clics
+    map.on('click', 'clusters', e => {
+        const feature = e.features[0];
+        const clusterId = feature.properties.cluster_id;
+        map.getSource('points').getClusterExpansionZoom(clusterId, (err, zoom) => {
+            if (err) return;
+            map.easeTo({center:feature.geometry.coordinates, zoom});
+        });
+    });
+    map.on('click', 'points', e => {
+        if (mode || identifiantActif) return;
+    });
+    map.on('click', 'agents', e => {
+        if (identifiantActif) return;
+        const a = e.features[0].properties;
+        const pop = new maplibregl.Popup({offset:[0,-16]}).setLngLat(e.lngLat).setHTML(`
+            <div style="min-width:200px;font-family:'Inter',sans-serif;">
+                ${a.photo ? `<img src="${a.photo}" style="width:100%;height:110px;object-fit:cover;border-radius:10px;margin-bottom:8px;">` : ''}
+                <b>👤 ${a.nom}</b><br><span style="font-size:.8rem;color:var(--text-2);">${a.fonction}</span><br>
+                <span style="font-size:.75rem;">📞 ${a.telephone}</span>
+            </div>`).addTo(map);
+        popupLegacy = pop;
+    });
+    map.on('click', 'activites', e => {
+        if (identifiantActif) return;
+        const a = e.features[0].properties;
+        const pop = new maplibregl.Popup({offset:[0,-16], maxWidth:'340px'}).setLngLat(e.lngLat).setHTML(`
+            <div style="min-width:220px;font-family:'Inter',sans-serif;">
+                <b>📋 ${a.projet}</b><br>
+                <span style="font-size:.8rem;color:var(--text-2);">${a.rapport}</span><br>
+                <span style="font-size:.75rem;">👥 ${a.beneficiaires} bénéficiaires · ${a.date}</span>
+                ${a.zone_visitee ? `<br><span style="font-size:.75rem;">📍 ${a.zone_visitee}</span>` : ''}
+                ${a.niveau_securite ? `<br><span style="font-size:.75rem;">🛡️ ${a.niveau_securite}</span>` : ''}
+            </div>`).addTo(map);
+        popupLegacy = pop;
+    });
+    map.on('click', 'zones-fill', e => { if (!identifiantActif) afficherZone(e.features[0]); });
+    map.on('click', 'zones-line', e => { if (!identifiantActif) afficherZone(e.features[0]); });
+    map.on('click', 'zones-point', e => { if (!identifiantActif) afficherZone(e.features[0]); });
+}
+
+function afficherZone(f) {
+    const z = f.properties;
+    const pop = new maplibregl.Popup({offset:[0,-16]}).setLngLat(f.geometry.coordinates[0] || f.geometry.coordinates).setHTML(`
+        <div style="min-width:220px;font-family:'Inter',sans-serif;">
+            <b style="color:${z.couleur};">${z.nom}</b><br>
+            <span class="badge" style="background:${z.couleur};color:#fff;border:none;">${libZone(z.statut)}</span>
+            ${z.motif ? `<div style="font-size:.8rem;margin-top:6px;">⚠️ ${z.motif}</div>` : ''}
+            <div style="font-size:.72rem;color:var(--text-3);margin-top:6px;">${(mukmapT && mukmapT('par')) || 'Par'} ${z.auteur || '—'} · ${z.date}</div>
+        </div>`).addTo(map);
+    popupLegacy = pop;
+    const panel = document.getElementById('panel-droit');
+    panel.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <b style="font-size:.95rem;">🛡️ ${z.nom}</b>
+            <button class="btn btn-icon btn-sm" onclick="document.getElementById('panel-droit').classList.remove('ouvert')">✕</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+            <span class="badge" style="background:${z.couleur};color:#fff;border:none;">${libZone(z.statut)}</span>
+            <span class="badge">${z.type}</span>
+        </div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('statut')) || 'Statut'}</span><span class="val">${libZone(z.statut)}</span></div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('rayon_m')) || 'Rayon (m)'}</span><span class="val">${z.rayon || 0}</span></div>
+        ${f.geometry.type === 'Polygon' ? `<div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('surface')) || 'Surface'}</span><span class="val">${(turf.area(f) / 10000).toFixed(2)} ha</span></div><div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('perimetre')) || 'Périmètre'}</span><span class="val">${(turf.length(f, {units:'kilometers'})).toFixed(2)} km</span></div>` : ''}
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('responsable')) || 'Responsable'}</span><span class="val">${z.auteur || '—'}</span></div>
+        <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('date_heure')) || 'Date'}</span><span class="val">${z.date}</span></div>
+        ${z.motif ? `<p style="font-size:.8rem;color:var(--text-2);margin-top:10px;">⚠️ ${z.motif}</p>` : ''}`;
+    panel.classList.add('ouvert');
+}
+
+// ─── COUCHES : POPUPS + SUPPRESSION DES DESSINS ───────────────
+function initialiserCouchesClic() {
+    Object.keys(map.getStyle().sources).forEach(s => {
+        if (!s.startsWith('couche-')) return;
+        const id = s.split('-')[1];
+        ['couche-point-' + id, 'couche-fill-' + id, 'couche-ligne-' + id].forEach(layer => {
+            if (!map.getLayer(layer)) return;
+            map.on('click', layer, e => {
+                if (identifiantActif) return;
+                const f = e.features[0];
+                const pr = f.properties || {};
+                const lignes = Object.entries(pr).filter(([k]) => !['geom_id','couche_id','couleur','type_dessin'].includes(k))
+                    .map(([k,v]) => `<div class="ligne-info"><span class="lib">${k}</span><span class="val">${v}</span></div>`).join('');
+                const pop = new maplibregl.Popup({offset:[0,-16]}).setLngLat(e.lngLat).setHTML(`
+                    <div style="min-width:200px;font-family:'Inter',sans-serif;">
+                        <b style="color:${pr.couleur};">${pr.nom || ((mukmapT && mukmapT('dessin')) || 'Dessin')}</b> <span style="font-size:.7rem;color:var(--text-3);">(${pr.couche_nom || ''})</span>
+                        ${lignes ? `<div style="margin-top:6px;">${lignes}</div>` : ''}
+                        ${pr.couche_nom === 'Dessins' ? `<button class="btn btn-danger btn-sm" style="width:100%;margin-top:10px;" onclick="supprimerDessin(${pr.geom_id})">${(mukmapT && mukmapT('supprimer_dessin')) || 'Supprimer ce dessin'}</button>` : ''}
+                    </div>`).addTo(map);
+                popupLegacy = pop;
+            });
+        });
+    });
+}
+function supprimerDessin(id) {
+    if (!confirm((mukmapT && mukmapT('supprimer_dessin_confirm')) || 'Supprimer ce dessin ?')) return;
+    fetch('{% url "geometrie_delete" 0 %}'.replace('/0/', '/' + id + '/'), {
+        method:'POST', headers:{'X-CSRFToken':(document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || CSRF}
+    }).then(r => r.json()).then(d => {
+        if (d.ok) { toast((mukmapT && mukmapT('dessin_supprime')) || 'Dessin supprimé.'); rechargerCouches(); }
+    });
+}
+
+// ─── DESSIN + MESURE ──────────────────────────────────────────
+let mode = null;
+let vertices = [];
+const btnOutils = document.querySelectorAll('#outils-dessin .btn-tool');
+const mesureBarre = document.getElementById('mesure-barre');
+const mesureValeur = document.getElementById('mesure-valeur');
+const hintDessin = document.getElementById('hint-dessin');
+
+document.getElementById('outils-dessin')?.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.btn-tool');
+    if (!btn) return;
+    const nouveau = btn.dataset.mode;
+    if (mode === nouveau) { desactiverMode(); return; }
+    mode = nouveau;
+    btnOutils.forEach(b => b.classList.toggle('active', b === btn));
+    vertices = [];
+    majTemp();
+    map.doubleClickZoom.disable();
+    map.getCanvas().style.cursor = mode === 'erase' ? 'pointer' : 'crosshair';
+    if (mode === 'distance' || mode === 'area') { mesureBarre.style.display = 'flex'; mesureValeur.textContent = '0 m'; }
+    else mesureBarre.style.display = 'none';
+    const msg = {
+        point:(mukmapT && mukmapT('dessin_msg_point')) || 'Cliquez pour placer le point.',
+        line:(mukmapT && mukmapT('dessin_msg_ligne')) || 'Cliquez pour tracer la ligne. Double-clic pour terminer.',
+        polygon:(mukmapT && mukmapT('dessin_msg_polygone')) || 'Cliquez pour tracer le polygone. Double-clic pour terminer.',
+        circle:(mukmapT && mukmapT('dessin_msg_cercle')) || 'Cliquez pour le centre, puis un 2ᵉ clic pour le rayon.',
+        rectangle:(mukmapT && mukmapT('dessin_msg_rectangle')) || 'Cliquez pour un coin, puis un 2ᵉ clic pour le coin opposé.',
+        distance:(mukmapT && mukmapT('dessin_msg_distance')) || 'Cliquez pour mesurer. Double-clic pour terminer.',
+        area:(mukmapT && mukmapT('dessin_msg_surface')) || 'Cliquez pour mesurer la surface. Double-clic pour terminer.',
+        erase:(mukmapT && mukmapT('dessin_msg_effacer')) || 'Cliquez sur un dessin pour le supprimer.'
+    }[mode];
+    if (hintDessin) hintDessin.textContent = msg;
+});
+function desactiverMode() {
+    mode = null; vertices = [];
+    btnOutils.forEach(b => b.classList.remove('active'));
+    map.getCanvas().style.cursor = '';
+    map.doubleClickZoom.enable();
+    mesureBarre.style.display = 'none';
+    majTemp();
+    if (hintDessin) hintDessin.textContent = (mukmapT && mukmapT('hint_dessin')) || 'Sélectionnez un outil. Double-clic pour terminer un tracé.';
+}
+
+function majTemp() {
+    if (!map.getSource('temp-points')) return;
+    const pts = {type:'FeatureCollection', features:vertices.map(v => ({type:'Feature', geometry:{type:'Point', coordinates:v}}))};
+    const ligne = {type:'FeatureCollection', features: vertices.length > 1 ? [{type:'Feature', geometry:{type:'LineString', coordinates:vertices}}] : []};
+    let poly = {type:'FeatureCollection', features:[]};
+    if (vertices.length > 2 && ['polygon','area'].includes(mode)) {
+        poly = {type:'FeatureCollection', features:[{type:'Feature', geometry:{type:'Polygon', coordinates:[[...vertices, vertices[0]]]}}]};
+    }
+    map.getSource('temp-points').setData(pts);
+    map.getSource('temp-line').setData(ligne);
+    map.getSource('temp-poly').setData(poly);
+}
+
+let dernierClic = 0;
+map.on('click', e => {
+    if (!mode || mode === 'erase') return;
+    const now = Date.now();
+    if (now - dernierClic < 350) { dernierClic = 0; return; }
+    dernierClic = now;
+    const c = [e.lngLat.lng, e.lngLat.lat];
+    if (mode === 'point') {
+        finaliserDessin('Point', c);
+        return;
+    }
+    if (mode === 'circle') {
+        if (vertices.length === 0) {
+            vertices.push(c);
+            majTemp();
+        } else {
+            const rayon = turf.distance(turf.point(vertices[0]), turf.point(c), {units:'meters'});
+            finaliserDessin('Circle', turf.circle(vertices[0], rayon, {units:'meters'}).geometry.coordinates);
+        }
+        return;
+    }
+    if (mode === 'rectangle') {
+        if (vertices.length === 0) {
+            vertices.push(c);
+            majTemp();
+        } else {
+            const a = vertices[0], b = c;
+            const minX = Math.min(a[0], b[0]), maxX = Math.max(a[0], b[0]);
+            const minY = Math.min(a[1], b[1]), maxY = Math.max(a[1], b[1]);
+            finaliserDessin('Rectangle', turf.bboxPolygon([minX, minY, maxX, maxY]).geometry.coordinates);
+        }
+        return;
+    }
+    vertices.push(c);
+    majTemp();
+    if (mode === 'distance') {
+        const dist = vertices.length > 1 ? turf.length(turf.lineString(vertices), {units:'kilometers'}) : 0;
+        mesureValeur.textContent = dist.toFixed(2) + ' km';
+    }
+    if (mode === 'area') {
+        if (vertices.length > 2) {
+            const surf = turf.area(turf.polygon([[...vertices, vertices[0]]]));
+            mesureValeur.textContent = (surf / 10000).toFixed(2) + ' ha';
+        }
+    }
+});
+map.on('dblclick', e => {
+    if (mode === 'line' && vertices.length > 1) finaliserDessin('LineString', vertices);
+    if (mode === 'polygon' && vertices.length > 2) finaliserDessin('Polygon', [[...vertices, vertices[0]]]);
+    if (mode === 'distance' && vertices.length > 1) { const dist = turf.length(turf.lineString(vertices), {units:'kilometers'}); toast(((mukmapT && mukmapT('distance_mesuree')) || 'Distance mesurée : {v} km').replace('{v}', dist.toFixed(2))); desactiverMode(); }
+    if (mode === 'area' && vertices.length > 2) { const surf = turf.area(turf.polygon([[...vertices, vertices[0]]])); toast(((mukmapT && mukmapT('surface_mesuree')) || 'Surface mesurée : {v} ha').replace('{v}', (surf / 10000).toFixed(2))); desactiverMode(); }
+});
+map.on('mousemove', e => {
+    if (!mode || mode === 'erase' || mode === 'point') return;
+    if (!vertices.length) return;
+    if (['line','distance'].includes(mode)) {
+        map.getSource('temp-line').setData({type:'FeatureCollection', features:[{type:'Feature', geometry:{type:'LineString', coordinates:[...vertices, [e.lngLat.lng, e.lngLat.lat]]}}]});
+    }
+});
+
+function finaliserDessin(type, coords) {
+    const nomsTypes = {Point:'point', LineString:'ligne', Polygon:'polygone', Circle:'cercle', Rectangle:'rectangle'};
+    const typeNom = (nomsTypes[type] && mukmapT && mukmapT(nomsTypes[type])) || type;
+    const nom = prompt((mukmapT && mukmapT('nom_dessin')) || 'Nom du dessin :', typeNom);
+    if (nom === null) { vertices = []; majTemp(); return; }
+    fetch('{% url "dessin_save" %}', {
+        method:'POST',
+        headers:{'Content-Type':'application/json', 'X-CSRFToken':(document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || CSRF},
+        body:JSON.stringify({nom: nom || type, type, coordonnees:coords})
+    }).then(r => r.json()).then(d => {
+        if (d.ok) {
+            toast(((mukmapT && mukmapT('dessin_enregistre')) || 'Dessin « {nom} » enregistré.').replace('{nom}', nom || type));
+            desactiverMode();
+            rechargerCouches();
+        } else toast(d.erreur || (mukmapT && mukmapT('erreur_sauvegarde')) || 'Erreur lors de la sauvegarde.', 'error');
+    }).catch(() => toast((mukmapT && mukmapT('erreur_reseau')) || 'Erreur réseau.', 'error'));
+}
+
+map.on('click', e => {
+    if (mode !== 'erase') return;
+    const f = map.queryRenderedFeatures(e.point).find(x => (x.properties || {}).couche_nom === 'Dessins');
+    if (f) { supprimerDessin(f.properties.geom_id); return; }
+    toast((mukmapT && mukmapT('aucun_dessin_ici')) || 'Aucun dessin ici. Cliquez directement sur un tracé.', 'warning');
+});
+
+document.getElementById('btn-effacer-mesure')?.addEventListener('click', () => { vertices = []; majTemp(); mesureValeur.textContent = '0 m'; });
+document.getElementById('btn-finir-mesure')?.addEventListener('click', () => {
+    if (mode === 'distance' && vertices.length > 1) toast(((mukmapT && mukmapT('distance_label')) || 'Distance : {v} km').replace('{v}', turf.length(turf.lineString(vertices), {units:'kilometers'}).toFixed(2)));
+    if (mode === 'area' && vertices.length > 2) toast(((mukmapT && mukmapT('surface_label')) || 'Surface : {v} ha').replace('{v}', (turf.area(turf.polygon([[...vertices, vertices[0]]])) / 10000).toFixed(2)));
+    desactiverMode();
+});
+
+// ─── IDENTIFICATION (style QGIS) ───────────────────────────────
+let identifiantActif = false;
+let popupLegacy = null;
+const couchesDonnees = [];
+const identifyPanel = document.getElementById('identify-panel');
+const identifyCorps = document.getElementById('identify-corps');
+const identifyActions = document.getElementById('identify-actions');
+const identifyListe = document.getElementById('identify-liste');
+const CLES_INTERNES = new Set(['geom_id', 'couche_id', 'couleur', 'couche_nom', 'type_dessin', 'point_count', '_partie', 'donnees', 'medias', 'photo']);
+
+function tIdent(cle, def) { return (mukmapT && mukmapT(cle)) || def; }
+function extraireDonnees(pr) {
+    let d = pr ? pr.donnees : null;
+    if (typeof d === 'string') {
+        try { d = JSON.parse(d); } catch (e) { d = null; }
+    }
+    return d && typeof d === 'object' && Object.keys(d).length ? d : null;
+}
+function echapper(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function nomCandidat(pr) {
+    return pr.nom || pr.name || pr.title ||
+        (pr.couche_nom ? pr.couche_nom + ' n°' + (pr.geom_id !== undefined ? pr.geom_id : '') : '');
+}
+function nomCoucheCarte(layerId, pr) {
+    if (layerId.startsWith('couche-')) return pr.couche_nom || tIdent('couche', 'Couche');
+    if (layerId.startsWith('zones-')) return tIdent('zones_securite', 'Zones de sécurité');
+    if (layerId === 'points') return tIdent('points_carte', 'Points');
+    if (layerId === 'agents') return tIdent('agents', 'Agents');
+    if (layerId === 'activites') return tIdent('activites_carte', 'Activités');
+    return layerId;
+}
+function couleurCandidat(pr) {
+    if (pr.couleur) return pr.couleur;
+    if (pr.categorie && CATS[pr.categorie]) return CATS[pr.categorie].couleur;
+    return '#6d5df6';
+}
+function cleUnique(f) {
+    const pr = f.properties || {};
+    if (pr.geom_id !== undefined) return (f.source || '') + '|g' + pr.geom_id;
+    if (f.id !== undefined && f.id !== null) return (f.source || '') + '|i' + f.id;
+    return (f.source || '') + '|c' + JSON.stringify(f.geometry ? f.geometry.coordinates : null);
+}
+function formatNombre(n) {
+    try { return new Intl.NumberFormat(navigator.language || 'fr-FR').format(n); }
+    catch (err) { return String(n); }
+}
+function formatSurface(m2) {
+    if (m2 >= 1e6) return (m2 / 1e6).toLocaleString('fr-FR', {maximumFractionDigits: 2}) + ' km²';
+    if (m2 >= 1e4) return (m2 / 1e4).toLocaleString('fr-FR', {maximumFractionDigits: 2}) + ' ha';
+    return formatNombre(Math.round(m2)) + ' m²';
+}
+function formatDateImport(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
+function formatFichier(n) {
+    const ext = String(n || '').split('.').pop();
+    return ext && ext !== n ? ext.toUpperCase() : '—';
+}
+function formaterValeur(cle, v) {
+    if (v === null || v === undefined || v === '') return '<span class="iv-vide">—</span>';
+    const cl = String(cle).toLowerCase();
+    const s = String(v);
+    if (typeof v === 'number') {
+        if (Number.isInteger(v)) return formatNombre(v);
+        return String(parseFloat(v.toFixed(8)));
+    }
+    if (/^-?\d+$/.test(s) && s.length <= 12) return formatNombre(parseInt(s, 10));
+    if (/^-?\d+\.\d+$/.test(s) && s.length <= 20) return s;
+    if ((cl.includes('date') || cl.includes('annee') || cl.includes('year') || cl.includes('jour')) &&
+        /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(s)) {
+        const p = s.split(/[-/T ]/);
+        if (p.length >= 3 && p[0].length === 4) return `${p[2]}/${p[1]}/${p[0]}` + (p[3] ? ' ' + p[3] : '');
+    }
+    if (/^https?:\/\//i.test(s) || /^www\./i.test(s)) {
+        const url = /^www\./i.test(s) ? 'http://' + s : s;
+        return `<a href="${echapper(url)}" target="_blank" rel="noopener">🔗 ${echapper(s.length > 60 ? s.slice(0, 60) + '…' : s)}</a>`;
+    }
+    if (/^mailto:/i.test(s)) return `<a href="${echapper(s)}">📧 ${echapper(s.replace(/^mailto:/, ''))}</a>`;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && /(mail|email|courriel|contact)/.test(cl)) {
+        return `<a href="mailto:${echapper(s)}">📧 ${echapper(s)}</a>`;
+    }
+    if (/\.(png|jpe?g|gif|webp|svg)(\?|#|$)/i.test(s) && /(photo|image|img|avatar|icone|logo|picto)/.test(cl)) {
+        return `<a href="${echapper(s)}" target="_blank" rel="noopener"><img src="${echapper(s)}" class="iv-img" onerror="this.style.display='none'"></a>`;
+    }
+    return echapper(s);
+}
+const CLE_SECTION = [
+    ['section_identification', ['nom', 'name', 'title', 'python', 'no', 'id', 'code', 'identifiant', 'numero', 'n°', 'matricule', 'ref', 'reference']],
+    ['section_localisation', ['province', 'territoire', 'commune', 'village', 'site', 'quartier', 'localite', 'region', 'pays', 'ville', 'zone', 'atelier', 'adresse', 'secteur', 'groupement', 'chefferie', 'chois', 'selection', 'circonscription']],
+    ['section_coordonnees', ['lat', 'long', 'lon', 'lng', 'alt', 'x', 'y', 'z', 'latitude', 'longitude', 'altitude', 'elevation', 'elev']],
+    ['section_activite', ['activite', 'type', 'infrastructure', 'cycle', 'bailleur', 'donor', 'budget', 'responsable', 'projet', 'intervention', 'domaine', 'filiere']],
+    ['section_statut', ['statut', 'status', 'priorite', 'niveau', 'securite', 'etude', 'avancement', 'etat', 'phase', 'acheve', 'encours']],
+    ['section_observations', ['observation', 'commentaire', 'remarque', 'notes', 'note']],
+];
+function _nettoyer(s) { return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+function sectionDonnee(k) {
+    const kk = _nettoyer(k);
+    for (const [cle, mots] of CLE_SECTION) {
+        if (mots.some(m => {
+            const mm = _nettoyer(m);
+            if (kk === mm) return true;
+            if (kk.includes(mm) && mm.length >= 5) return true;
+            return false;
+        })) return cle;
+    }
+    return 'section_autres';
+}
+function sectionsDonnees(donnees) {
+    const sections = {};
+    Object.entries(donnees || {}).forEach(([k, v]) => {
+        const sec = sectionDonnee(k);
+        (sections[sec] = sections[sec] || []).push([k, v]);
+    });
+    return sections;
+}
+function formaterValeurBrut(v) {
+    if (v === null || v === undefined || v === '') return '<span class="iv-vide">—</span>';
+    return echapper(String(v));
+}
+const LIB_SECTION = {
+    section_identification: 'Identification', section_localisation: 'Localisation',
+    section_coordonnees: 'Coordonnées', section_activite: 'Activité',
+    section_statut: 'Statut', section_observations: 'Observations', section_autres: 'Autres',
+};
+function libSection(sec) { return (mukmapT && mukmapT(sec)) || LIB_SECTION[sec] || sec; }
+function htmlTableAttributs(entrees, avecEntete) {
+    return `<table class="ip-tab">${avecEntete ? `<thead><tr><th>${tIdent('champ', 'Champ')}</th><th>${tIdent('valeur', 'Valeur')}</th></tr></thead>` : ''}<tbody>` +
+        entrees.map(([k, v]) => `<tr><td class="ip-cle">${echapper(k)}</td><td>${formaterValeurBrut(v)}</td></tr>`).join('') +
+        '</tbody></table>';
+}
+function htmlSectionsDonnees(donnees) {
+    const sections = sectionsDonnees(donnees);
+    return Object.entries(sections).map(([sec, entrees]) =>
+        `<div class="ip-section">${libSection(sec)}</div>` + htmlTableAttributs(entrees, true)
+    ).join('');
+}
+function htmlSectionsCompactes(donnees) {
+    const sections = sectionsDonnees(donnees);
+    return Object.entries(sections).map(([sec, entrees]) => `
+        <div style="margin-top:8px;font-size:.65rem;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.6px;">${libSection(sec)}</div>
+        ${entrees.map(([k, v]) => `<div style="display:flex;gap:8px;margin-top:5px;font-size:.74rem;word-break:break-word;"><span style="color:var(--text-3);flex-shrink:0;min-width:120px;font-weight:600;">${echapper(k)}</span><b>${v === '' || v == null ? '—' : echapper(String(v))}</b></div>`).join('')}`).join('');
+}
+function infosGeometrie(f) {
+    const g = f.geometry;
+    const infos = [];
+    if (!g) return infos;
+    if (g.type === 'Point') {
+        const c = g.coordinates;
+        infos.push([tIdent('latitude', 'Latitude'), formatNombre(parseFloat(c[1].toFixed(6)))]);
+        infos.push([tIdent('longitude', 'Longitude'), formatNombre(parseFloat(c[0].toFixed(6)))]);
+        if (c.length > 2 && c[2] !== undefined && c[2] !== null) infos.push([tIdent('altitude_m', 'Altitude'), formatNombre(parseFloat(Number(c[2]).toFixed(2))) + ' m']);
+    } else if (g.type === 'LineString') {
+        try {
+            const km = turf.length(turf.feature(g), {units: 'kilometers'});
+            infos.push([tIdent('longueur', 'Longueur'), km.toFixed(2) + ' km']);
+        } catch (err) {}
+        infos.push([tIdent('points_verts', 'Points'), g.coordinates.length]);
+    } else if (g.type === 'Polygon') {
+        try {
+            const ft = turf.feature(g);
+            infos.push([tIdent('surface', 'Surface'), formatSurface(turf.area(ft))]);
+            infos.push([tIdent('perimetre', 'Périmètre'), turf.length(ft, {units: 'kilometers'}).toFixed(2) + ' km']);
+            const cc = turf.centroid(ft).geometry.coordinates;
+            infos.push([tIdent('centroide', 'Centroïde'), cc[1].toFixed(5) + ', ' + cc[0].toFixed(5)]);
+        } catch (err) {}
+    }
+    try {
+        const bbox = turf.bbox(turf.feature(g));
+        infos.push([tIdent('emprise_bbox', 'Emprise (bbox)'), bbox.map(x => x.toFixed(5)).join(', ')]);
+    } catch (err) {}
+    return infos;
+}
+function metadonneesIdentifiant(pr) {
+    const meta = [];
+    if (pr.couche_id !== undefined) {
+        const c = couchesDonnees.find(x => x.id === pr.couche_id);
+        meta.push([tIdent('couche', 'Couche'), pr.couche_nom || '']);
+        meta.push([tIdent('id_objet', 'Identifiant'), pr.geom_id !== undefined ? pr.geom_id : '—']);
+        if (c) {
+            meta.push([tIdent('fichier_source', 'Fichier source'), c.fichier_source || '—']);
+            meta.push([tIdent("date_import", "Date d'importation"), formatDateImport(c.date_import)]);
+            meta.push([tIdent('format_import', 'Format'), formatFichier(c.fichier_source)]);
+            meta.push([tIdent("nb_objets", "Nombre d'objets"), c.nb_geometries]);
+        }
+    }
+    if (pr._partie) {
+        meta.push([tIdent('partie_geometrie', 'Partie'), tIdent('partie_geometrie', 'Partie {n} sur {t} ({type})')
+            .replace('{n}', pr._partie.numero).replace('{t}', pr._partie.total).replace('{type}', pr._partie.type)]);
+    }
+    return meta;
+}
+
+function basculerIdentifiant() {
+    identifiantActif = !identifiantActif;
+    const btn = document.getElementById('btn-identify-ctrl');
+    if (btn) btn.classList.toggle('active', identifiantActif);
+    map.getCanvas().style.cursor = identifiantActif ? 'crosshair' : '';
+    if (!identifiantActif) fermerIdentifiant();
+}
+function identifierClic(e) {
+    if (mode) return;
+    const etaitActif = identifiantActif;
+    const candidats = [];
+    const vus = new Set();
+    let feats = [];
+    try { feats = map.queryRenderedFeatures(e.point); } catch (err) { feats = []; }
+    for (const f of feats) {
+        const lid = f.layer ? f.layer.id : '';
+        if (lid === 'clusters' || lid === 'clusters-texte' || lid.startsWith('temp-')) continue;
+        if (lid.endsWith('-icones') || lid.endsWith('-symbole')) continue;
+        const pr = f.properties || {};
+        if (pr.point_count !== undefined) continue;
+        const k = cleUnique(f);
+        if (vus.has(k)) continue;
+        vus.add(k);
+        candidats.push(f);
+    }
+    candidats.sort((a, b) => {
+        const pa = a.layer && a.layer.id === 'points' ? 0 : 1;
+        const pb = b.layer && b.layer.id === 'points' ? 0 : 1;
+        return pa - pb;
+    });
+    if (!candidats.length) {
+        if (etaitActif) toast(tIdent('aucun_element_trouve', 'Aucun élément trouvé à cet emplacement.'), 'warning');
+        return;
+    }
+    if (!identifiantActif) {
+        identifiantActif = true;
+        const btn = document.getElementById('btn-identify-ctrl');
+        if (btn) btn.classList.add('active');
+        map.getCanvas().style.cursor = 'crosshair';
+    }
+    if (popupLegacy) { popupLegacy.remove(); popupLegacy = null; }
+    const pDroit = document.getElementById('panel-droit');
+    if (pDroit) pDroit.classList.remove('ouvert');
+    if (candidats.length === 1) ouvrirIdentifiant(candidats[0]);
+    else afficherListeIdentifiant(candidats, e);
+}
+function afficherListeIdentifiant(candidats, e) {
+    identifyListe.innerHTML = '<div class="il-titre">' + tIdent('elements_trouves', '{n} éléments trouvés').replace('{n}', candidats.length) + '</div>' +
+        candidats.map((f, i) => {
+            const pr = f.properties || {};
+            return '<button class="il-item" data-idx="' + i + '">' +
+                '<span class="il-puce" style="background:' + couleurCandidat(pr) + '"></span>' +
+                '<b style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + echapper(nomCandidat(pr) || '—') + '</b>' +
+                '<span class="il-src">' + echapper(nomCoucheCarte(f.layer ? f.layer.id : '', pr)) + '</span></button>';
+        }).join('');
+    identifyListe._candidats = candidats;
+    identifyListe.style.display = 'block';
+    const r = identifyListe.getBoundingClientRect();
+    identifyListe.style.left = Math.max(6, Math.min(e.point.x + 12, window.innerWidth - r.width - 10)) + 'px';
+    identifyListe.style.top = Math.max(6, Math.min(e.point.y + 12, window.innerHeight - r.height - 10)) + 'px';
+}
+function ouvrirIdentifiant(f) {
+    identifyListe.style.display = 'none';
+    const pr = f.properties || {};
+    surbrillanceIdentifiant(f);
+    const badges = `<span class="badge" style="background:${couleurCandidat(pr)};color:#fff;border:none;">${echapper(nomCoucheCarte(f.layer ? f.layer.id : '', pr))}</span>` +
+        `<span class="badge">${echapper(f.geometry ? f.geometry.type : '?')}</span>`;
+    const donneesObj = extraireDonnees(pr);
+    let htmlAttributs = '';
+    if (donneesObj) {
+        htmlAttributs = htmlSectionsDonnees(donneesObj);
+    } else {
+        const entrees = Object.entries(pr).filter(([k]) => !CLES_INTERNES.has(k) && !k.startsWith('_'));
+        htmlAttributs = entrees.length
+            ? `<div class="ip-section">${tIdent('attributs', 'Attributs')}</div>` +
+              `<table class="ip-tab"><thead><tr><th>${tIdent('champ', 'Champ')}</th><th>${tIdent('valeur', 'Valeur')}</th></tr></thead><tbody>` +
+              entrees.map(([k, v]) => `<tr><td class="ip-cle">${echapper(k)}</td><td>${formaterValeur(k, v)}</td></tr>`).join('') + '</tbody></table>'
+            : `<div class="ip-msg">${tIdent('aucun_attribut', 'Aucun attribut disponible pour cet élément.')}</div>`;
+    }
+    const tableGeo = `<table class="ip-tab"><tbody>` +
+        infosGeometrie(f).map(([k, v]) => `<tr><td class="ip-cle">${echapper(k)}</td><td>${v}</td></tr>`).join('') + '</tbody></table>';
+    const meta = metadonneesIdentifiant(pr);
+    const tableMeta = meta.length
+        ? `<table class="ip-tab"><tbody>` + meta.map(([k, v]) => `<tr><td class="ip-cle">${echapper(k)}</td><td>${v}</td></tr>`).join('') + '</tbody></table>'
+        : '';
+    const sourceRows = [];
+    if (pr.source_fichier) {
+        sourceRows.push([tIdent('fichier_source', 'Fichier source'), pr.source_fichier]);
+        sourceRows.push([tIdent('format_import', 'Format'), pr.source_format || '—']);
+    }
+    const tableSource = sourceRows.length
+        ? `<div class="ip-section">${tIdent('source_donnees', 'Source')}</div>` +
+          `<table class="ip-tab"><tbody>` + sourceRows.map(([k, v]) => `<tr><td class="ip-cle">${echapper(k)}</td><td>${echapper(v)}</td></tr>`).join('') + '</tbody></table>'
+        : '';
+    identifyCorps.innerHTML = `
+        <div class="ip-infos">${badges}</div>
+        <div class="ip-nom">${echapper(nomCandidat(pr) || tIdent('informations_element', "Informations sur l'élément"))}</div>
+        ${htmlAttributs}
+        <div class="ip-section">${tIdent('geometrie', 'Géométrie')}</div>${tableGeo}
+        ${tableSource}
+        ${meta.length ? `<div class="ip-section">${tIdent('metadonnees', 'Métadonnées')}</div>${tableMeta}` : ''}
+        <div id="identify-details" style="display:none;"></div>`;
+    const btnTableAttr = (f.layer && f.layer.id === 'points' && pr.id !== undefined)
+        ? `<button class="btn btn-sm" id="ip-table"><span data-lucide="table"></span> ${tIdent('table_attributaire', 'Table attributaire')}</button>`
+        : '';
+    identifyActions.innerHTML = `
+        <button class="btn btn-sm" id="ip-copier"><span data-lucide="copy"></span> ${tIdent('copier', 'Copier')}</button>
+        <button class="btn btn-sm" id="ip-zoom"><span data-lucide="search"></span> ${tIdent('zoom_objet', 'Zoomer')}</button>
+        <button class="btn btn-sm" id="ip-vue"><span data-lucide="map-pin"></span> ${tIdent('vue_carte', 'Carte')}</button>
+        <button class="btn btn-sm" id="ip-exporter"><span data-lucide="download"></span> ${tIdent('exporter', 'Exporter')}</button>
+        ${btnTableAttr}
+        <button class="btn btn-sm btn-primary" id="ip-details" style="flex-basis:100%;"><span data-lucide="list-tree"></span> ${tIdent('voir_details', 'Voir tous les détails')}</button>`;
+    identifyPanel.style.display = 'flex';
+    if (window.lucide) lucide.createIcons();
+    document.getElementById('ip-copier').addEventListener('click', () => copierAttributs(pr));
+    document.getElementById('ip-zoom').addEventListener('click', () => zoomerObjet(f));
+    document.getElementById('ip-vue').addEventListener('click', () => zoomerObjet(f));
+    document.getElementById('ip-exporter').addEventListener('click', () => exporterAttributs(f));
+    const btnTable = document.getElementById('ip-table');
+    if (btnTable) btnTable.addEventListener('click', () => { window.location.href = '/points/?point=' + pr.id; });
+    document.getElementById('ip-details').addEventListener('click', () => basculerDetailsIdentifiant(f, pr));
+    identifyPanel._feature = f;
+    identifyPanel._pr = pr;
+}
+function basculerDetailsIdentifiant(f, pr) {
+    const box = document.getElementById('identify-details');
+    const btn = document.getElementById('ip-details');
+    if (box.style.display !== 'none') {
+        box.style.display = 'none';
+        btn.innerHTML = `<span data-lucide="list-tree"></span> ${tIdent('voir_details', 'Voir tous les détails')}`;
+        if (window.lucide) lucide.createIcons();
+        return;
+    }
+    const meta = metadonneesIdentifiant(pr);
+    const coords = JSON.stringify(f.geometry ? f.geometry.coordinates : null);
+    box.innerHTML = `
+        <div class="ip-section">${tIdent('metadonnees', 'Métadonnées')}</div>
+        <table class="ip-tab"><tbody>
+            <tr><td class="ip-cle">${tIdent('couche', 'Couche')}</td><td>${echapper(pr.couche_nom || nomCoucheCarte(f.layer ? f.layer.id : '', pr))}</td></tr>
+            <tr><td class="ip-cle">${tIdent('type_geometrie', 'Type')}</td><td>${echapper(f.geometry ? f.geometry.type : '?')}</td></tr>
+            <tr><td class="ip-cle">${tIdent('id_objet', 'Identifiant')}</td><td>${pr.geom_id !== undefined ? pr.geom_id : echapper(nomCandidat(pr) || '—')}</td></tr>
+            ${meta.map(([k, v]) => `<tr><td class="ip-cle">${echapper(k)}</td><td>${echapper(v)}</td></tr>`).join('')}
+        </tbody></table>
+        <div class="ip-section">${tIdent('geometrie', 'Géométrie')} — GeoJSON</div>
+        <table class="ip-tab"><tbody>
+            <tr><td class="ip-cle">${tIdent('type_geometrie', 'Type')}</td><td>${echapper(f.geometry ? f.geometry.type : '?')}</td></tr>
+            <tr><td class="ip-cle">${tIdent('coordonnees', 'Coordonnées')}</td><td><code>${echapper(coords.length > 1500 ? coords.slice(0, 1500) + ' …' : coords)}</code></td></tr>
+        </tbody></table>`;
+    box.style.display = 'block';
+    btn.innerHTML = `<span data-lucide="eye-off"></span> ${tIdent('masquer_details', 'Masquer les détails')}`;
+    if (window.lucide) lucide.createIcons();
+}
+function copierAttributs(pr) {
+    let entrees;
+    const dObj = extraireDonnees(pr);
+    if (dObj) {
+        entrees = Object.entries(dObj);
+    } else {
+        entrees = Object.entries(pr).filter(([k]) => !CLES_INTERNES.has(k) && !k.startsWith('_'));
+    }
+    const txt = entrees.map(([k, v]) => k + ' : ' + v).join('\n');
+    const fin = () => toast(tIdent('informations_copiees', 'Informations copiées.'));
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(fin).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = txt; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); } catch (err) {}
+            ta.remove(); fin();
+        });
+    } else {
+        const ta = document.createElement('textarea');
+        ta.value = txt; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (err) {}
+        ta.remove(); fin();
+    }
+}
+function zoomerObjet(f) {
+    try {
+        const bbox = turf.bbox(turf.feature(f.geometry));
+        map.fitBounds(bbox, {padding: 80, maxZoom: 18, duration: 800});
+    } catch (err) {
+        if (f.geometry && f.geometry.type === 'Point') map.flyTo({center: f.geometry.coordinates, zoom: 16});
+    }
+}
+function exporterAttributs(f) {
+    const pr = f.properties || {};
+    let p = {};
+    const dObj = extraireDonnees(pr);
+    if (dObj) {
+        p = Object.assign({}, dObj);
+        if (pr.nom) p['nom'] = pr.nom;
+    } else {
+        p = Object.assign({}, pr);
+        CLES_INTERNES.forEach(k => delete p[k]);
+        Object.keys(p).forEach(k => { if (k.startsWith('_')) delete p[k]; });
+    }
+    const fc = {type: 'FeatureCollection', features: [{type: 'Feature', geometry: f.geometry, properties: p}]};
+    const blob = new Blob([JSON.stringify(fc, null, 2)], {type: 'application/geo+json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'element-' + ((f.properties || {}).geom_id || 'identifie') + '.geojson';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function surbrillanceIdentifiant(f) {
+    const src = map.getSource('identify-highlight');
+    if (!src) return;
+    src.setData({type: 'FeatureCollection', features: [{type: 'Feature', geometry: f.geometry, properties: {}}]});
+}
+function effacerIdentifiant() {
+    const src = map.getSource('identify-highlight');
+    if (src) src.setData({type: 'FeatureCollection', features: []});
+}
+function fermerIdentifiant() {
+    identifyPanel.style.display = 'none';
+    identifyListe.style.display = 'none';
+    effacerIdentifiant();
+}
+
+const ControleIdentifier = {
+    onAdd: function () {
+        const btn = document.createElement('button');
+        btn.id = 'btn-identify-ctrl';
+        btn.className = 'btn-identify-ctrl';
+        btn.type = 'button';
+        btn.innerHTML = '<span data-lucide="search-check">🔍</span>';
+        btn.title = tIdent('identifiant_outil', 'Identifier / Informations');
+        btn.addEventListener('click', basculerIdentifiant);
+        this._btn = btn;
+        const ctr = document.createElement('div');
+        ctr.className = 'maplibregl-ctrl';
+        ctr.appendChild(btn);
+        return ctr;
+    },
+    onRemove: function () {
+        if (this._btn && this._btn.parentNode) this._btn.parentNode.removeChild(this._btn);
+    }
+};
+
+map.on('click', identifierClic);
+identifyListe.addEventListener('click', ev => {
+    const item = ev.target.closest('.il-item');
+    if (!item) return;
+    const c = identifyListe._candidats ? identifyListe._candidats[parseInt(item.dataset.idx, 10)] : null;
+    if (c) ouvrirIdentifiant(c);
+});
+document.getElementById('btn-fermer-identify').addEventListener('click', () => fermerIdentifiant());
+window.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (identifiantActif) basculerIdentifiant();
+    fermerIdentifiant();
+});
+(function initPanelIdentifiant() {
+    const tete = identifyPanel.querySelector('.ip-head');
+    const poignee = document.getElementById('identify-resize');
+    let x0 = 0, y0 = 0, g0 = 0, h0 = 0, deplace = false, redim = false;
+    tete.addEventListener('mousedown', ev => {
+        if (ev.target.closest('button')) return;
+        deplace = true;
+        identifyPanel.style.right = 'auto';
+        identifyPanel.style.maxWidth = '94vw';
+        const r = identifyPanel.getBoundingClientRect();
+        identifyPanel.style.left = r.left + 'px';
+        identifyPanel.style.top = r.top + 'px';
+        identifyPanel.style.width = r.width + 'px';
+        x0 = ev.clientX; y0 = ev.clientY; g0 = r.left; h0 = r.top;
+        ev.preventDefault();
+    });
+    poignee.addEventListener('mousedown', ev => {
+        redim = true;
+        const r = identifyPanel.getBoundingClientRect();
+        x0 = ev.clientX; y0 = ev.clientY; g0 = r.width; h0 = r.height;
+        ev.preventDefault(); ev.stopPropagation();
+    });
+    document.addEventListener('mousemove', ev => {
+        if (deplace) {
+            identifyPanel.style.left = Math.max(0, g0 + ev.clientX - x0) + 'px';
+            identifyPanel.style.top = Math.max(62, h0 + ev.clientY - y0) + 'px';
+        } else if (redim) {
+            identifyPanel.style.width = Math.max(300, g0 + ev.clientX - x0) + 'px';
+            const h = Math.max(220, h0 + ev.clientY - y0);
+            identifyPanel.style.height = h + 'px';
+            identifyCorps.style.maxHeight = (h - 132) + 'px';
+        }
+    });
+    document.addEventListener('mouseup', () => { deplace = false; redim = false; });
+})();
+
+// ─── RAPPORT D'IMPORTATION + INFO-BULLE + RECHERCHE COORDONNÉES ──
+function afficherRapportImport(r) {
+    const corps = document.getElementById('rapport-corps');
+    document.getElementById('rapport-fichier').textContent = r.fichier || '';
+    const lignes = [];
+    lignes.push(['✅', formatNombre(r.lignes_analysees) + ' ' + tIdent('lignes_analysees', 'lignes / entités analysées')]);
+    if (r.points_detectes !== undefined) lignes.push(['✅', formatNombre(r.points_detectes) + ' ' + tIdent('points_detectes', 'points détectés')]);
+    lignes.push(['✅', formatNombre(r.points_crees) + ' ' + tIdent('points_crees', 'points créés')]);
+    if (r.sans_coordonnees) lignes.push(['⚠️', formatNombre(r.sans_coordonnees) + ' ' + tIdent('sans_coordonnees', 'lignes sans coordonnées')]);
+    if (r.invalides) lignes.push(['⚠️', formatNombre(r.invalides) + ' ' + tIdent('coordonnees_invalides', 'coordonnée(s) invalide(s) (hors plage WGS84)')]);
+    if (r.doublons_position) lignes.push(['ℹ️', formatNombre(r.doublons_position) + ' ' + tIdent('doublons_position', 'points superposés (mêmes coordonnées)')]);
+    let html = lignes.map(l => `<div class="rp-ligne"><span class="rp-ico">${l[0]}</span><span>${l[1]}</span></div>`).join('');
+    if (r.colonnes) {
+        html += '<hr class="rp-sep"><div class="rp-titre">' + tIdent('colonnes_detectees', 'Coordonnées détectées') + '</div>';
+        html += `<div class="rp-ligne"><span class="rp-ico"></span><span class="rp-cle">${tIdent('longitude', 'Longitude')} :</span> <span class="rp-val">${echapper(r.colonnes.longitude || '—')}</span></div>`;
+        html += `<div class="rp-ligne"><span class="rp-ico"></span><span class="rp-cle">${tIdent('latitude', 'Latitude')} :</span> <span class="rp-val">${echapper(r.colonnes.latitude || '—')}</span></div>`;
+        html += `<div class="rp-ligne"><span class="rp-ico"></span><span class="rp-cle">${tIdent('altitude', 'Altitude')} :</span> <span class="rp-val">${echapper(r.colonnes.altitude || '—')}</span></div>`;
+    }
+    html += '<hr class="rp-sep">';
+    html += `<div class="rp-ligne"><span class="rp-ico"></span><span class="rp-cle">${tIdent('systeme', 'Système de coordonnées')} :</span> <span class="rp-val">${echapper(r.crs || 'WGS84 (EPSG:4326)')}</span></div>`;
+    if (r.dimension) html += `<div class="rp-ligne"><span class="rp-ico"></span><span class="rp-cle">${tIdent('dimension', 'Dimension')} :</span> <span class="rp-val">${r.dimension}</span></div>`;
+    corps.innerHTML = html;
+    document.getElementById('rapport-modal').style.display = 'flex';
+    if (window.lucide) lucide.createIcons();
+}
+function zoomerCoucheParId(idCible) {
+    const c = couchesDonnees.find(x => String(x.id) === String(idCible));
+    if (c && c.geojson && c.geojson.features && c.geojson.features.length) {
+        try { map.fitBounds(turf.bbox(c.geojson), {padding: 70, maxZoom: 16, duration: 900}); return true; } catch (e) {}
+    }
+    return false;
+}
+if (rapportImport && typeof rapportImport === 'object' && rapportImport.points_crees !== undefined) {
+    afficherRapportImport(rapportImport);
+}
+document.getElementById('rapport-fermer').addEventListener('click', () => { document.getElementById('rapport-modal').style.display = 'none'; });
+document.getElementById('rapport-voir').addEventListener('click', () => {
+    document.getElementById('rapport-modal').style.display = 'none';
+    if (coucheImporteeCible && zoomerCoucheParId(coucheImporteeCible)) return;
+    if (couchesDonnees.length) zoomerCoucheParId(couchesDonnees[0].id);
+});
+
+// Info-bulle Lon / Lat / Alt au survol des points importés
+let reqAnimBulle = 0;
+map.on('mousemove', e => {
+    if (reqAnimBulle) return;
+    reqAnimBulle = requestAnimationFrame(() => {
+        reqAnimBulle = 0;
+        const bulle = document.getElementById('info-bulle-coord');
+        if (identifyPanel.style.display !== 'none' || mode || !couchePointLayers.length) { bulle.style.display = 'none'; return; }
+        const feats = map.queryRenderedFeatures(e.point, {layers: couchePointLayers});
+        const f = feats.find(x => x.geometry && x.geometry.type === 'Point');
+        if (!f) { bulle.style.display = 'none'; return; }
+        const c = f.geometry.coordinates;
+        const pr = f.properties || {};
+        let html = '';
+        const nomFeat = pr.nom || pr.name || pr.title;
+        if (nomFeat) html += '<b>' + echapper(nomFeat) + '</b><br>';
+        html += 'Lon : ' + formatNombre(parseFloat(Number(c[0]).toFixed(6))) + '<br>';
+        html += 'Lat : ' + formatNombre(parseFloat(Number(c[1]).toFixed(6)));
+        if (c.length > 2 && c[2] !== undefined && c[2] !== null) html += '<br>Alt : ' + formatNombre(parseFloat(Number(c[2]).toFixed(2))) + ' m';
+        bulle.innerHTML = html;
+        bulle.style.display = 'block';
+        const rCont = map.getContainer().getBoundingClientRect();
+        let x = rCont.left + e.point.x + 16, y = rCont.top + e.point.y + 16;
+        const bw = bulle.offsetWidth || 200;
+        if (x + bw > rCont.left + rCont.width - 10) x = rCont.left + e.point.x - bw - 16;
+        bulle.style.left = x + 'px';
+        bulle.style.top = y + 'px';
+    });
+});
+
+// Localiser par coordonnées
+const ControleCoordRecherche = {
+    onAdd: function () {
+        const btn = document.createElement('button');
+        btn.id = 'btn-coord-ctrl';
+        btn.type = 'button';
+        btn.className = 'btn-identify-ctrl';
+        btn.innerHTML = '<span data-lucide="crosshair">🎯</span>';
+        btn.title = tIdent('recherche_coordonnees', 'Localiser par coordonnées');
+        btn.addEventListener('click', () => {
+            const pop = document.getElementById('coords-popover');
+            const visible = pop.style.display !== 'none';
+            pop.style.display = visible ? 'none' : 'block';
+            btn.classList.toggle('active', !visible);
+        });
+        this._btn = btn;
+        const ctr = document.createElement('div');
+        ctr.className = 'maplibregl-ctrl';
+        ctr.appendChild(btn);
+        return ctr;
+    },
+    onRemove: function () {
+        if (this._btn && this._btn.parentNode) this._btn.parentNode.removeChild(this._btn);
+    }
+};
+map.addControl(ControleCoordRecherche, 'top-right');
+document.getElementById('rc-localiser').addEventListener('click', () => {
+    const lon = parseFloat(document.getElementById('rc-lon').value);
+    const lat = parseFloat(document.getElementById('rc-lat').value);
+    const alt = parseFloat(document.getElementById('rc-alt').value);
+    if (!isFinite(lon) || !isFinite(lat)) {
+        toast(tIdent('saisie_coordonnees', 'Saisissez une longitude et une latitude valides.'), 'warning');
+        return;
+    }
+    if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        toast(tIdent('coordonnees_hors_plage', 'Coordonnées hors plage WGS84 (Lon : -180 à 180, Lat : -90 à 90).'), 'warning');
+        return;
+    }
+    const coords = isFinite(alt) ? [lon, lat, alt] : [lon, lat];
+    map.flyTo({center: [lon, lat], zoom: 17, duration: 1200});
+    const src = map.getSource('identify-highlight');
+    if (src) src.setData({type: 'FeatureCollection', features: [{type: 'Feature', properties: {}, geometry: {type: 'Point', coordinates: coords}}]});
+    document.getElementById('coords-popover').style.display = 'none';
+    const bC = document.getElementById('btn-coord-ctrl');
+    if (bC) bC.classList.remove('active');
+    setTimeout(() => { const s2 = map.getSource('identify-highlight'); if (s2) s2.setData({type: 'FeatureCollection', features: []}); }, 6000);
+});
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    document.getElementById('coords-popover').style.display = 'none';
+    document.getElementById('rapport-modal').style.display = 'none';
+    const bC = document.getElementById('btn-coord-ctrl');
+    if (bC) bC.classList.remove('active');
+});
+
+// ─── MINIMAP ──────────────────────────────────────────────────
+function initMiniMap() {
+    mini = new maplibregl.Map({container:'minimap', style:styleMinimap(), attributionControl:false, interactive:false});
+    mini.setCenter(map.getCenter()); mini.setZoom(map.getZoom() - 4);
+    ['move','zoom','rotate'].forEach(evt => map.on(evt, () => {
+        mini.setCenter(map.getCenter()); mini.setZoom(map.getZoom() - 4);
+        mini.setBearing(map.getBearing()); mini.setPitch(map.getPitch());
+    }));
+}
+
+// ─── SIDEBAR ──────────────────────────────────────────────────
+const btnSidebar = document.getElementById('btn-sidebar');
+const sidebar = document.getElementById('sidebar');
+btnSidebar.addEventListener('click', () => {
+    sidebar.classList.toggle('fermee');
+    btnSidebar.classList.toggle('actif', !sidebar.classList.contains('fermee'));
+});
+
+if (window.lucide) lucide.createIcons();
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if edition %}Modifier le projet — {% else %}Nouveau projet — {% endif %}MUKMAP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5; --green: #22c55e; --red: #ef4444; --orange: #f59e0b;
+            --shadow: 0 10px 40px rgba(0,0,0,.45);
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 16px; }
+        .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 32px; width: 520px; max-width: 100%; }
+        h2 { font-size: 1.15rem; margin-bottom: 4px; display: flex; align-items: center; gap: 9px; }
+        .subtitle { color: var(--text-3); font-size: .8rem; margin-bottom: 22px; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; margin-bottom: 6px; color: var(--text-2); font-weight: 600; font-size: .8rem; }
+        input, textarea { width: 100%; padding: 11px 13px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; font-size: .88rem; color: var(--text); font-family: 'Inter', Arial, sans-serif; }
+        input:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(109,93,246,.18); }
+        button[type="submit"] { width: 100%; padding: 12px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; border-radius: 10px; font-size: .92rem; font-weight: 700; cursor: pointer; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        button[type="submit"]:hover { box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .nav-top { margin-bottom: 18px; }
+        .nav-top a { color: var(--text-2); text-decoration: none; font-size: .82rem; display: inline-flex; align-items: center; gap: 6px; }
+        .nav-top a:hover { color: var(--accent); }
+        .marque { font-size: .68rem; color: var(--text-3); letter-spacing: 3px; font-weight: 700; margin-bottom: 14px; }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="card">
+    <div class="marque">MUK<span style="color:var(--accent);">MAP</span> v1.0</div>
+    <div class="nav-top"><a href="{% url 'projet_list' %}"><i data-lucide="arrow-left"></i> <span data-i18n="retour_projets">Retour aux projets</span></a></div>
+    <h2><i data-lucide="{% if edition %}edit-3{% else %}folder-plus{% endif %}" style="width:20px;height:20px;color:var(--accent);"></i> {% if edition %}<span data-i18n="modifier_projet">Modifier le projet</span>{% else %}<span data-i18n="nouveau_projet">Nouveau projet</span>{% endif %}</h2>
+    <p class="subtitle">{% if edition %}<span data-i18n="modifier_projet_subtitle">Modifiez les informations du projet.</span>{% else %}<span data-i18n="nouveau_projet_subtitle">Créez un projet pour regrouper les activités de terrain.</span>{% endif %}</p>
+    <form method="POST">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="nom" data-i18n="nom_projet">Nom du projet *</label>
+            <input type="text" id="nom" name="nom" required placeholder="Ex: Suivi des déplacés Nord-Kivu" data-i18n-ph="ex_nom_projet" value="{{ projet.nom|default:'' }}">
+        </div>
+        <div class="form-group">
+            <label for="but" data-i18n="but_activite">But de l'activité</label>
+            <textarea id="but" name="but" rows="3" placeholder="Décrivez l'objectif du projet..." data-i18n-ph="ph_but_activite">{{ projet.but|default:'' }}</textarea>
+        </div>
+        <div class="form-group">
+            <label for="description" data-i18n="description_projet">Description du projet</label>
+            <textarea id="description" name="description" rows="3" placeholder="Informations complémentaires..." data-i18n-ph="ph_description_projet">{{ projet.description|default:'' }}</textarea>
+        </div>
+        <button type="submit"><i data-lucide="{% if edition %}save{% else %}plus{% endif %}" style="width:17px;height:17px;"></i> {% if edition %}<span data-i18n="enregistrer_modifications">Enregistrer les modifications</span>{% else %}<span data-i18n="creer_projet">Créer le projet</span>{% endif %}</button>
+    </form>
+</div>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>if (window.lucide) lucide.createIcons();</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

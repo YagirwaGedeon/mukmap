@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion — MUKMAP v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        :root {
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --text: #1a1f36; --text-2: #4b5278;
+            --ok: #22c55e; --err: #ef4444;
+        }
+        [data-theme="light"] { --texte-txt: #1a1f36; }
+        [data-theme="dark"] { --texte-txt: #eef0ff; }
+        body {
+            min-height: 100vh; overflow: hidden; background: #0b0e1e;
+            display: flex; align-items: center; justify-content: center;
+            position: relative;
+        }
+        [data-theme="light"] body { background: #eef0f8; }
+
+        /* ── Fond : carte stylisée ── */
+        .fond {
+            position: fixed; inset: 0; z-index: 0;
+            background:
+                radial-gradient(900px 500px at 15% 20%, rgba(109,93,246,.28), transparent 60%),
+                radial-gradient(700px 420px at 85% 80%, rgba(59,130,246,.22), transparent 60%),
+                radial-gradient(500px 300px at 70% 15%, rgba(34,197,94,.14), transparent 60%),
+                #0b0e1e;
+        }
+        [data-theme="light"] .fond {
+            background:
+                radial-gradient(900px 500px at 15% 20%, rgba(109,93,246,.18), transparent 60%),
+                radial-gradient(700px 420px at 85% 80%, rgba(59,130,246,.15), transparent 60%),
+                #eef0f8;
+        }
+        .grille-geo {
+            position: absolute; inset: 0; opacity: .35;
+            background-image:
+                linear-gradient(rgba(139,148,255,.16) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139,148,255,.16) 1px, transparent 1px);
+            background-size: 56px 56px;
+            mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+        }
+        .point-lumineux {
+            position: absolute; width: 5px; height: 5px; border-radius: 50%;
+            background: #8b8bff; box-shadow: 0 0 12px 3px rgba(139,139,255,.8);
+            animation: pulsation 3.2s ease-in-out infinite;
+        }
+        @keyframes pulsation { 0%,100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.35); } }
+        .courbe { position: absolute; border: 1.5px solid rgba(139,148,255,.3); border-radius: 50%; }
+
+        /* ── Splash ── */
+        #splash {
+            position: fixed; inset: 0; z-index: 999; background: #0b0e1e;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+            transition: opacity .55s ease, visibility .55s;
+        }
+        #splash.disparu { opacity: 0; visibility: hidden; pointer-events: none; }
+        .logo-splash { width: 86px; height: 86px; border-radius: 24px; background: linear-gradient(135deg, #6d5df6, #4f46e5); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.7rem; color: #fff; box-shadow: 0 12px 44px rgba(79,70,229,.55); animation: surgir .7s ease; }
+        @keyframes surgir { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .nom-splash { font-size: 1.9rem; font-weight: 800; letter-spacing: .12em; color: #fff; }
+        .nom-splash span { color: #8b8bff; }
+        .version-splash { font-size: .75rem; color: #8a90b8; font-weight: 600; }
+        .chargement { display: flex; gap: 7px; margin-top: 6px; }
+        .chargement i { width: 9px; height: 9px; border-radius: 50%; background: #6d5df6; animation: rebond 1s ease-in-out infinite; }
+        .chargement i:nth-child(2) { animation-delay: .15s; }
+        .chargement i:nth-child(3) { animation-delay: .3s; }
+        @keyframes rebond { 0%,100% { transform: translateY(0); opacity: .4; } 50% { transform: translateY(-9px); opacity: 1; } }
+        .dev-splash { font-size: .8rem; color: #6b729c; margin-top: 8px; }
+
+        /* ── Carte glassmorphism ── */
+        .panneau {
+            position: relative; z-index: 10; width: min(920px, 94vw); display: grid;
+            grid-template-columns: 1.05fr 1fr; border-radius: 26px; overflow: hidden;
+            background: rgba(23,26,46,.6); border: 1px solid rgba(139,148,255,.25);
+            backdrop-filter: blur(22px); box-shadow: 0 30px 90px rgba(0,0,0,.55);
+        }
+        [data-theme="light"] .panneau { background: rgba(255,255,255,.72); border-color: rgba(109,93,246,.22); box-shadow: 0 30px 70px rgba(30,40,90,.18); }
+        .panneau-gauche { padding: 46px 42px; display: flex; flex-direction: column; justify-content: center; gap: 14px; border-right: 1px solid rgba(139,148,255,.14); }
+        [data-theme="light"] .panneau-gauche { border-right-color: rgba(109,93,246,.14); }
+        .logo-petit { display: flex; align-items: center; gap: 13px; }
+        .logo-icone { width: 52px; height: 52px; border-radius: 15px; background: linear-gradient(135deg, #6d5df6, #4f46e5); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.05rem; color: #fff; box-shadow: 0 8px 26px rgba(79,70,229,.5); }
+        .logo-texte .t { font-size: 1.45rem; font-weight: 800; letter-spacing: .1em; color: var(--texte-txt); }
+        .logo-texte .t span { color: var(--accent); }
+        .logo-texte .s { font-size: .72rem; color: var(--text-2); font-weight: 600; letter-spacing: .14em; }
+        .panneau-gauche h1 { font-size: 1.5rem; font-weight: 800; color: var(--texte-txt); line-height: 1.3; margin-top: 6px; }
+        .panneau-gauche p { font-size: .84rem; color: var(--text-2); line-height: 1.6; }
+        .points-forts { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+        .point-fort { display: flex; align-items: center; gap: 10px; font-size: .8rem; color: var(--text-2); }
+        .point-fort i { width: 18px; height: 18px; color: var(--ok); flex-shrink: 0; }
+        .dev { margin-top: auto; padding-top: 22px; font-size: .74rem; color: var(--text-2); border-top: 1px solid rgba(139,148,255,.14); }
+        .dev b { color: var(--accent); }
+        .version { font-size: .68rem; color: var(--text-2); opacity: .8; }
+
+        .panneau-droite { padding: 40px 40px 30px; display: flex; flex-direction: column; }
+        .en-tete-options { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
+        .bouton-theme, .bouton-langue { width: 38px; height: 38px; border-radius: 11px; border: 1px solid rgba(139,148,255,.25); background: rgba(139,148,255,.08); color: var(--texte-txt); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all .18s; }
+        .bouton-theme:hover, .bouton-langue:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .bouton-langue { width: auto; padding: 0 12px; font-size: .72rem; font-weight: 700; gap: 6px; }
+        .selecteur-langue { display: flex; align-items: center; gap: 7px; border-radius: 11px; border: 1px solid rgba(139,148,255,.25); background: rgba(139,148,255,.08); color: var(--texte-txt); padding: 0 9px; height: 38px; transition: all .18s; }
+        .selecteur-langue:hover { border-color: var(--accent); }
+        .selecteur-langue select { background: transparent; border: none; color: var(--texte-txt); font-size: .7rem; font-weight: 700; outline: none; cursor: pointer; font-family: inherit; }
+        .selecteur-langue select option { background: #171a2e; color: #eef0ff; }
+        .espace-options { margin-left: auto; }
+
+        .onglets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: rgba(139,148,255,.09); padding: 5px; border-radius: 13px; margin-bottom: 22px; }
+        .onglet { padding: 9px 0; border: none; background: transparent; border-radius: 9px; color: var(--text-2); font-weight: 700; font-size: .8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all .2s; }
+        .onglet.actif { background: linear-gradient(135deg, #6d5df6, #4f46e5); color: #fff; box-shadow: 0 5px 16px rgba(79,70,229,.4); }
+
+        .champ { margin-bottom: 16px; position: relative; }
+        .champ label { display: block; font-size: .7rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+        .champ .conteneur-input { position: relative; }
+        .champ .conteneur-input .icone-champ { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--text-2); pointer-events: none; }
+        .champ input {
+            width: 100%; padding: 12px 14px 12px 41px; border-radius: 12px; outline: none;
+            background: rgba(139,148,255,.07); border: 1.5px solid rgba(139,148,255,.22);
+            color: var(--texte-txt); font-size: .88rem; transition: all .2s;
+        }
+        [data-theme="light"] .champ input { background: rgba(109,93,246,.05); }
+        .champ input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(109,93,246,.15); }
+        .champ .oeil { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-2); cursor: pointer; padding: 4px; display: flex; }
+        .champ .oeil:hover { color: var(--accent); }
+
+        .ligne-options { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 18px; }
+        .souvenir { display: flex; align-items: center; gap: 8px; font-size: .78rem; color: var(--text-2); cursor: pointer; }
+        .souvenir input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+        .oublie { font-size: .78rem; color: var(--accent); text-decoration: none; font-weight: 600; }
+        .oublie:hover { text-decoration: underline; }
+
+        .bouton-connexion {
+            width: 100%; padding: 13px; border: none; border-radius: 12px; cursor: pointer;
+            background: linear-gradient(135deg, #6d5df6, #4f46e5); color: #fff;
+            font-weight: 700; font-size: .9rem; display: flex; align-items: center; justify-content: center; gap: 9px;
+            box-shadow: 0 10px 28px rgba(79,70,229,.4); transition: all .2s;
+        }
+        .bouton-connexion:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(79,70,229,.5); }
+        .bouton-connexion:disabled { opacity: .6; cursor: wait; transform: none; }
+
+        .separateur { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--text-2); font-size: .7rem; }
+        .separateur::before, .separateur::after { content: ''; flex: 1; height: 1px; background: rgba(139,148,255,.2); }
+
+        .bouton-invite {
+            width: 100%; padding: 12px; border-radius: 12px; cursor: pointer;
+            background: rgba(139,148,255,.08); border: 1.5px dashed rgba(139,148,255,.4);
+            color: var(--texte-txt); font-weight: 700; font-size: .84rem;
+            display: flex; align-items: center; justify-content: center; gap: 9px; transition: all .2s;
+        }
+        .bouton-invite:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+
+        .messages { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+        .msg { padding: 10px 14px; border-radius: 11px; font-size: .78rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .msg.success { background: rgba(34,197,94,.12); color: var(--ok); border: 1px solid rgba(34,197,94,.3); }
+        .msg.error { background: rgba(239,68,68,.12); color: var(--err); border: 1px solid rgba(239,68,68,.3); }
+        .msg.warning { background: rgba(245,158,11,.12); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); }
+
+        /* ── Modale mot de passe oublié ── */
+        #modal-oublie { position: fixed; inset: 0; z-index: 500; display: none; align-items: center; justify-content: center; background: rgba(8,10,24,.7); backdrop-filter: blur(6px); }
+        #modal-oublie.ouvert { display: flex; }
+        .carte-modale { width: min(430px, 92vw); background: rgba(23,26,46,.97); border: 1px solid rgba(139,148,255,.25); border-radius: 18px; padding: 28px; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+        [data-theme="light"] .carte-modale { background: #fff; }
+        .carte-modale h3 { font-size: 1rem; font-weight: 800; color: var(--texte-txt); display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+        .carte-modale p { font-size: .8rem; color: var(--text-2); line-height: 1.6; margin-bottom: 18px; }
+        .carte-modale .fermer { width: 100%; padding: 11px; border-radius: 11px; border: 1px solid rgba(139,148,255,.25); background: rgba(139,148,255,.08); color: var(--texte-txt); font-weight: 700; font-size: .8rem; cursor: pointer; }
+        .carte-modale .fermer:hover { border-color: var(--accent); color: var(--accent); }
+
+        .pied { position: fixed; bottom: 14px; left: 0; right: 0; z-index: 20; text-align: center; font-size: .72rem; color: rgba(139,148,255,.75); }
+
+        @media (max-width: 860px) {
+            .panneau { grid-template-columns: 1fr; max-height: 94vh; overflow-y: auto; }
+            .panneau-gauche { display: none; }
+        }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="fond">
+    <div class="grille-geo"></div>
+    <div class="point-lumineux" style="top:18%;left:22%;"></div>
+    <div class="point-lumineux" style="top:70%;left:78%;animation-delay:.9s;"></div>
+    <div class="point-lumineux" style="top:32%;left:88%;animation-delay:1.6s;"></div>
+    <div class="point-lumineux" style="top:82%;left:12%;animation-delay:2.3s;"></div>
+    <div class="courbe" style="width:340px;height:340px;left:4%;top:6%;"></div>
+    <div class="courbe" style="width:520px;height:520px;right:-140px;bottom:-160px;"></div>
+</div>
+
+<div id="splash">
+    <div class="logo-splash"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:24px;background:#fff"></div>
+    <div class="nom-splash">MUK<span>MAP</span></div>
+    <div class="version-splash">VERSION 1.0</div>
+    <div class="chargement"><i></i><i></i><i></i></div>
+    <div class="dev-splash"><span data-i18n="developpe_par">Développé par</span> <b>Ir. Yagirwa Gedeon</b></div>
+</div>
+
+<div class="panneau">
+    <div class="panneau-gauche">
+        <div class="logo-petit">
+            <div class="logo-icone"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:15px;background:#fff"></div>
+            <div class="logo-texte">
+                <div class="t">MUK<span>MAP</span></div>
+                <div class="s" data-i18n="plateforme_sig">PLATEFORME SIG PROFESSIONNELLE</div>
+            </div>
+        </div>
+        <h1 data-i18n="slogan">Cartographie de terrain,<br>collecte &amp; suivi sécurisé.</h1>
+        <p data-i18n="slogan_texte">Organisez toutes vos données géographiques par projet puis par activité. Collectez, visualisez, analysez et exportez vos données SIG en toute simplicité.</p>
+        <div class="points-forts">
+            <div class="point-fort"><i data-lucide="folder-kanban"></i> <span data-i18n="feat_gestion">Gestion par projet et activité</span></div>
+            <div class="point-fort"><i data-lucide="map"></i> <span data-i18n="feat_carte">Carte interactive multi-fonds</span></div>
+            <div class="point-fort"><i data-lucide="shield-check"></i> <span data-i18n="feat_controle">Contrôle d'accès Administrateur / Agent / Invité</span></div>
+            <div class="point-fort"><i data-lucide="file-text"></i> <span data-i18n="feat_rapports_pdf">Rapports professionnels PDF &amp; Word</span></div>
+        </div>
+        <div class="dev">
+            <b>MUKMAP</b> v1.0<br>
+            <span data-i18n="developpe_par">Développé par</span> <b>Ir. Yagirwa Gedeon</b>
+        </div>
+    </div>
+
+    <div class="panneau-droite">
+        <div class="en-tete-options">
+            <span class="espace-options"></span>
+            {% include 'cartographie/_selecteur_langue.html' %}
+            <button class="bouton-theme" id="btn-theme" title="Changer de thème"><i data-lucide="moon" id="icone-theme"></i></button>
+        </div>
+
+        <form method="POST" id="form-connexion" autocomplete="off">
+            {% csrf_token %}
+            <div class="onglets">
+                <button type="button" class="onglet actif" data-type="agent" id="onglet-agent"><i data-lucide="user" style="width:15px;height:15px;"></i> <span data-i18n="agent_role">Agent</span></button>
+                <button type="button" class="onglet" data-type="admin" id="onglet-admin"><i data-lucide="shield" style="width:15px;height:15px;"></i> <span data-i18n="administrateur">Administrateur</span></button>
+            </div>
+            <input type="hidden" name="type" id="input-type" value="agent">
+
+            {% if messages %}
+            <div class="messages">
+                {% for m in messages %}
+                <div class="msg {{ m.tags }}"><i data-lucide="{{ m.tags|yesno:'check-circle,alert-circle' }}" style="width:14px;height:14px;flex-shrink:0;"></i> {{ m }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="champ">
+                <label for="username" data-i18n="nom_utilisateur">Nom d'utilisateur</label>
+                <div class="conteneur-input">
+                    <i data-lucide="user" class="icone-champ"></i>
+                    <input type="text" name="username" id="username" required placeholder="ex: YAGIRWA" autocomplete="username">
+                </div>
+            </div>
+            <div class="champ">
+                <label for="password" data-i18n="mot_de_passe">Mot de passe</label>
+                <div class="conteneur-input">
+                    <i data-lucide="lock" class="icone-champ"></i>
+                    <input type="password" name="password" id="password" required placeholder="••••••••" autocomplete="current-password">
+                    <button type="button" class="oeil" id="btn-oeil" title="Afficher / masquer"><i data-lucide="eye" id="icone-oeil" style="width:17px;height:17px;"></i></button>
+                </div>
+            </div>
+
+            <div class="ligne-options">
+                <label class="souvenir"><input type="checkbox" name="remember" id="remember"> <span data-i18n="se_souvenir">Se souvenir de moi</span></label>
+                <a href="#" class="oublie" id="lien-oublie" data-i18n="mdp_oublie">Mot de passe oublié ?</a>
+            </div>
+
+            <button type="submit" class="bouton-connexion" id="bouton-connexion"><i data-lucide="log-in" style="width:17px;height:17px;"></i> <span data-i18n="connexion">Connexion</span></button>
+        </form>
+
+        <div class="separateur" data-i18n="ou">OU</div>
+        <a href="{% url 'index_cartographie' %}" class="bouton-invite"><i data-lucide="eye" style="width:16px;height:16px;"></i> <span data-i18n="continuer_invite">Continuer en tant qu'Invité</span></a>
+    </div>
+</div>
+
+<div id="modal-oublie">
+    <div class="carte-modale">
+        <h3><i data-lucide="key-round" style="color:#f59e0b;width:18px;height:18px;"></i> <span data-i18n="mdp_oublie_titre">Mot de passe oublié</span></h3>
+        <p><span data-i18n="mdp_oublie_texte">Pour réinitialiser votre mot de passe, contactez l'administrateur de la plateforme :</span><br><b>Ir. Yagirwa Gedeon</b> (admin@mukmap.local).<br><br><span data-i18n="mdp_oublie_note">Votre compte sera réactivé dans les plus brefs délais.</span></p>
+        <button class="fermer" id="fermer-oublie" data-i18n="fermer">Fermer</button>
+    </div>
+</div>
+
+<div class="pied">MUKMAP v1.0 — <span data-i18n="developpe_par">Développé par</span> Ir. Yagirwa Gedeon</div>
+
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+const theme = localStorage.getItem('theme') || 'dark';
+document.documentElement.dataset.theme = theme;
+
+document.getElementById('btn-theme').addEventListener('click', () => {
+    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+    document.getElementById('icone-theme').dataset.lucide = t === 'dark' ? 'moon' : 'sun';
+    if (window.lucide) lucide.createIcons();
+});
+
+document.getElementById('btn-oeil').addEventListener('click', () => {
+    const input = document.getElementById('password');
+    const visible = input.type === 'text';
+    input.type = visible ? 'password' : 'text';
+    document.getElementById('icone-oeil').dataset.lucide = visible ? 'eye' : 'eye-off';
+    if (window.lucide) lucide.createIcons();
+});
+
+document.querySelectorAll('.onglet').forEach(ong => {
+    ong.addEventListener('click', () => {
+        document.querySelectorAll('.onglet').forEach(o => o.classList.remove('actif'));
+        ong.classList.add('actif');
+        document.getElementById('input-type').value = ong.dataset.type;
+        if (window.lucide) lucide.createIcons();
+    });
+});
+
+document.getElementById('lien-oublie').addEventListener('click', e => {
+    e.preventDefault();
+    document.getElementById('modal-oublie').classList.add('ouvert');
+});
+document.getElementById('fermer-oublie').addEventListener('click', () => {
+    document.getElementById('modal-oublie').classList.remove('ouvert');
+});
+document.getElementById('modal-oublie').addEventListener('click', e => {
+    if (e.target.id === 'modal-oublie') document.getElementById('modal-oublie').classList.remove('ouvert');
+});
+
+setTimeout(() => document.getElementById('splash').classList.add('disparu'), 1600);
+if (window.lucide) lucide.createIcons();
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

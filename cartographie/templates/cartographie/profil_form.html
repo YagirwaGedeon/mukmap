@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon profil - MUKMAP v1.0</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { --bg: #1a1b2e; --bg-card: #232541; --bg-input: #1e2038; --border: #3d4060; --text: #e8e9f3; --text-sec: #a0a3c2; --accent: #60a5fa; --green: #4ade80; }
+        [data-theme="light"] { --bg: #f0f2f5; --bg-card: #ffffff; --bg-input: #f9fafb; --border: #d1d5db; --text: #1f2937; --text-sec: #6b7280; --accent: #2563eb; --green: #16a34a; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 35px; width: 480px; }
+        h1 { color: var(--text); font-size: 1.3rem; margin-bottom: 4px; }
+        .sub { color: var(--text-sec); font-size: 0.85rem; margin-bottom: 22px; }
+        .form-group { margin-bottom: 14px; }
+        label { display: block; margin-bottom: 5px; color: var(--text-sec); font-weight: 600; font-size: 0.85rem; }
+        input, textarea, select { width: 100%; padding: 10px 12px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; color: var(--text); }
+        input:focus, textarea:focus { border-color: var(--accent); outline: none; }
+        button { width: 100%; padding: 12px; background: var(--green); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 8px; }
+        button:hover { opacity: 0.9; }
+        .theme-toggle { text-align: right; margin-bottom: 10px; }
+        .theme-toggle button { width: auto; padding: 6px 14px; background: var(--bg); color: var(--text); border: 1px solid var(--border); font-size: 0.8rem; margin: 0; }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="card">
+    <div class="theme-toggle"><button onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='light'?'dark':'light'">🌙/☀️</button></div>
+    {% if edition %}<h1 data-i18n="modifier_mon_profil">Modifier mon profil</h1>{% else %}<h1 data-i18n="creer_votre_profil">Créer votre profil</h1>{% endif %}
+    <p class="sub" data-i18n="infos_obligatoires">Ces informations sont obligatoires pour utiliser la plateforme.</p>
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-group"><label data-i18n="nom_complet">Nom complet</label><input type="text" value="{{ request.user.get_full_name|default:request.user.username }}" disabled></div>
+        <div class="form-group"><label><span data-i18n="numero_telephone">Numéro de téléphone</span> *</label><input type="text" name="telephone" required value="{{ profil.telephone|default:'' }}" placeholder="+243 XXX XXX XXX"></div>
+        <div class="form-group"><label data-i18n="adresse_email">Adresse e-mail</label><input type="email" value="{{ request.user.email }}" disabled></div>
+        <div class="form-group"><label><span data-i18n="fonction_projet">Fonction dans le projet</span> *</label><input type="text" name="fonction" required value="{{ profil.fonction|default:'' }}" placeholder="Ex: Agent de terrain, Superviseur" data-i18n-ph="ph_fonction_projet"></div>
+        <div class="form-group"><label data-i18n="motif_mission">Motif de la mission</label><textarea name="motif_mission" rows="3" placeholder="Raison de votre présence sur le terrain..." data-i18n-ph="ph_motif_mission">{{ profil.motif_mission|default:'' }}</textarea></div>
+        <div class="form-group"><label data-i18n="photo_identite">Photo d'identité</label><input type="file" name="photo" accept="image/*"></div>
+        <button type="submit">{% if edition %}<span data-i18n="mettre_a_jour">Mettre à jour</span>{% else %}<span data-i18n="creer_mon_profil">Créer mon profil</span>{% endif %}</button>
+    </form>
+</div>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

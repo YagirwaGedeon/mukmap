@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Nouvel agent - MUKMAP v1.0</title>
+<style>:root{--bg:#1a1b2e;--bg-card:#232541;--bg-input:#1e2038;--border:#3d4060;--text:#e8e9f3;--text-sec:#a0a3c2;--text-muted:#6b6e8a;--accent:#60a5fa;--green:#4ade80}[data-theme="light"]{--bg:#f0f2f5;--bg-card:#ffffff;--bg-input:#f9fafb;--border:#d1d5db;--text:#1f2937;--text-sec:#6b7280}*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}body{background:var(--bg);color:var(--text);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}.card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:35px;width:520px}h1{font-size:1.3rem;margin-bottom:4px}.sub{color:var(--text-sec);font-size:0.85rem;margin-bottom:22px}.form-group{margin-bottom:15px}label{display:block;margin-bottom:5px;color:var(--text-sec);font-weight:600;font-size:0.85rem}input{width:100%;padding:10px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;font-size:0.95rem;color:var(--text)}input:focus{border-color:var(--accent);outline:none}button{width:100%;padding:12px;background:var(--green);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:bold;cursor:pointer;margin-top:6px}.lien-retour{color:var(--text-sec);text-decoration:none;font-size:0.85rem;display:block;margin-bottom:15px}.lien-retour:hover{color:var(--accent)}.row{display:flex;gap:12px}.row .form-group{flex:1}.info-coords{color:var(--text-muted);font-size:0.78rem;margin-top:3px}</style>{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="card">
+    <a href="{% url 'agent_list' %}" class="lien-retour">← <span data-i18n="gestion_agents">Gestion des agents</span></a>
+    <h1 data-i18n="creer_compte_agent">Créer un compte agent</h1>
+    <p class="sub" data-i18n="remplir_infos_agent">Remplissez les informations de l'agent.</p>
+    <form method="POST">{% csrf_token %}
+        <div class="form-group"><label><span data-i18n="nom_complet">Nom complet</span> *</label><input type="text" name="nom_complet" required placeholder="Ex: Jean Mukoko" data-i18n-ph="ph_nom_complet"></div>
+        <div class="form-group"><label><span data-i18n="adresse_email">Adresse e-mail</span> *</label><input type="email" name="email" required placeholder="agent@exemple.com" data-i18n-ph="ph_email_agent"></div>
+        <div class="row">
+            <div class="form-group"><label><span data-i18n="identifiant">Identifiant</span> *</label><input type="text" name="username" required placeholder="Nom d'utilisateur" data-i18n-ph="nom_utilisateur"></div>
+            <div class="form-group"><label><span data-i18n="mot_de_passe">Mot de passe</span> *</label><input type="text" name="password" required placeholder="Mot de passe" data-i18n-ph="mot_de_passe"></div>
+        </div>
+        <div class="form-group"><label><span data-i18n="numero_telephone">Numéro de téléphone</span> *</label><input type="text" name="telephone" required placeholder="+243 XXX XXX XXX"></div>
+        <div class="form-group"><label><span data-i18n="titre_fonction">Titre / Fonction</span> *</label><input type="text" name="titre" required placeholder="Ex: Agent de terrain" data-i18n-ph="ph_titre_fonction"></div>
+        <div class="row">
+            <div class="form-group"><label data-i18n="latitude_optionnelle">Latitude (optionnel)</label><input type="number" step="any" name="latitude" placeholder="Ex: -1.67"></div>
+            <div class="form-group"><label data-i18n="longitude_optionnelle">Longitude (optionnel)</label><input type="number" step="any" name="longitude" placeholder="Ex: 29.22"></div>
+        </div>
+        <div class="info-coords" data-i18n="info_coords">Si renseignées, la carte centrera sur ces coordonnées.</div>
+        <button type="submit" data-i18n="creer_compte_agent">Créer le compte agent</button>
+    </form>
+</div>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

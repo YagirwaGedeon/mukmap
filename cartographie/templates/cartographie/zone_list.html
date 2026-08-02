@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zones de sécurité - MUKMAP v1.0</title>
+    <style>
+        :root { --bg: #1a1b2e; --bg-card: #232541; --border: #3d4060; --text: #e8e9f3; --text-sec: #a0a3c2; --text-muted: #6b6e8a; --accent: #60a5fa; --green: #4ade80; --red: #ef4444; --yellow: #eab308; }
+        [data-theme="light"] { --bg: #f0f2f5; --bg-card: #ffffff; --border: #d1d5db; --text: #1f2937; --text-sec: #6b7280; --text-muted: #9ca3af; --accent: #2563eb; --green: #16a34a; --red: #dc2626; --yellow: #ca8a04; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); }
+        .topbar { background: var(--bg-card); padding: 16px 30px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+        .topbar h1 { font-size: 1.3rem; }
+        .topbar nav a { color: var(--text-sec); text-decoration: none; margin-left: 18px; font-size: 0.9rem; }
+        .topbar nav a:hover { color: var(--accent); }
+        .container { max-width: 1000px; margin: 0 auto; padding: 30px; }
+        .filtres { margin-bottom: 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .filtres a, .filtres span { padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; text-decoration: none; font-weight: 600; }
+        .filtre-all { background: var(--bg-card); color: var(--text); border: 1px solid var(--border); }
+        .filtre-rouge { background: var(--red); color: #fff; }
+        .filtre-vert { background: var(--green); color: #fff; }
+        .filtre-jaune { background: var(--yellow); color: #000; }
+        .filtre-actif { outline: 2px solid var(--accent); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+        th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
+        td { color: var(--text-sec); }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; }
+        .badge-rouge { background: var(--red); color: #fff; }
+        .badge-vert { background: var(--green); color: #fff; }
+        .badge-jaune { background: var(--yellow); color: #000; }
+        .actions a { text-decoration: none; margin-right: 8px; font-size: 0.85rem; font-weight: 600; }
+        .btn-edit { color: var(--accent); }
+        .btn-del { color: var(--red); }
+        .btn-add { background: var(--green); color: #fff; text-decoration: none; padding: 8px 18px; border-radius: 8px; font-weight: bold; font-size: 0.85rem; }
+        .theme-toggle button { width: auto; padding: 6px 14px; background: var(--bg-card); color: var(--text); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin: 0; }
+        .vide { text-align: center; padding: 60px; color: var(--text-muted); }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="topbar">
+    <h1 data-i18n="zones_securite">Zones de sécurité</h1>
+    <nav>
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <span class="theme-toggle"><button onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='light'?'dark':'light'" title="Thème" data-i18n-title="theme">🌙/☀️</button></span>
+        <a href="{% url 'index_cartographie' %}"><span data-i18n="carte">Carte</span></a>
+        <a href="{% url 'dashboard' %}"><span data-i18n="tableau_de_bord">Dashboard</span></a>
+        <a href="{% url 'audit_list' %}"><span data-i18n="historique">Audit</span></a>
+        <a href="{% url 'zone_create' %}" class="btn-add">+ <span data-i18n="nouvelle_zone">Nouvelle zone</span></a>
+    </nav>
+</div>
+<div class="container">
+    <div class="filtres">
+        <a href="{% url 'zone_list' %}" class="filtre-all {% if not statut_filtre %}filtre-actif{% endif %}"><span data-i18n="toutes">Toutes</span></a>
+        <a href="{% url 'zone_list' %}?statut=dangereuse" class="filtre-rouge {% if statut_filtre == 'dangereuse' %}filtre-actif{% endif %}">🔴 <span data-i18n="dangereuses">Dangereuses</span></a>
+        <a href="{% url 'zone_list' %}?statut=securisee" class="filtre-vert {% if statut_filtre == 'securisee' %}filtre-actif{% endif %}">🟢 <span data-i18n="securisees">Sécurisées</span></a>
+        <a href="{% url 'zone_list' %}?statut=indisponible" class="filtre-jaune {% if statut_filtre == 'indisponible' %}filtre-actif{% endif %}">🟡 <span data-i18n="sans_info">Sans info</span></a>
+    </div>
+    {% if zones %}
+    <table>
+        <tr><th data-i18n="nom">Nom</th><th data-i18n="statut">Statut</th><th data-i18n="motif">Motif</th><th data-i18n="auteur">Auteur</th><th data-i18n="date">Date</th><th data-i18n="actions">Actions</th></tr>
+        {% for z in zones %}
+        <tr>
+            <td>{{ z.nom }}</td>
+            <td><span class="badge badge-{% if z.statut == 'dangereuse' %}rouge{% elif z.statut == 'securisee' %}vert{% else %}jaune{% endif %}">{{ z.get_statut_display }}</span></td>
+            <td>{{ z.motif|truncatewords:8 }}</td>
+            <td>{{ z.auteur.username|default:'-' }}</td>
+            <td>{{ z.date_declaration|date:"d/m/Y" }}</td>
+            <td class="actions">
+                <a href="{% url 'zone_edit' z.pk %}" class="btn-edit"><span data-i18n="modifier">Modifier</span></a>
+                <a href="{% url 'zone_delete' z.pk %}" class="btn-del"><span data-i18n="supprimer">Supprimer</span></a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}<div class="vide" data-i18n="aucune_zone">Aucune zone déclarée.</div>{% endif %}
+</div>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

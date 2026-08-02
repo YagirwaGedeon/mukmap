@@ -1,0 +1,2967 @@
+import json
+import re
+import base64
+import xml.etree.ElementTree as ET
+from xml.sax.saxutils import escape as _xml_escape
+import zipfile
+import io
+import os
+import math
+import csv
+from datetime import date, timedelta
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
+from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.models import User
+from django.http import JsonResponse, HttpResponse
+from django.conf import settings
+from django.db import models as db_models
+from django.db.models.functions import TruncMonth
+from django.template.loader import render_to_string
+from django.utils import timezone
+
+from .models import (
+    PointGeographique, Projet, Activite, ActiviteModele, PhotoActivite,
+    ProfilAgent, ZoneSecurite, Itineraire,
+    CoucheGeometrie, Geometrie, JournalAudit, MediaPoint
+)
+from .i18n import langue_active
+
+# ─── HELPERS ───────────────────────────────────────────────────
+
+
+def _xml_safe(texte):
+    if not texte:
+        return ''
+    return _xml_escape(str(texte))
+
+
+def _est_admin(user):
+    return user.is_authenticated and user.is_superuser
+
+
+def _projet_actif(request):
+    """Projet sélectionné en session (obligatoire pour toute création de donnée)."""
+    pid = request.session.get('projet_actif_id')
+    if not pid:
+        return None
+    try:
+        return Projet.objects.filter(pk=int(pid), statut='actif').first()
+    except (ValueError, TypeError):
+        return None
+
+
+def _activite_actuelle(request):
+    """Nom de l'activité en cours + éventuellement l'id d'une Activite existante."""
+    return {
+        'nom': request.session.get('activite_actuelle_nom', ''),
+        'id': request.session.get('activite_actuelle_id') or None,
+    }
+
+
+def _audit(request, action, details=''):
+    if request is None:
+        return
+    if request.user.is_authenticated:
+        ip = request.META.get('REMOTE_ADDR', '')
+        JournalAudit.objects.create(
+            utilisateur=request.user,
+            action=action,
+            adresse_ip=ip,
+            details=details,
+        )
+
+
+def _distance_haversine(lat1, lon1, lat2, lon2):
+    R = 6371000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+
+def _point_dans_zone(lat, lon, zone):
+    if zone.type_geometrie == 'Point':
+        coords = zone.coordonnees
+        dist = _distance_haversine(lat, lon, coords[1], coords[0])
+        return dist <= (zone.rayon if zone.rayon > 0 else 100)
+    return False
+
+
+def _analyser_itineraire(coords_list):
+    zones = ZoneSecurite.objects.all()
+    resultats = []
+    alertes = []
+    for zone in zones:
+        touche = False
+        for coord in coords_list:
+            if _point_dans_zone(coord[1], coord[0], zone):
+                touche = True
+                break
+        if touche:
+            resultats.append({
+                'zone_id': zone.pk,
+                'zone_nom': zone.nom,
+                'statut': zone.statut,
+                'couleur': zone.couleur(),
+                'motif': zone.motif,
+            })
+            if zone.statut == 'dangereuse':
+                alertes.append(f"ATTENTION : Vous traversez la zone dangereuse « {zone.nom} » — {zone.motif}")
+    return resultats, alertes
+
+
+# ─── AUTH ──────────────────────────────────────────────────────
+
+
+def connexion(request):
+    if request.method == "POST":
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        type_login = request.POST.get('type', 'agent')
+        remember = request.POST.get('remember') == 'on'
+        user = authenticate(request, username=username, password=password)
+
+        if user is None:
+            messages.error(request, "Identifiants invalides.")
+            return render(request, 'cartographie/connexion.html')
+
+        if hasattr(user, 'profil') and user.profil.est_bloque:
+            messages.error(request, "Votre compte a été bloqué par un administrateur.")
+            return render(request, 'cartographie/connexion.html')
+
+        if type_login == 'admin' and not user.is_superuser:
+            messages.error(request, "Ce compte n'est pas un administrateur.")
+            return render(request, 'cartographie/connexion.html')
+
+        if type_login == 'agent' and user.is_superuser:
+            messages.error(request, "Utilisez l'onglet « Administration » pour vous connecter.")
+            return render(request, 'cartographie/connexion.html')
+
+        login(request, user)
+        if remember:
+            request.session.set_expiry(60 * 60 * 24 * 30)
+        else:
+            request.session.set_expiry(0)
+        _audit(request, "Connexion")
+
+        if user.is_superuser:
+            if password in ('YENE2026', 'VALIO2026', 'DECHARTE2026'):
+                messages.warning(request, "Veuillez changer votre mot de passe dès que possible.")
+            return redirect('index_cartographie')
+
+        if hasattr(user, 'profil'):
+            return redirect('index_cartographie')
+        return redirect('profil_creer')
+
+    return render(request, 'cartographie/connexion.html')
+
+
+def deconnexion(request):
+    _audit(request, "Déconnexion")
+    logout(request)
+    return redirect('connexion')
+
+
+@login_required
+def profil_creer(request):
+    if hasattr(request.user, 'profil'):
+        return redirect('index_cartographie')
+    if request.method == "POST":
+        telephone = request.POST.get('telephone')
+        fonction = request.POST.get('fonction')
+        motif = request.POST.get('motif_mission', '')
+        if not all([telephone, fonction]):
+            messages.error(request, "Tous les champs obligatoires doivent être remplis.")
+            return render(request, 'cartographie/profil_form.html')
+        ProfilAgent.objects.create(
+            utilisateur=request.user,
+            telephone=telephone,
+            fonction=fonction,
+            motif_mission=motif,
+        )
+        _audit(request, "Création de profil agent")
+        messages.success(request, "Profil créé avec succès.")
+        return redirect('index_cartographie')
+    return render(request, 'cartographie/profil_form.html')
+
+
+@login_required
+def profil_edit(request):
+    profil = get_object_or_404(ProfilAgent, utilisateur=request.user)
+    if request.method == "POST":
+        profil.telephone = request.POST.get('telephone', profil.telephone)
+        profil.fonction = request.POST.get('fonction', profil.fonction)
+        profil.motif_mission = request.POST.get('motif_mission', '')
+        if request.FILES.get('photo'):
+            profil.photo = request.FILES['photo']
+        profil.save()
+        _audit(request, "Modification de profil")
+        messages.success(request, "Profil mis à jour.")
+        return redirect('index_cartographie')
+    return render(request, 'cartographie/profil_form.html', {'profil': profil, 'edition': True})
+
+
+# ─── PAGE PRINCIPALE (CARTE) ───────────────────────────────────
+
+
+def _creer_medias_point(point, fichiers):
+    for f in fichiers or []:
+        ext = (f.name or '').rsplit('.', 1)[-1].lower() if '.' in (f.name or '') else ''
+        if ext in ('png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'):
+            type_media = 'photo'
+        elif ext in ('mp4', 'webm', 'mov', 'avi', 'mkv'):
+            type_media = 'video'
+        elif ext == 'pdf':
+            type_media = 'pdf'
+        elif ext in ('mp3', 'wav', 'ogg', 'm4a', 'aac'):
+            type_media = 'audio'
+        else:
+            type_media = 'photo'
+        MediaPoint.objects.create(point=point, type=type_media, fichier=f)
+
+
+def index_cartographie(request):
+    est_invite = not request.user.is_authenticated
+    projet_actif = _projet_actif(request)
+    activite_actuelle = _activite_actuelle(request)
+
+    if request.method == "POST":
+        if est_invite:
+            messages.error(request, "Veuillez vous connecter pour enregistrer des données.")
+            return redirect('connexion')
+        if projet_actif is None:
+            messages.error(request, "Veuillez sélectionner un projet avant de commencer.")
+            return redirect('index_cartographie')
+        nom = request.POST.get('nom')
+        latitude = request.POST.get('latitude')
+        longitude = request.POST.get('longitude')
+        if not all([nom, latitude, longitude]):
+            messages.error(request, "Nom, latitude et longitude requis.")
+            return redirect('index_cartographie')
+        try:
+            lat, lng = float(latitude), float(longitude)
+        except (ValueError, TypeError):
+            messages.error(request, "Coordonnées invalides.")
+            return redirect('index_cartographie')
+        activite_id = None
+        if activite_actuelle.get('id'):
+            activite_id = activite_actuelle['id']
+        point = PointGeographique.objects.create(
+            nom=nom[:200],
+            description=request.POST.get('description', ''),
+            latitude=lat,
+            longitude=lng,
+            categorie=request.POST.get('categorie', 'autre'),
+            statut=request.POST.get('statut', 'actif'),
+            province=request.POST.get('province', ''),
+            commune=request.POST.get('commune', ''),
+            quartier=request.POST.get('quartier', ''),
+            projet=projet_actif,
+            activite_id=activite_id,
+            auteur=request.user,
+        )
+        if request.FILES.get('photo'):
+            point.photo = request.FILES['photo']
+            point.save()
+        _creer_medias_point(point, request.FILES.getlist('medias'))
+        _audit(request, "Création de point", f"Point #{point.pk} - {nom} ({projet_actif.nom})")
+        messages.success(request, f"Point « {nom} » enregistré.")
+        return redirect('index_cartographie')
+
+    points_qs = PointGeographique.objects.select_related('auteur', 'projet').prefetch_related('medias')
+    activites_qs = Activite.objects.select_related('projet', 'agent').prefetch_related('photos')
+    couches_qs = CoucheGeometrie.objects.all()
+    zones_qs = ZoneSecurite.objects.all()
+
+    if projet_actif is not None:
+        activites_qs = activites_qs.filter(projet=projet_actif)
+        couches_qs = couches_qs.filter(projet=projet_actif)
+        zones_qs = zones_qs.filter(projet=projet_actif)
+    elif est_invite:
+        zones_qs = zones_qs.none()
+        couches_qs = couches_qs.none()
+
+    points = points_qs.all()
+    points_liste = [
+        {
+            "id": p.pk, "nom": p.nom, "description": p.description,
+            "latitude": p.latitude, "longitude": p.longitude,
+            "photo": p.photo.url if p.photo else '',
+            "categorie": p.categorie, "statut": p.statut,
+            "province": p.province, "commune": p.commune, "quartier": p.quartier,
+            "projet": p.projet.nom if p.projet else '',
+            "projet_id": p.projet_id,
+            "donnees": p.donnees or {},
+            "source_fichier": p.source_fichier,
+            "source_format": p.source_format,
+            "medias": [{"url": m.fichier.url, "type": m.type} for m in p.medias.all()],
+            "auteur": p.auteur.get_full_name() or p.auteur.username if p.auteur else 'Anonyme',
+            "date": p.date_creation.strftime('%d/%m/%Y %H:%M'),
+        }
+        for p in points
+    ]
+
+    activites = activites_qs.all()
+    activites_json = [
+        {
+            "id": a.pk, "projet": a.projet.nom,
+            "nom_activite": a.nom_activite or '',
+            "rapport": a.rapport[:100], "observations": a.observations,
+            "beneficiaires": a.nombre_beneficiaires,
+            "latitude": a.latitude, "longitude": a.longitude,
+            "date": a.date_creation.strftime('%d/%m/%Y %H:%M'),
+            "photos": [p.image.url for p in a.photos.all()],
+            "agent": a.agent.get_full_name() or a.agent.username if a.agent else '',
+            "zone_visitee": a.zone_visitee,
+            "niveau_securite": a.niveau_securite,
+        }
+        for a in activites
+    ]
+
+    couches = couches_qs.all()
+    projets = Projet.objects.filter(statut='actif').order_by('nom')
+    zones = zones_qs.all()
+
+    agents_data = [
+        {
+            "nom": p.utilisateur.get_full_name() or p.utilisateur.username,
+            "telephone": p.telephone,
+            "fonction": p.fonction,
+            "latitude": p.latitude,
+            "longitude": p.longitude,
+            "photo": p.photo.url if p.photo else '',
+        }
+        for p in ProfilAgent.objects.select_related('utilisateur').all()
+        if p.latitude and p.longitude
+    ]
+
+    zones_json = [
+        {
+            "id": z.pk, "nom": z.nom, "statut": z.statut,
+            "couleur": z.couleur(), "motif": z.motif,
+            "type": z.type_geometrie, "coordonnees": z.coordonnees,
+            "rayon": z.rayon, "auteur": z.auteur.username if z.auteur else '',
+            "date": z.date_declaration.strftime('%d/%m/%Y'),
+        }
+        for z in zones
+    ]
+
+    ctx = {
+        'points_json': json.dumps(points_liste),
+        'activites_json': json.dumps(activites_json),
+        'agents_json': json.dumps(agents_data),
+        'couches': couches,
+        'projets': projets,
+        'zones_json': json.dumps(zones_json),
+        'est_invite': est_invite,
+        'est_admin': _est_admin(request.user),
+        'projet_actif': projet_actif,
+        'activite_actuelle': activite_actuelle,
+        'activites_recentes': activites_qs.exclude(nom_activite='').values('nom_activite').distinct()[:8],
+        'session_projet_id': request.session.get('projet_actif_id') or 0,
+        'rapport_import': json.dumps(request.session.pop('rapport_import', None)),
+        'couche_importee': request.GET.get('importe', ''),
+    }
+    return render(request, 'cartographie/carte.html', ctx)
+
+
+# ─── API GÉOMÉTRIES ────────────────────────────────────────────
+
+
+def geometrie_donnees(request):
+    est_invite = not request.user.is_authenticated
+    if est_invite:
+        return JsonResponse([], safe=False)
+    projet_actif = _projet_actif(request)
+    couches_qs = CoucheGeometrie.objects.all()
+    if projet_actif is not None:
+        couches_qs = couches_qs.filter(projet=projet_actif)
+    donnees = []
+    for couche in couches_qs:
+        features = []
+        for geom in couche.geometries.all():
+            features.append({
+                "type": "Feature",
+                "geometry": {"type": geom.type, "coordinates": geom.coordonnees},
+                "properties": {**geom.proprietes, "couche_nom": couche.nom, "couche_id": couche.pk, "couleur": couche.style_couleur, "geom_id": geom.pk},
+            })
+        donnees.append({
+            "id": couche.pk, "nom": couche.nom, "type": couche.type_geometrie,
+            "couleur": couche.style_couleur,
+            "fichier_source": couche.fichier_source or '',
+            "date_import": couche.date_import.isoformat() if couche.date_import else '',
+            "nb_geometries": couche.geometries.count(),
+            "geojson": {"type": "FeatureCollection", "features": features},
+        })
+    return JsonResponse(donnees, safe=False)
+
+
+# ─── DASHBOARD ─────────────────────────────────────────────────
+
+
+@login_required
+def dashboard(request):
+    projet_id = request.GET.get('projet')
+    agent_id = request.GET.get('agent')
+    projet_actif = _projet_actif(request)
+    est_admin = _est_admin(request.user)
+
+    if not projet_id and (projet_actif is not None or not est_admin):
+        projet_id = projet_actif.pk if projet_actif is not None else ''
+
+    activites = Activite.objects.select_related('projet', 'agent').prefetch_related('photos')
+    points_qs = PointGeographique.objects.all()
+    zones_qs = ZoneSecurite.objects.all()
+    if projet_id:
+        activites = activites.filter(projet_id=projet_id)
+        points_qs = points_qs.filter(projet_id=projet_id)
+        zones_qs = zones_qs.filter(projet_id=projet_id)
+    if agent_id:
+        activites = activites.filter(agent_id=agent_id)
+
+    total_activites = activites.count()
+    total_beneficiaires = activites.aggregate(s=db_models.Sum('nombre_beneficiaires'))['s'] or 0
+    zones_dangereuses = zones_qs.filter(statut='dangereuse').count()
+    zones_securisees = zones_qs.filter(statut='securisee').count()
+    zones_indisponibles = zones_qs.filter(statut='indisponible').count()
+    total_zones = zones_dangereuses + zones_securisees + zones_indisponibles
+
+    total_points = points_qs.count()
+    points_categories = [
+        {'nom': dict(PointGeographique.CATEGORIE_CHOICES).get(c['categorie'], c['categorie']),
+         'valeur': c['total']}
+        for c in points_qs.values('categorie')
+        .annotate(total=db_models.Count('id')).order_by('-total')
+    ]
+    points_par_statut = [
+        {'nom': dict(PointGeographique.STATUT_CHOICES).get(s['statut'], s['statut']),
+         'valeur': s['total']}
+        for s in points_qs.values('statut')
+        .annotate(total=db_models.Count('id')).order_by('-total')
+    ]
+    points_par_province = [
+        {'nom': p['province'] or 'Non renseignée', 'valeur': p['total']}
+        for p in points_qs.values('province')
+        .annotate(total=db_models.Count('id')).order_by('-total')[:10]
+    ]
+    points_par_mois = [
+        {'mois': m['mois'].strftime('%m/%Y'), 'valeur': m['total']}
+        for m in reversed(list(points_qs.annotate(mois=TruncMonth('date_creation'))
+        .values('mois').annotate(total=db_models.Count('id')).order_by('-mois')[:12]))
+    ]
+    activites_par_projet = [
+        {'nom': a['projet__nom'], 'valeur': a['total']}
+        for a in activites.values('projet__nom')
+        .annotate(total=db_models.Count('id')).order_by('-total')[:10]
+    ]
+    benef_par_mois = [
+        {'mois': b['mois'].strftime('%m/%Y'), 'valeur': b['total']}
+        for b in reversed(list(activites.annotate(mois=TruncMonth('date_creation'))
+        .values('mois').annotate(total=db_models.Sum('nombre_beneficiaires'))
+        .order_by('-mois')[:12]))
+    ]
+
+    ctx = {
+        'activites': activites,
+        'projets': Projet.objects.filter(statut='actif'),
+        'agents': ProfilAgent.objects.select_related('utilisateur').all(),
+        'projet_selectionne': int(projet_id) if projet_id else None,
+        'agent_selectionne': int(agent_id) if agent_id else None,
+        'projet_actif': projet_actif,
+        'activite_actuelle': _activite_actuelle(request),
+        'maintenant': timezone.now(),
+        'est_admin': est_admin,
+        'total_activites': total_activites,
+        'total_beneficiaires': total_beneficiaires,
+        'zones_dangereuses': zones_dangereuses,
+        'zones_securisees': zones_securisees,
+        'zones_indisponibles': zones_indisponibles,
+        'total_zones': total_zones,
+        'zones': zones_qs.select_related('auteur').order_by('-date_declaration')[:8],
+        'total_points': total_points,
+        'points_categories_json': json.dumps(points_categories),
+        'points_par_statut_json': json.dumps(points_par_statut),
+        'points_par_province_json': json.dumps(points_par_province),
+        'points_par_mois_json': json.dumps(points_par_mois),
+        'activites_par_projet_json': json.dumps(activites_par_projet),
+        'benef_par_mois_json': json.dumps(benef_par_mois),
+    }
+    _audit(request, "Consultation du tableau de bord")
+    return render(request, 'cartographie/dashboard.html', ctx)
+
+
+# ─── ACTIVITÉS ─────────────────────────────────────────────────
+
+
+@login_required
+def activite_create(request):
+    if request.method == "POST":
+        projet_id = request.POST.get('projet')
+        if not projet_id:
+            projet_actif = _projet_actif(request)
+            projet_id = projet_actif.pk if projet_actif else ''
+        rapport = request.POST.get('rapport')
+        nom_activite = request.POST.get('nom_activite', '').strip()
+        description = request.POST.get('description', '')
+        observations = request.POST.get('observations', '')
+        nb = request.POST.get('nombre_beneficiaires', 0)
+        latitude = request.POST.get('latitude')
+        longitude = request.POST.get('longitude')
+        zone_visitee = request.POST.get('zone_visitee', '')
+        agent_id = request.POST.get('agent')
+        niveau_securite = ''
+
+        if zone_visitee:
+            zones = ZoneSecurite.objects.all()
+            for z in zones:
+                try:
+                    lat, lon = float(latitude), float(longitude)
+                    if _point_dans_zone(lat, lon, z):
+                        niveau_securite = z.get_statut_display()
+                        break
+                except (ValueError, TypeError):
+                    pass
+
+        if not all([projet_id, rapport, latitude, longitude]):
+            messages.error(request, "Tous les champs obligatoires doivent être remplis.")
+            return redirect('activite_create')
+
+        agent = None
+        if _est_admin(request.user) and agent_id:
+            try:
+                agent = User.objects.get(pk=int(agent_id))
+            except (User.DoesNotExist, ValueError):
+                pass
+        if agent is None:
+            agent = request.user if request.user.is_authenticated else None
+
+        try:
+            activite = Activite.objects.create(
+                projet_id=int(projet_id),
+                agent=agent,
+                nom_activite=nom_activite,
+                description=description,
+                rapport=rapport,
+                observations=observations,
+                nombre_beneficiaires=int(nb) if nb else 0,
+                latitude=float(latitude),
+                longitude=float(longitude),
+                zone_visitee=zone_visitee,
+                niveau_securite=niveau_securite,
+            )
+        except (ValueError, TypeError):
+            messages.error(request, "Erreur dans les données saisies.")
+            return redirect('activite_create')
+
+        photos = request.FILES.getlist('photos')
+        for photo in photos:
+            PhotoActivite.objects.create(activite=activite, image=photo)
+
+        _audit(request, "Création d'activité", f"Activité #{activite.pk} assignée à {agent.username if agent else 'N/A'}")
+        messages.success(request, "Activité encodée avec succès.")
+        return redirect('dashboard')
+
+    agents_disponibles = User.objects.filter(is_superuser=False, profil__isnull=False)
+    return render(request, 'cartographie/activite_form.html', {
+        'projets': Projet.objects.all(),
+        'agents_list': agents_disponibles,
+        'est_admin': _est_admin(request.user),
+    })
+
+
+@login_required
+def activite_detail(request, pk):
+    activite = get_object_or_404(Activite.objects.select_related('projet', 'agent').prefetch_related('photos'), pk=pk)
+    return render(request, 'cartographie/activite_detail.html', {'activite': activite})
+
+
+@login_required
+def activite_delete(request, pk):
+    activite = get_object_or_404(Activite, pk=pk)
+    if request.method == "POST":
+        _audit(request, "Suppression d'activité", f"Activité #{pk}")
+        activite.delete()
+        messages.success(request, "Activité supprimée.")
+        return redirect('dashboard')
+    return render(request, 'cartographie/activite_confirm_delete.html', {'activite': activite})
+
+
+# ─── PROJETS ───────────────────────────────────────────────────
+
+
+@user_passes_test(_est_admin)
+def projet_list(request):
+    projets = Projet.objects.annotate(
+        nb_activites=db_models.Count('activites'),
+        nb_points=db_models.Count('points'),
+    ).order_by('-date_creation')
+    return render(request, 'cartographie/projet_list.html', {
+        'projets': projets,
+        'activites_modeles': ActiviteModele.objects.select_related('projet').order_by('projet__nom', 'nom'),
+    })
+
+
+@login_required
+def projet_create(request):
+    if request.method == "POST":
+        nom = request.POST.get('nom')
+        but = request.POST.get('but', '')
+        description = request.POST.get('description', '')
+        if nom:
+            p = Projet.objects.create(nom=nom, but=but, description=description, cree_par=request.user)
+            _audit(request, "Création de projet", f"Projet #{p.pk} - {nom}")
+            messages.success(request, f"Projet « {nom} » créé.")
+            return redirect('projet_list')
+        messages.error(request, "Le nom du projet est obligatoire.")
+    return render(request, 'cartographie/projet_form.html')
+
+
+@user_passes_test(_est_admin)
+def projet_edit(request, pk):
+    projet = get_object_or_404(Projet, pk=pk)
+    if request.method == "POST":
+        nom = request.POST.get('nom')
+        if not nom:
+            messages.error(request, "Le nom du projet est obligatoire.")
+            return redirect('projet_edit', pk)
+        projet.nom = nom
+        projet.but = request.POST.get('but', '')
+        projet.description = request.POST.get('description', '')
+        projet.save()
+        _audit(request, "Modification de projet", f"Projet #{pk} - {nom}")
+        messages.success(request, f"Projet « {nom} » mis à jour.")
+        return redirect('projet_list')
+    return render(request, 'cartographie/projet_form.html', {'projet': projet, 'edition': True})
+
+
+@user_passes_test(_est_admin)
+def projet_archive(request, pk):
+    projet = get_object_or_404(Projet, pk=pk)
+    if request.method == "POST":
+        projet.statut = 'archive' if projet.statut != 'archive' else 'actif'
+        projet.save()
+        etat = 'archivé' if projet.statut == 'archive' else 'réactivé'
+        _audit(request, f"Projet {etat}", f"Projet #{pk} - {projet.nom}")
+        messages.success(request, f"Projet « {projet.nom} » {etat}.")
+    return redirect('projet_list')
+
+
+@user_passes_test(_est_admin)
+def activite_modele_create(request, pk):
+    projet = get_object_or_404(Projet, pk=pk)
+    if request.method == "POST":
+        nom = request.POST.get('nom', '').strip()
+        if nom:
+            ActiviteModele.objects.create(projet=projet, nom=nom[:255], cree_par=request.user)
+            _audit(request, "Création d'activité modèle", f"« {nom} » — {projet.nom}")
+            messages.success(request, f"Activité modèle « {nom} » créée.")
+        else:
+            messages.error(request, "Le nom de l'activité modèle est obligatoire.")
+    return redirect('projet_list')
+
+
+@user_passes_test(_est_admin)
+def activite_modele_delete(request, pk):
+    am = get_object_or_404(ActiviteModele, pk=pk)
+    if request.method == "POST":
+        _audit(request, "Suppression d'activité modèle", f"« {am.nom} »")
+        am.delete()
+        messages.success(request, "Activité modèle supprimée.")
+    return redirect('projet_list')
+
+
+def changer_langue(request):
+    """Change la langue pour toute l'application (session + cookie) puis revient."""
+    from .i18n import LANGUES
+    langue = request.POST.get('langue') or request.GET.get('langue') or ''
+    if langue not in dict(LANGUES):
+        langue = 'fr'
+    request.session['langue'] = langue
+    referer = request.META.get('HTTP_REFERER') or ''
+    if not referer.startswith(request.build_absolute_uri('/')):
+        referer = '/'
+    response = redirect(referer)
+    response.set_cookie('mukmap_langue', langue, max_age=60 * 60 * 24 * 365, samesite='Lax')
+    return response
+
+
+def selection_projet(request):
+    """Enregistre le projet + l'activité en cours dans la session (obligatoire avant collecte)."""
+    if request.method != "POST":
+        return redirect('index_cartographie')
+    projet_id = request.POST.get('projet_id')
+    nom_activite = request.POST.get('nom_activite', '').strip()
+    activite_id = request.POST.get('activite_id', '').strip()
+
+    projet = None
+    if projet_id:
+        projet = Projet.objects.filter(pk=int(projet_id), statut='actif').first()
+    if projet is None:
+        messages.error(request, "Veuillez sélectionner un projet valide.")
+        return redirect('index_cartographie')
+    if not nom_activite:
+        messages.error(request, "Veuillez saisir le nom de l'activité à réaliser.")
+        return redirect('index_cartographie')
+
+    request.session['projet_actif_id'] = projet.pk
+    request.session['activite_actuelle_nom'] = nom_activite[:255]
+    if activite_id and activite_id.isdigit():
+        request.session['activite_actuelle_id'] = int(activite_id)
+    else:
+        request.session.pop('activite_actuelle_id', None)
+    _audit(request, "Sélection de projet", f"Projet {projet.nom} — Activité : {nom_activite[:120]}")
+    messages.success(request, f"Projet « {projet.nom} » — Activité « {nom_activite} » enregistrée.")
+    return redirect('index_cartographie')
+
+
+def api_projets(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'erreur': 'Authentification requise.'}, status=403)
+    projets = Projet.objects.filter(statut='actif').values('id', 'nom', 'description')
+    return JsonResponse(list(projets), safe=False)
+
+
+def api_activites_suggestions(request):
+    """Suggestions d'activités : activités modèles de l'admin + historique du projet."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'erreur': 'Authentification requise.'}, status=403)
+    try:
+        projet_id = int(request.GET.get('projet') or 0)
+    except (ValueError, TypeError):
+        projet_id = 0
+    q = (request.GET.get('q') or '').strip().lower()
+
+    modeles = ActiviteModele.objects.filter(projet_id=projet_id).values_list('nom', flat=True)
+    historiques = Activite.objects.filter(projet_id=projet_id)
+    if q:
+        historiques = historiques.filter(nom_activite__icontains=q)
+    historiques = list(historiques.exclude(nom_activite='').order_by('nom_activite').distinct().values_list('nom_activite', flat=True))
+
+    noms = list(modeles) + [h for h in historiques if h not in modeles]
+    if q:
+        noms = [n for n in noms if q in n.lower()]
+    return JsonResponse(noms[:25], safe=False)
+
+
+# ─── IMPORT FICHIER (POINTS: GeoJSON/KML) ─────────────────────
+
+
+@login_required
+def importer_fichier(request):
+    if request.method != "POST":
+        return redirect('index_cartographie')
+    fichier = request.FILES.get('fichier_import')
+    if not fichier:
+        messages.error(request, "Aucun fichier sélectionné.")
+        return redirect('index_cartographie')
+
+    nom_fichier = fichier.name.lower()
+    contenu = fichier.read()
+
+    try:
+        if nom_fichier.endswith('.geojson'):
+            points = _parser_geojson(contenu)
+        elif nom_fichier.endswith('.kml'):
+            points = _parser_kml(contenu)
+        else:
+            messages.error(request, "Format non supporté. Utilisez .geojson ou .kml.")
+            return redirect('index_cartographie')
+    except Exception:
+        messages.error(request, "Fichier invalide ou corrompu.")
+        return redirect('index_cartographie')
+
+    if not points:
+        messages.warning(request, "Aucun point valide trouvé.")
+        return redirect('index_cartographie')
+
+    inserer = 0
+    for p in points:
+        try:
+            proprietes = p.get('proprietes') or {}
+            source_format = nom_fichier.rsplit('.', 1)[-1].upper() if '.' in nom_fichier else ''
+            PointGeographique.objects.create(
+                nom=(p.get('nom') or 'Sans nom')[:200],
+                description=p.get('description', ''),
+                latitude=float(p['latitude']),
+                longitude=float(p['longitude']),
+                donnees=proprietes,
+                source_fichier=fichier.name,
+                source_format=source_format,
+                auteur=request.user if request.user.is_authenticated else None,
+            )
+            inserer += 1
+        except (ValueError, TypeError, KeyError):
+            continue
+
+    _audit(request, "Import fichier", f"{inserer} points depuis {nom_fichier}")
+    messages.success(request, f"{inserer} point(s) importé(s) avec succès.")
+    return redirect('index_cartographie')
+
+
+def _parser_geojson(contenu):
+    data = json.loads(contenu)
+    features = data.get('features', [])
+    resultats = []
+    for feature in features:
+        geom = feature.get('geometry', {})
+        if geom.get('type') != 'Point':
+            continue
+        coords = geom.get('coordinates', [])
+        if len(coords) < 2:
+            continue
+        props = feature.get('properties', {}) or {}
+        proprietes = {}
+        for k, v in props.items():
+            if v is None:
+                v = ''
+            if isinstance(v, (dict, list)):
+                try:
+                    v = json.dumps(v, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    v = str(v)
+            proprietes[str(k)] = str(v)
+        resultats.append({
+            'nom': props.get('nom') or props.get('name') or props.get('title'),
+            'description': props.get('description') or props.get('desc') or '',
+            'longitude': coords[0], 'latitude': coords[1],
+            'proprietes': proprietes,
+        })
+    return resultats
+
+
+def _parser_kml(contenu):
+    root = ET.fromstring(contenu)
+    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+    resultats = []
+    placemarks = root.findall('.//kml:Placemark', ns) or root.findall('.//Placemark')
+    for pm in placemarks:
+        nom_el = pm.find('kml:name', ns)
+        if nom_el is None:
+            nom_el = pm.find('name')
+        desc_el = pm.find('kml:description', ns)
+        if desc_el is None:
+            desc_el = pm.find('description')
+        coord_el = pm.find('.//kml:coordinates', ns)
+        if coord_el is None:
+            coord_el = pm.find('.//coordinates')
+        nom = nom_el.text.strip() if nom_el is not None and nom_el.text else None
+        description = desc_el.text.strip() if desc_el is not None and desc_el.text else ''
+        proprietes = {}
+        if nom:
+            proprietes['Nom'] = nom
+        if description:
+            proprietes['Description'] = description
+        ext_el = pm.find('kml:ExtendedData', ns)
+        if ext_el is None:
+            ext_el = pm.find('ExtendedData')
+        if ext_el is not None:
+            for data_el in ext_el.findall('kml:Data', ns) + ext_el.findall('Data'):
+                k = data_el.get('name')
+                val_el = data_el.find('kml:value', ns)
+                if val_el is None:
+                    val_el = data_el.find('value')
+                if k and val_el is not None and val_el.text is not None:
+                    proprietes[k] = val_el.text.strip()
+            for sd_el in ext_el.findall('kml:SimpleData', ns) + ext_el.findall('SimpleData'):
+                k = sd_el.get('name')
+                if k and sd_el.text is not None:
+                    proprietes[k] = sd_el.text.strip()
+        if coord_el is None or not coord_el.text:
+            continue
+        parts = coord_el.text.strip().split(',')
+        if len(parts) < 2:
+            continue
+        try:
+            longitude, latitude = float(parts[0]), float(parts[1])
+        except ValueError:
+            continue
+        resultats.append({'nom': nom, 'description': description, 'longitude': longitude, 'latitude': latitude, 'proprietes': proprietes})
+    return resultats
+
+
+# ─── IMPORT EXCEL → KML ────────────────────────────────────────
+
+
+@login_required
+def importer_excel(request):
+    if request.method != "POST":
+        return redirect('index_cartographie')
+
+    fichier = request.FILES.get('fichier_excel')
+    if not fichier or not fichier.name.lower().endswith('.xlsx'):
+        messages.error(request, "Veuillez fournir un fichier Excel (.xlsx).")
+        return redirect('index_cartographie')
+
+    import openpyxl
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(fichier.read()))
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+    except Exception:
+        messages.error(request, "Impossible de lire le fichier Excel.")
+        return redirect('index_cartographie')
+
+    if not rows or len(rows) < 2:
+        messages.error(request, "Le fichier est vide.")
+        return redirect('index_cartographie')
+
+    headers = [str(h).lower().strip() if h else '' for h in rows[0]]
+    idx_nom = next((i for i, h in enumerate(headers) if 'nom' in h), None)
+    idx_lat = next((i for i, h in enumerate(headers) if 'lat' in h), None)
+    idx_lng = next((i for i, h in enumerate(headers) if 'lon' in h or 'lng' in h), None)
+    idx_desc = next((i for i, h in enumerate(headers) if 'desc' in h), None)
+
+    if idx_lat is None or idx_lng is None:
+        messages.error(request, "Colonnes Latitude/Longitude introuvables.")
+        return redirect('index_cartographie')
+
+    nom_couche = f"Excel_{date.today().strftime('%Y%m%d_%H%M%S')}"
+    couche = CoucheGeometrie.objects.create(
+        nom=nom_couche, type_geometrie='point', fichier_source=fichier.name,
+        projet=_projet_actif(request),
+    )
+
+    kml_parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>',
+        f'<name>{nom_couche}</name>',
+    ]
+
+    points_crees = 0
+    for row in rows[1:]:
+        if not row or not any(row):
+            continue
+        try:
+            lat = float(row[idx_lat]) if row[idx_lat] is not None else None
+            lng = float(row[idx_lng]) if row[idx_lng] is not None else None
+        except (ValueError, TypeError):
+            continue
+        if lat is None or lng is None:
+            continue
+
+        nom = str(row[idx_nom])[:200] if idx_nom is not None and row[idx_nom] else 'Sans nom'
+        desc = str(row[idx_desc]) if idx_desc is not None and row[idx_desc] else ''
+
+        PointGeographique.objects.create(
+            nom=nom, description=desc, latitude=lat, longitude=lng,
+            projet=_projet_actif(request),
+            auteur=request.user if request.user.is_authenticated else None,
+        )
+
+        geo = Geometrie.objects.create(
+            couche=couche, type='Point',
+            coordonnees=[lng, lat],
+            proprietes={'nom': nom, 'description': desc},
+        )
+
+        kml_parts.append('<Placemark>')
+        kml_parts.append(f'<name>{_xml_safe(nom)}</name>')
+        kml_parts.append(f'<description>{_xml_safe(desc)}</description>')
+        kml_parts.append(f'<Point><coordinates>{lng},{lat},0</coordinates></Point>')
+        kml_parts.append('</Placemark>')
+        points_crees += 1
+
+    kml_parts.append('</Document></kml>')
+    kml_content = '\n'.join(kml_parts)
+
+    # Sauvegarder le KML sur le disque
+    kml_filename = f"{nom_couche}.kml"
+    kml_dir = os.path.join(settings.MEDIA_ROOT, 'kml_imports')
+    os.makedirs(kml_dir, exist_ok=True)
+    kml_path = os.path.join(kml_dir, kml_filename)
+    with open(kml_path, 'w', encoding='utf-8') as f:
+        f.write(kml_content)
+
+    couche.fichier_kml = f'kml_imports/{kml_filename}'
+    couche.save()
+
+    _audit(request, "Import Excel", f"{points_crees} points depuis {fichier.name}")
+    if points_crees > 0:
+        messages.success(request, f"{points_crees} point(s) importés depuis Excel et convertis en KML.")
+    else:
+        messages.warning(request, "Aucun point valide trouvé dans le fichier.")
+    return redirect('index_cartographie')
+
+
+# ─── ZONES DE SÉCURITÉ ─────────────────────────────────────────
+
+
+@user_passes_test(_est_admin)
+def zone_list(request):
+    statut = request.GET.get('statut', '')
+    zones = ZoneSecurite.objects.select_related('auteur', 'modifie_par').all()
+    projet_actif = _projet_actif(request)
+    if projet_actif is not None:
+        zones = zones.filter(projet=projet_actif)
+    if statut:
+        zones = zones.filter(statut=statut)
+    return render(request, 'cartographie/zone_list.html', {
+        'zones': zones, 'statut_filtre': statut,
+    })
+
+
+@user_passes_test(_est_admin)
+def zone_create(request):
+    if request.method == "POST":
+        nom = request.POST.get('nom')
+        statut = request.POST.get('statut')
+        motif = request.POST.get('motif', '')
+        rayon = request.POST.get('rayon', 0)
+        type_geom = request.POST.get('type_geometrie', 'Point')
+        coords_raw = request.POST.get('coordonnees', '[]')
+
+        if not all([nom, statut, coords_raw]):
+            messages.error(request, "Nom, statut et coordonnées requis.")
+            return redirect('zone_create')
+
+        try:
+            coords = json.loads(coords_raw)
+        except json.JSONDecodeError:
+            messages.error(request, "Coordonnées invalides.")
+            return redirect('zone_create')
+
+        zone = ZoneSecurite.objects.create(
+            nom=nom, statut=statut, motif=motif if statut == 'dangereuse' else '',
+            type_geometrie=type_geom, coordonnees=coords,
+            rayon=float(rayon), auteur=request.user,
+            projet=_projet_actif(request),
+        )
+        _audit(request, "Déclaration de zone", f"Zone #{zone.pk} - {nom} ({statut})")
+        messages.success(request, f"Zone « {nom} » déclarée comme {dict(ZoneSecurite.STATUT_CHOICES).get(statut)}.")
+        return redirect('zone_list')
+
+    return render(request, 'cartographie/zone_form.html')
+
+
+@user_passes_test(_est_admin)
+def zone_edit(request, pk):
+    zone = get_object_or_404(ZoneSecurite, pk=pk)
+    if request.method == "POST":
+        zone.nom = request.POST.get('nom', zone.nom)
+        zone.statut = request.POST.get('statut', zone.statut)
+        zone.motif = request.POST.get('motif', '')
+        zone.rayon = float(request.POST.get('rayon', zone.rayon))
+        zone.modifie_par = request.user
+        zone.save()
+        _audit(request, "Modification de zone", f"Zone #{pk}")
+        messages.success(request, "Zone mise à jour.")
+        return redirect('zone_list')
+    return render(request, 'cartographie/zone_form.html', {'zone': zone, 'edition': True})
+
+
+@user_passes_test(_est_admin)
+def zone_delete(request, pk):
+    zone = get_object_or_404(ZoneSecurite, pk=pk)
+    if request.method == "POST":
+        _audit(request, "Suppression de zone", f"Zone #{pk} - {zone.nom}")
+        zone.delete()
+        messages.success(request, "Zone supprimée.")
+        return redirect('zone_list')
+    return render(request, 'cartographie/zone_confirm_delete.html', {'zone': zone})
+
+
+# ─── ITINÉRAIRES ────────────────────────────────────────────────
+
+
+@login_required
+def itineraire_list(request):
+    iti = Itineraire.objects.filter(utilisateur=request.user).all()
+    return render(request, 'cartographie/itineraire_list.html', {'itineraire': iti})
+
+
+@login_required
+def itineraire_create(request):
+    if request.method == "POST":
+        nom = request.POST.get('nom', '')
+        coords_raw = request.POST.get('coordonnees', '[]')
+        if not nom:
+            messages.error(request, "Nom de l'itinéraire requis.")
+            return redirect('itineraire_create')
+        try:
+            coords = json.loads(coords_raw)
+        except json.JSONDecodeError:
+            messages.error(request, "Coordonnées invalides.")
+            return redirect('itineraire_create')
+        if len(coords) < 2:
+            messages.error(request, "Tracez au moins 2 points sur la carte.")
+            return redirect('itineraire_create')
+
+        analyse, alertes = _analyser_itineraire(coords)
+        alerte_msg = '\n'.join(alertes) if alertes else ''
+
+        iti = Itineraire.objects.create(
+            utilisateur=request.user, nom=nom,
+            coordonnees=coords, analyse=analyse, alerte=alerte_msg,
+        )
+        _audit(request, "Création d'itinéraire", f"Itinéraire #{iti.pk} - {nom}")
+        if alertes:
+            messages.warning(request, alerte_msg)
+        messages.success(request, f"Itinéraire « {nom} » enregistré.")
+        return redirect('itineraire_list')
+
+    return render(request, 'cartographie/itineraire_form.html')
+
+
+@login_required
+def itineraire_detail(request, pk):
+    iti = get_object_or_404(Itineraire, pk=pk, utilisateur=request.user)
+    return render(request, 'cartographie/itineraire_detail.html', {'iti': iti})
+
+
+@login_required
+def itineraire_delete(request, pk):
+    iti = get_object_or_404(Itineraire, pk=pk, utilisateur=request.user)
+    if request.method == "POST":
+        _audit(request, "Suppression d'itinéraire", f"Itinéraire #{pk}")
+        iti.delete()
+        messages.success(request, "Itinéraire supprimé.")
+        return redirect('itineraire_list')
+    return render(request, 'cartographie/itineraire_confirm_delete.html', {'iti': iti})
+
+
+# ─── JOURNAL D'AUDIT ────────────────────────────────────────────
+
+
+@user_passes_test(_est_admin)
+def audit_list(request):
+    logs = JournalAudit.objects.select_related('utilisateur').all()
+    user_id = request.GET.get('user')
+    if user_id:
+        logs = logs.filter(utilisateur_id=user_id)
+    return render(request, 'cartographie/audit_list.html', {
+        'logs': logs,
+        'users': ProfilAgent.objects.select_related('utilisateur').all(),
+        'user_filtre': int(user_id) if user_id else None,
+    })
+
+
+# ─── GESTION DES AGENTS (ADMIN) ─────────────────────────────────
+
+
+@user_passes_test(_est_admin)
+def agent_list(request):
+    profils = ProfilAgent.objects.select_related('utilisateur').all()
+    return render(request, 'cartographie/agent_list.html', {'profils': profils})
+
+
+@user_passes_test(_est_admin)
+def agent_create(request):
+    if request.method == "POST":
+        nom_complet = request.POST.get('nom_complet', '').strip()
+        telephone = request.POST.get('telephone', '').strip()
+        titre = request.POST.get('titre', '').strip()
+        email = request.POST.get('email', '').strip()
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '').strip()
+        latitude = request.POST.get('latitude', '').strip()
+        longitude = request.POST.get('longitude', '').strip()
+
+        if not all([nom_complet, telephone, titre, email, username, password]):
+            messages.error(request, "Tous les champs obligatoires doivent être remplis.")
+            return render(request, 'cartographie/agent_form.html')
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, f"L'identifiant « {username} » est déjà utilisé.")
+            return render(request, 'cartographie/agent_form.html')
+
+        parts = nom_complet.split(None, 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ''
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+        lat_val = float(latitude) if latitude else None
+        lng_val = float(longitude) if longitude else None
+
+        ProfilAgent.objects.create(
+            utilisateur=user,
+            telephone=telephone,
+            fonction=titre,
+            latitude=lat_val,
+            longitude=lng_val,
+        )
+        _audit(request, "Création de compte agent", f"Agent {nom_complet} ({username})")
+        messages.success(
+            request,
+            f"Agent « {nom_complet} » créé avec succès.<br>"
+            f"<b>Identifiant :</b> {username}",
+            extra_tags='safe'
+        )
+        return redirect('agent_list')
+
+    return render(request, 'cartographie/agent_form.html')
+
+
+@user_passes_test(_est_admin)
+def agent_bloquer(request, pk):
+    profil = get_object_or_404(ProfilAgent, pk=pk)
+    profil.est_bloque = not profil.est_bloque
+    profil.save()
+    etat = "bloqué" if profil.est_bloque else "débloqué"
+    _audit(request, f"Agent {etat}", f"Agent #{pk} - {profil.utilisateur.username}")
+    messages.success(request, f"Agent {etat}.")
+    return redirect('agent_list')
+
+
+# ─── RAPPORTS ────────────────────────────────────────────────────
+
+
+def _donnees_rapport(debut, fin):
+    activites = Activite.objects.filter(date_creation__gte=debut, date_creation__lte=fin)
+    activites = activites.select_related('projet', 'agent').prefetch_related('photos')
+    total = activites.count()
+    zones_dang = ZoneSecurite.objects.filter(statut='dangereuse').count()
+    zones_secu = ZoneSecurite.objects.filter(statut='securisee').count()
+    zones_indis = ZoneSecurite.objects.filter(statut='indisponible').count()
+    zones = ZoneSecurite.objects.select_related('auteur').order_by('-date_declaration')
+    audits = JournalAudit.objects.filter(utilisateur__is_superuser=True, date__gte=debut, date__lte=fin)
+    audits = audits.select_related('utilisateur').order_by('-date')
+    profils = ProfilAgent.objects.select_related('utilisateur').all()
+    bene_total = activites.aggregate(s=db_models.Sum('nombre_beneficiaires'))['s'] or 0
+    return activites, total, zones_dang, zones_secu, zones_indis, zones, audits, profils, bene_total
+
+
+@login_required
+def rapport_generer(request):
+    periode = request.GET.get('periode', 'mensuel')
+    aujourd = timezone.localdate()
+
+    mapping = {
+        'journalier': (aujourd, aujourd),
+        'hebdomadaire': (aujourd - timedelta(days=7), aujourd),
+        'mensuel': (aujourd - timedelta(days=30), aujourd),
+        'trimestriel': (aujourd - timedelta(days=90), aujourd),
+    }
+    debut, fin = mapping.get(periode, (aujourd - timedelta(days=30), aujourd))
+    activites, total, zd, zs, zi, zones, audits, profils, bene_total = _donnees_rapport(debut, fin)
+
+    return render(request, 'cartographie/rapport.html', {
+        'periode': periode,
+        'debut': debut,
+        'fin': fin,
+        'activites': activites,
+        'total': total,
+        'zones_dangereuses': zd,
+        'zones_securisees': zs,
+        'zones_indisponibles': zi,
+        'zones': zones,
+        'audits': audits,
+        'profils': profils,
+        'total_beneficiaires': bene_total,
+    })
+
+
+@login_required
+def rapport_telecharger(request, format):
+    from django.utils import timezone
+    periode = request.GET.get('periode', 'mensuel')
+    aujourd = timezone.localdate()
+    mapping = {
+        'journalier': (aujourd, aujourd),
+        'hebdomadaire': (aujourd - timedelta(days=7), aujourd),
+        'mensuel': (aujourd - timedelta(days=30), aujourd),
+        'trimestriel': (aujourd - timedelta(days=90), aujourd),
+    }
+    debut, fin = mapping.get(periode, (aujourd - timedelta(days=30), aujourd))
+    activites, total, zd, zs, zi, zones, audits, profils, bene_total = _donnees_rapport(debut, fin)
+
+    nom_fichier = f"rapport_{periode}_{aujourd.strftime('%Y%m%d')}"
+
+    lang = langue_active(request)
+    if format == 'docx':
+        return _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_total, debut, fin, nom_fichier, lang)
+    elif format == 'pdf':
+        return _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_total, debut, fin, nom_fichier, lang)
+    else:
+        messages.error(request, "Format non supporté.")
+        return redirect('rapport_generer')
+
+
+# ─── PWA : manifest + service worker ──────────────────────────────
+
+def manifest_pwa(request):
+    """Manifeste PWA (URL /manifest.webmanifest, MIME correct)."""
+    from django.http import JsonResponse
+    from django.templatetags.static import static
+    from .branding import COULEUR_FOND, COULEUR_THEME, DEVELOPPEUR, NOM, TAGLINE_FR, VERSION
+    manifest = {
+        'name': 'MUKMAP — Plateforme SIG professionnelle',
+        'short_name': NOM,
+        'description': 'MUKMAP — ' + TAGLINE_FR + ' : collecte de données géospatiales, cartographie, suivi de terrain, zones de sécurité et rapports pour entreprises, ONG et ingénieurs topographes.',
+        'id': '/',
+        'start_url': '/',
+        'scope': '/',
+        'display': 'standalone',
+        'orientation': 'any',
+        'background_color': COULEUR_FOND,
+        'theme_color': COULEUR_THEME,
+        'lang': langue_active(request),
+        'categories': ['business', 'productivity', 'utilities', 'navigation'],
+        'icons': [
+            {'src': static('pwa/icon-192.png'), 'sizes': '192x192', 'type': 'image/png', 'purpose': 'any'},
+            {'src': static('pwa/icon-512.png'), 'sizes': '512x512', 'type': 'image/png', 'purpose': 'any'},
+            {'src': static('pwa/icon-maskable-192.png'), 'sizes': '192x192', 'type': 'image/png', 'purpose': 'maskable'},
+            {'src': static('pwa/icon-maskable-512.png'), 'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'},
+        ],
+        'shortcuts': [
+            {'name': 'Cartographie', 'short_name': 'Carte', 'url': '/', 'icons': [{'src': static('pwa/icon-192.png'), 'sizes': '192x192'}]},
+            {'name': 'Tableau de bord', 'short_name': 'Dashboard', 'url': '/dashboard/', 'icons': [{'src': static('pwa/icon-192.png'), 'sizes': '192x192'}]},
+            {'name': 'Rapports', 'short_name': 'Rapports', 'url': '/rapport/', 'icons': [{'src': static('pwa/icon-192.png'), 'sizes': '192x192'}]},
+        ],
+    }
+    response = JsonResponse(manifest, json_dumps_params={'ensure_ascii': False, 'indent': 2})
+    response['Content-Type'] = 'application/manifest+json'
+    response['Cache-Control'] = 'no-cache'
+    return response
+
+
+def service_worker_pwa(request):
+    """Sert le Service Worker à la racine (portée /) avec le bon MIME."""
+    from django.http import FileResponse
+    from django.views.decorators.cache import never_cache
+    chemin = os.path.join(str(settings.STATICFILES_DIRS[0]), 'js', 'sw.js')
+    if not os.path.exists(chemin):
+        from django.http import HttpResponse
+        return HttpResponse(status=404)
+    response = FileResponse(open(chemin, 'rb'), content_type='application/javascript')
+    response['Service-Worker-Allowed'] = '/'
+    response['Cache-Control'] = 'no-cache'
+    return response
+
+
+def _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_total, debut, fin, nom_fichier, lang='fr'):
+    from docx import Document
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from django.utils import timezone
+    from .branding import chemin_logo, DEVELOPPEUR, NOM, VERSION
+    from .i18n import traduire
+
+    t = lambda cle: traduire(lang, cle)
+    maintenant = timezone.now()
+    doc = Document()
+
+    style = doc.styles['Normal']
+    style.font.name = 'Calibri'
+    style.font.size = Pt(10)
+
+    ACCENT = RGBColor(0x4F, 0x46, 0xE5)
+    GRIS = RGBColor(0x6B, 0x72, 0x9C)
+
+    # ── Page de couverture ──────────────────────────────────────
+    logo_chemin = chemin_logo()
+    if os.path.exists(logo_chemin):
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.add_run().add_picture(logo_chemin, width=Inches(1.4))
+    titre = doc.add_heading('', 0)
+    titre.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = titre.add_run(f'{NOM} v{VERSION} — {t("plateforme_sig")}')
+    r.font.color.rgb = ACCENT
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run(t('couverture'))
+    r.font.size = Pt(16)
+    r.font.bold = True
+
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.add_run(' ').add_break()
+    table_info = doc.add_table(rows=4, cols=2)
+    table_info.alignment = 1
+    table_info.style = 'Light Shading Accent 1'
+    for i, (lib, val) in enumerate([(t('periode_rapport'), f"{debut.strftime('%d/%m/%Y')} — {fin.strftime('%d/%m/%Y')}"),
+                                    (t('informations_projet'), nom_fichier.replace('rapport_', '').upper()),
+                                    (t('genere_le'), f"{maintenant.strftime('%d/%m/%Y')} {t('heure')} {maintenant.strftime('%H:%M')}"),
+                                    (t('developpe_par'), DEVELOPPEUR)]):
+        table_info.cell(i, 0).text = lib
+        table_info.cell(i, 1).text = val
+    doc.add_page_break()
+
+    # ── En-tête de contenu ──────────────────────────────────────
+    doc.add_heading(f'{NOM} — {t("plateforme_sig")}', 0)
+    doc.add_heading(f"{t('rapport_activites_periode')} — {debut.strftime('%d/%m/%Y')} {t('au')} {fin.strftime('%d/%m/%Y')}", level=1)
+    p = doc.add_paragraph()
+    r = p.add_run(f"{t('genere_le')} {maintenant.strftime('%d/%m/%Y')} {t('heure')} {maintenant.strftime('%H:%M')} — {NOM} v{VERSION}, {t('developpe_par')} {DEVELOPPEUR}")
+    r.italic = True
+    r.font.size = Pt(9)
+    r.font.color.rgb = GRIS
+
+    doc.add_heading(t('resume_periode'), level=2)
+    resume = doc.add_table(rows=2, cols=5)
+    resume.style = 'Light Shading Accent 1'
+    for i, (lib, val) in enumerate([(t('activites'), total), (t('beneficiaires'), bene_total),
+                                    (t('zones_dangereuses'), zd), (t('zones_securisees'), zs),
+                                    (t('zones_sans_info'), zi)]):
+        resume.cell(0, i).text = lib
+        resume.cell(1, i).text = str(val)
+
+    doc.add_heading(t('zones_securite'), level=2)
+    if zones:
+        table = doc.add_table(rows=1, cols=5)
+        table.style = 'Light Shading Accent 1'
+        hdr = table.rows[0].cells
+        for i, k in enumerate(['zone', 'statut', 'motif', 'declaree_le', 'par']):
+            hdr[i].text = t(k)
+        for z in zones:
+            row = table.add_row().cells
+            row[0].text = z.nom
+            row[1].text = {
+                'dangereuse': t('zone_dangereuse'),
+                'securisee': t('zone_securisee'),
+                'indisponible': t('zone_indisponible'),
+            }.get(z.statut, z.get_statut_display())
+            row[2].text = (z.motif or '')[:80]
+            row[3].text = z.date_declaration.strftime('%d/%m/%Y %H:%M')
+            row[4].text = (z.auteur.get_full_name() or z.auteur.username) if z.auteur else '-'
+    else:
+        doc.add_paragraph(t('aucune_zone_periode'))
+
+    doc.add_heading(t('agents'), level=2)
+    table = doc.add_table(rows=1, cols=4)
+    table.style = 'Light Shading Accent 1'
+    hdr = table.rows[0].cells
+    for i, k in enumerate(['nom_complet', 'telephone', 'email', 'fonction']):
+        hdr[i].text = t(k)
+    for p in profils:
+        row = table.add_row().cells
+        row[0].text = p.utilisateur.get_full_name() or p.utilisateur.username
+        row[1].text = p.telephone or '-'
+        row[2].text = p.utilisateur.email or '-'
+        row[3].text = p.fonction or '-'
+
+    doc.add_heading(t('activites_administrateurs'), level=2)
+    if audits:
+        table = doc.add_table(rows=1, cols=4)
+        table.style = 'Light Shading Accent 1'
+        hdr = table.rows[0].cells
+        for i, k in enumerate(['date_heure', 'administrateur', 'action', 'adresse_ip']):
+            hdr[i].text = t(k)
+        for l in audits[:100]:
+            row = table.add_row().cells
+            row[0].text = l.date.strftime('%d/%m/%Y %H:%M')
+            row[1].text = l.utilisateur.get_full_name() or l.utilisateur.username
+            row[2].text = (l.action or '')[:90]
+            row[3].text = l.adresse_ip or '-'
+    else:
+        doc.add_paragraph(t('aucune_admin_periode'))
+
+    doc.add_heading(t('activites_agents'), level=2)
+    for a in activites:
+        doc.add_heading(f"{a.projet.nom} — {a.date_creation.strftime('%d/%m/%Y %H:%M')}", level=3)
+        p = doc.add_paragraph()
+        p.add_run(f"{t('agent')} : ").bold = True
+        p.add_run((a.agent.get_full_name() or a.agent.username) if a.agent else 'N/A')
+        p = doc.add_paragraph()
+        p.add_run(f"{t('zone_visitee')} : ").bold = True
+        p.add_run(a.zone_visitee or 'N/A')
+        p = doc.add_paragraph()
+        p.add_run(f"{t('securite')} : ").bold = True
+        p.add_run(a.niveau_securite or 'N/A')
+        p = doc.add_paragraph()
+        p.add_run(f"{t('coordonnees_gps')} : ").bold = True
+        p.add_run(f"{a.latitude}, {a.longitude}")
+        p = doc.add_paragraph()
+        p.add_run(f"{t('beneficiaires')} : ").bold = True
+        p.add_run(str(a.nombre_beneficiaires or 0))
+        p = doc.add_paragraph()
+        p.add_run(f"{t('rapport_du')} : ").bold = True
+        p.add_run((a.rapport or '')[:300])
+        if a.observations:
+            p = doc.add_paragraph()
+            p.add_run(f"{t('observations_du')} : ").bold = True
+            p.add_run((a.observations or '')[:300])
+
+        for photo in a.photos.all():
+            if photo.image and os.path.exists(photo.image.path):
+                try:
+                    doc.add_picture(photo.image.path, width=Inches(3))
+                except Exception:
+                    pass
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.docx"'
+    doc.save(response)
+    _audit(None, "Téléchargement rapport DOCX", nom_fichier)
+    return response
+
+
+def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_total, debut, fin, nom_fichier, lang='fr'):
+    from fpdf import FPDF
+    from django.utils import timezone
+    from .branding import chemin_logo, DEVELOPPEUR, NOM, VERSION
+    from .i18n import traduire
+
+    t = lambda cle: traduire(lang, cle)
+    maintenant = timezone.now()
+
+    def net(s):
+        if s is None:
+            return ''
+        if lang == 'zh':
+            return str(s)
+        return str(s).encode('cp1252', 'replace').decode('cp1252')
+
+    def tronque(s, n):
+        s = net(s)
+        return s if len(s) <= n else s[:n - 1] + '…'
+
+    POLICES = [
+        ('Arial', '', 'C:/Windows/Fonts/arial.ttf'),
+        ('Arial', 'B', 'C:/Windows/Fonts/arialbd.ttf'),
+        ('Arial', 'I', 'C:/Windows/Fonts/ariali.ttf'),
+    ]
+    fam = 'Arial'
+    if lang == 'zh' and os.path.exists('C:/Windows/Fonts/msyh.ttc'):
+        POLICES = [
+            ('YaHei', '', 'C:/Windows/Fonts/msyh.ttc'),
+            ('YaHei', 'B', 'C:/Windows/Fonts/msyh.ttc'),
+            ('YaHei', 'I', 'C:/Windows/Fonts/msyh.ttc'),
+        ]
+        fam = 'YaHei'
+    elif not all(os.path.exists(c) for _, _, c in POLICES):
+        fam = 'Helvetica'
+
+    ACCENT = (77, 67, 246)
+    VERT = (34, 197, 94)
+    ROUGE = (239, 68, 68)
+    JAUNE = (234, 179, 8)
+    TEXTE = (31, 36, 60)
+    GRIS = (110, 118, 150)
+    LIGNE = (225, 227, 245)
+
+    def statut_zone(s):
+        return {
+            'dangereuse': (t('zone_dangereuse'), ROUGE),
+            'securisee': (t('zone_securisee'), VERT),
+            'indisponible': (t('zone_indisponible'), JAUNE),
+        }.get(s, (s or '-', TEXTE))
+
+    logo_chemin = chemin_logo()
+    logo_dispo = os.path.exists(logo_chemin)
+
+    class RapportPDF(FPDF):
+        def header(self):
+            if self.page_no() == 1:
+                return  # page de couverture, dessinée manuellement
+            if logo_dispo:
+                try:
+                    self.image(logo_chemin, x=8, y=4.5, w=15)
+                except Exception:
+                    pass
+            self.set_fill_color(*ACCENT)
+            self.rect(0, 0, 210, 26, 'F')
+            self.set_text_color(255, 255, 255)
+            self.set_font(fam, 'B', 15)
+            self.set_y(4)
+            self.set_x(26)
+            self.cell(174, 9, f'{NOM} v{VERSION} — {t("plateforme_sig")}', 0, 1, 'C')
+            self.set_font(fam, '', 9)
+            self.set_x(26)
+            self.cell(174, 7, f"{t('rapport_activites_periode')} — {debut.strftime('%d/%m/%Y')} {t('au')} {fin.strftime('%d/%m/%Y')}", 0, 1, 'C')
+            self.ln(4)
+            self.set_draw_color(255, 255, 255)
+            self.line(10, 25.5, 200, 25.5)
+            self.set_text_color(*TEXTE)
+
+        def footer(self):
+            self.set_y(-14)
+            self.set_font(fam, '', 8)
+            self.set_text_color(*GRIS)
+            self.cell(0, 6, f"{NOM} v{VERSION} — {DEVELOPPEUR}  |  {t('genere_le')} {maintenant.strftime('%d/%m/%Y')} {t('heure')} {maintenant.strftime('%H:%M')}  |  {t('page')} {self.page_no()}/{self.alias_nb_pages()}", 0, 0, 'C')
+
+    pdf = RapportPDF()
+    try:
+        for nom, st, chemin in POLICES:
+            if os.path.exists(chemin):
+                pdf.add_font(nom, st, chemin)
+    except Exception:
+        fam = 'Helvetica'
+    pdf.alias_nb_pages()
+    pdf.set_auto_page_break(True, margin=18)
+
+    # ── 0. Page de couverture ───────────────────────────────────
+    pdf.add_page()
+    if logo_dispo:
+        try:
+            pdf.image(logo_chemin, x=(210 - 55) / 2, y=30, w=55)
+        except Exception:
+            pass
+    pdf.set_y(100)
+    pdf.set_font(fam, 'B', 30)
+    pdf.set_text_color(*ACCENT)
+    pdf.cell(0, 14, f'{NOM} v{VERSION}', 0, 1, 'C')
+    pdf.set_font(fam, '', 13)
+    pdf.set_text_color(*TEXTE)
+    pdf.cell(0, 8, net(t('plateforme_sig')), 0, 1, 'C')
+    pdf.ln(12)
+    pdf.set_fill_color(*ACCENT)
+    pdf.rect(45, pdf.get_y(), 120, 0.8, 'F')
+    pdf.ln(12)
+    pdf.set_font(fam, 'B', 20)
+    pdf.cell(0, 10, net(t('couverture')), 0, 1, 'C')
+    pdf.ln(14)
+    pdf.set_font(fam, '', 11)
+    for lib, val in [(t('periode_rapport'), f"{debut.strftime('%d/%m/%Y')} — {fin.strftime('%d/%m/%Y')}"),
+                     (t('informations_projet'), nom_fichier.replace('rapport_', '').upper()),
+                     (t('genere_le'), f"{maintenant.strftime('%d/%m/%Y')} {t('heure')} {maintenant.strftime('%H:%M')}"),
+                     (t('developpe_par'), DEVELOPPEUR)]:
+        pdf.set_font(fam, 'B', 11)
+        pdf.cell(90, 8, net(lib), 0, 0, 'R')
+        pdf.set_font(fam, '', 11)
+        pdf.cell(0, 8, '  ' + net(val), 0, 1, 'L')
+    pdf.add_page()
+
+    def titre_section(txt):
+        if pdf.get_y() > 230:
+            pdf.add_page()
+        y = pdf.get_y()
+        pdf.set_fill_color(*ACCENT)
+        pdf.rect(10, y + 1, 4, 8, 'F')
+        pdf.set_font(fam, 'B', 12)
+        pdf.set_text_color(*TEXTE)
+        pdf.cell(0, 9, '  ' + net(txt), 0, 1)
+        pdf.set_draw_color(*LIGNE)
+        pdf.line(10, pdf.get_y() + 1, 200, pdf.get_y() + 1)
+        pdf.ln(6)
+
+    def table_entete(largeurs, cols):
+        pdf.set_fill_color(*ACCENT)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font(fam, 'B', 8.5)
+        for lib, w in zip(cols, largeurs):
+            pdf.cell(w, 7.5, net(lib), 1, 0, 'C', True)
+        pdf.ln()
+        pdf.set_text_color(*TEXTE)
+
+    def ligne_table(largeurs, vals, hauteur=7, alterner=False):
+        pdf.set_font(fam, '', 8.5)
+        if alterner:
+            pdf.set_fill_color(243, 244, 252)
+        for v, w in zip(vals, largeurs):
+            pdf.cell(w, hauteur, tronque(v, int(w / 1.7)), 1, 0, 'L', alterner)
+        pdf.ln()
+        pdf.set_text_color(*TEXTE)
+
+    # ── 1. Résumé (blocs de statistiques)
+    titre_section(t('resume_periode'))
+    stats = [(t('activites'), total, ACCENT), (t('beneficiaires'), bene_total, ACCENT),
+             (t('zones_dangereuses'), zd, ROUGE), (t('zones_securisees'), zs, VERT),
+             (t('zones_sans_info'), zi, JAUNE)]
+    x0 = 10
+    bloc = 37
+    y = pdf.get_y()
+    for lib, val, col in stats:
+        pdf.set_fill_color(*col)
+        pdf.rect(x0, y, bloc, 18, 'F')
+        pdf.set_xy(x0, y + 2)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font(fam, 'B', 14)
+        pdf.cell(bloc, 7, net(str(val)), 0, 1, 'C')
+        pdf.set_font(fam, '', 7)
+        pdf.cell(bloc, 7, net(lib), 0, 1, 'C')
+        x0 += bloc + 1
+    pdf.set_y(y + 22)
+
+    # ── 2. Zones de sécurité
+    titre_section(f"{t('zones_securite')} ({len(zones)})")
+    if zones:
+        largeurs = [44, 34, 57, 24, 28]
+        table_entete(largeurs, [t('zone'), t('statut'), t('motif'), t('declaree_le'), t('par')])
+        for i, z in enumerate(zones):
+            lib_statut, couleur = statut_zone(z.statut)
+            pdf.set_font(fam, '', 8.5)
+            if i % 2 == 1:
+                pdf.set_fill_color(243, 244, 252)
+            pdf.cell(largeurs[0], 7, tronque(z.nom, 24), 1, 0, 'L', i % 2 == 1)
+            pdf.set_text_color(*couleur)
+            pdf.set_font(fam, 'B', 8.5)
+            pdf.cell(largeurs[1], 7, tronque(lib_statut, 18), 1, 0, 'C', i % 2 == 1)
+            pdf.set_text_color(*TEXTE)
+            pdf.set_font(fam, '', 8.5)
+            pdf.cell(largeurs[2], 7, tronque(z.motif, 32), 1, 0, 'L', i % 2 == 1)
+            pdf.cell(largeurs[3], 7, tronque(z.date_declaration.strftime('%d/%m/%Y'), 13), 1, 0, 'C', i % 2 == 1)
+            pdf.cell(largeurs[4], 7, tronque((z.auteur.get_full_name() or z.auteur.username) if z.auteur else '-', 15), 1, 0, 'L', i % 2 == 1)
+            pdf.ln()
+    else:
+        pdf.set_font(fam, 'I', 9)
+        pdf.set_text_color(*GRIS)
+        pdf.cell(0, 7, net(t('aucune_zone_periode')), 0, 1)
+
+    # ── 3. Agents
+    titre_section(f"{t('agents')} ({len(profils)})")
+    if profils:
+        largeurs = [52, 34, 42, 59]
+        table_entete(largeurs, [t('nom_complet'), t('telephone'), t('fonction'), t('email')])
+        for i, p in enumerate(profils):
+            ligne_table(largeurs, [p.utilisateur.get_full_name() or p.utilisateur.username,
+                                   p.telephone or '-', p.fonction or '-', p.utilisateur.email or '-'],
+                        alterner=i % 2 == 1)
+    else:
+        pdf.set_font(fam, 'I', 9)
+        pdf.set_text_color(*GRIS)
+        pdf.cell(0, 7, net(t('aucun_agent')), 0, 1)
+
+    # ── 4. Activités des administrateurs
+    titre_section(f"{t('activites_administrateurs')} ({len(audits)})")
+    if audits:
+        largeurs = [27, 40, 86, 34]
+        table_entete(largeurs, [t('date_heure'), t('administrateur'), t('action'), t('adresse_ip')])
+        for i, l in enumerate(audits[:200]):
+            ligne_table(largeurs, [l.date.strftime('%d/%m/%Y %H:%M'),
+                                   l.utilisateur.get_full_name() or l.utilisateur.username,
+                                   (l.action or '')[:90], l.adresse_ip or '-'],
+                        alterner=i % 2 == 1)
+    else:
+        pdf.set_font(fam, 'I', 9)
+        pdf.set_text_color(*GRIS)
+        pdf.cell(0, 7, net(t('aucune_admin_periode')), 0, 1)
+
+    # ── 5. Activités des agents
+    titre_section(f"{t('activites_agents')} ({total})")
+    for i, a in enumerate(activites, 1):
+        if pdf.get_y() > 235:
+            pdf.add_page()
+        y = pdf.get_y()
+        pdf.set_fill_color(*ACCENT)
+        pdf.rect(10, y, 4, 8, 'F')
+        pdf.set_font(fam, 'B', 10.5)
+        pdf.set_text_color(*TEXTE)
+        pdf.cell(0, 8, f'  {i}. {tronque(a.projet.nom, 60)}', 0, 1)
+        pdf.set_draw_color(*LIGNE)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(2)
+
+        pdf.set_font(fam, '', 9)
+        pdf.cell(0, 5.5, f"{t('agent')} : {(a.agent.get_full_name() or a.agent.username) if a.agent else 'N/A'}   |   Date : {a.date_creation.strftime('%d/%m/%Y')} {t('heure')} {a.date_creation.strftime('%H:%M')}", 0, 1)
+        pdf.cell(0, 5.5, f"{t('zone_visitee')} : {tronque(a.zone_visitee or 'N/A', 60)}   |   {t('securite')} : {tronque(a.niveau_securite or 'N/A', 18)}", 0, 1)
+        pdf.cell(0, 5.5, f"{t('coordonnees_gps')} : {a.latitude}, {a.longitude}   |   {t('beneficiaires')} : {a.nombre_beneficiaires or 0}", 0, 1)
+        if a.rapport:
+            pdf.set_x(10)
+            pdf.multi_cell(0, 5.5, f"{t('rapport_du')} : " + tronque(a.rapport, 280))
+        if a.observations:
+            pdf.set_x(10)
+            pdf.multi_cell(0, 5.5, f"{t('observations_du')} : " + tronque(a.observations, 180))
+
+        photos = [p for p in a.photos.all() if p.image and os.path.exists(p.image.path)]
+        if photos:
+            pdf.ln(2)
+            pdf.set_font(fam, '', 8)
+            pdf.set_text_color(*GRIS)
+            pdf.cell(0, 5, f"{t('photos_label')} ({len(photos)}) :", 0, 1)
+            x = 10
+            for ph in photos[:4]:
+                try:
+                    if pdf.get_y() + 48 > 278:
+                        pdf.add_page()
+                        x = 10
+                    pdf.image(ph.image.path, x=x, w=48)
+                    x += 48 + 2
+                except Exception:
+                    continue
+            if x > 10:
+                pdf.set_y(pdf.get_y() + 2)
+        pdf.ln(4)
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.pdf"'
+    response.write(bytes(pdf.output()))
+    _audit(None, "Téléchargement rapport PDF", nom_fichier)
+    return response
+
+
+# ─── IMPORT SIG ──────────────────────────────────────────────────
+
+
+@login_required
+def importer_geometrie(request):
+    if request.method != "POST":
+        return redirect('index_cartographie')
+
+    fichier = request.FILES.get('fichier_geom')
+    nom_couche = request.POST.get('nom_couche', '').strip()
+    if not fichier or not nom_couche:
+        messages.error(request, "Nom de couche et fichier requis.")
+        return redirect('index_cartographie')
+
+    nom_fichier = fichier.name.lower()
+    contenu = fichier.read()
+
+    try:
+        if nom_fichier.endswith('.kml') or nom_fichier.endswith('.kmz'):
+            couche = _importer_kml_kmz(nom_couche, contenu, nom_fichier)
+        elif nom_fichier.endswith('.gpx'):
+            couche = _importer_gpx(nom_couche, contenu, nom_fichier)
+        elif nom_fichier.endswith('.zip') or nom_fichier.endswith('.shp'):
+            couche = _importer_shapefile(nom_couche, contenu, nom_fichier)
+        elif nom_fichier.endswith('.geojson') or nom_fichier.endswith('.json'):
+            couche = _importer_geojson(nom_couche, contenu, nom_fichier)
+        elif nom_fichier.endswith('.csv'):
+            couche = _importer_csv(nom_couche, contenu, nom_fichier)
+        else:
+            messages.error(request, "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp/.zip")
+            return redirect('index_cartographie')
+    except AmbiguiteCoordonnees as e:
+        if len(contenu) > 8 * 1024 * 1024:
+            messages.error(request, "Fichier trop volumineux pour la sélection interactive des colonnes.")
+            return redirect('index_cartographie')
+        request.session['import_ambig'] = {
+            'nom_fichier': nom_fichier,
+            'nom_couche': nom_couche,
+            'contenu': base64.b64encode(contenu).decode('ascii'),
+            'candidats': e.candidats,
+        }
+        messages.info(request, "Plusieurs colonnes de coordonnées plausibles ont été détectées. Choisissez celles à utiliser.")
+        return redirect('import_choix_colonnes')
+    except Exception as e:
+        messages.error(request, f"Erreur lors de l'import : {e}")
+        return redirect('index_cartographie')
+
+    return _terminer_import(request, couche, nom_fichier)
+
+
+def _terminer_import(request, couche, nom_fichier):
+    """Finalise un import : projet actif, audit, rapport, redirection avec zoom."""
+    nb = couche.geometries.count()
+    projet_actif = _projet_actif(request)
+    if projet_actif is not None:
+        couche.projet = projet_actif
+        couche.save()
+    _audit(request, "Import SIG", f"Couche {couche.nom} - {nb} géométries")
+    rapport = getattr(couche, '_rapport', None)
+    if not isinstance(rapport, dict):
+        rapport = {
+            'fichier': nom_fichier,
+            'format': nom_fichier.rsplit('.', 1)[-1].upper() if '.' in nom_fichier else 'FICHIER',
+            'lignes_analysees': nb,
+            'points_detectes': nb,
+            'points_crees': nb,
+            'sans_coordonnees': 0,
+            'invalides': 0,
+            'doublons_position': 0,
+            'colonnes': None,
+            'srid': getattr(couche, 'srid', 4326),
+            'crs': 'WGS84 (EPSG:4326)' if getattr(couche, 'srid', 4326) == 4326 else f'EPSG:{couche.srid}',
+            'dimension': '2D',
+        }
+    request.session['rapport_import'] = rapport
+    messages.success(request, f"Couche « {couche.nom} » importée ({nb} géométrie(s)).")
+    return redirect(f"{reverse('index_cartographie')}?importe={couche.pk}")
+
+
+def import_choix_colonnes(request):
+    """Page de choix interactif des colonnes de coordonnées en cas d'ambiguïté."""
+    donnees = request.session.get('import_ambig')
+    if not donnees:
+        messages.warning(request, "Aucune importation en attente de choix de colonnes.")
+        return redirect('index_cartographie')
+
+    if request.method == 'POST':
+        col_lon = request.POST.get('col_lon', '').strip()
+        col_lat = request.POST.get('col_lat', '').strip()
+        col_alt = request.POST.get('col_alt', '').strip()
+        if not col_lon or not col_lat:
+            messages.error(request, "Sélectionnez une colonne pour la latitude et une pour la longitude.")
+            return redirect('import_choix_colonnes')
+        try:
+            contenu = base64.b64decode(donnees['contenu'])
+            couche = _importer_csv(
+                donnees['nom_couche'], contenu, donnees['nom_fichier'],
+                colonnes_forcees={'col_lon': col_lon, 'col_lat': col_lat, 'col_alt': col_alt or None})
+        except Exception as e:
+            messages.error(request, f"Erreur lors de l'import : {e}")
+            return redirect('import_choix_colonnes')
+        request.session.pop('import_ambig', None)
+        return _terminer_import(request, couche, donnees['nom_fichier'])
+
+    return render(request, 'cartographie/import_choix_colonnes.html', {
+        'fichier': donnees['nom_fichier'],
+        'couche': donnees['nom_couche'],
+        'candidats': donnees['candidats'],
+    })
+
+
+def _importer_kml_kmz(nom_couche, contenu, nom_fichier):
+    if nom_fichier.endswith('.kmz'):
+        with zipfile.ZipFile(io.BytesIO(contenu)) as z:
+            kml_files = [n for n in z.namelist() if n.endswith('.kml')]
+            if not kml_files:
+                raise ValueError("Aucun fichier KML trouvé dans le KMZ.")
+            contenu = z.read(kml_files[0])
+
+    root = ET.fromstring(contenu)
+    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+    placemarks = root.findall('.//kml:Placemark', ns) or root.findall('.//Placemark')
+
+    def premier(scope, tag, chemin=False):
+        """Premier élément trouvé (namespace d'abord). Pas de `or` : les éléments
+        XML vides (0 enfant) sont falsy en Python >= 3.13 (bool = len())."""
+        prefix = './/' if chemin else ''
+        e = scope.find(prefix + 'kml:' + tag, ns)
+        if e is None:
+            e = scope.find(prefix + tag)
+        return e
+
+    def texte_el(pm, tag):
+        e = premier(pm, tag)
+        return e.text.strip() if e is not None and e.text else ''
+
+    def proprietes_kml(pm):
+        """Tous les attributs du Placemark : Name, Description, ExtendedData, SchemaData, styleUrl…"""
+        props = {'nom': texte_el(pm, 'name') or 'Sans nom'}
+        desc = texte_el(pm, 'description')
+        if desc:
+            props['description'] = desc
+        for tag in ('Snippet', 'styleUrl'):
+            v = texte_el(pm, tag)
+            if v:
+                props[tag] = v
+        ext = premier(pm, 'ExtendedData')
+        if ext is not None:
+            for data in ext.findall('kml:Data', ns) or ext.findall('Data'):
+                nm = data.get('name')
+                if nm:
+                    val = premier(data, 'value')
+                    props[nm] = val.text.strip() if val is not None and val.text else ''
+            for schema in ext.findall('kml:SchemaData', ns) or ext.findall('SchemaData'):
+                for sd in schema.findall('kml:SimpleData', ns) or schema.findall('SimpleData'):
+                    nm = sd.get('name')
+                    if nm:
+                        props[nm] = sd.text.strip() if sd.text else ''
+        for att in ('id', 'targetId'):
+            v = pm.get(att)
+            if v:
+                props[att] = v
+        return props
+
+    def coords_kml(coord_el, props):
+        if coord_el is None or not coord_el.text:
+            return None
+        parts_list = [p.strip().split(',') for p in coord_el.text.strip().split() if p.strip()]
+        pts = []
+        for p in parts_list:
+            if len(p) >= 2:
+                pt = [float(p[0]), float(p[1])]
+                if len(p) >= 3 and p[2]:
+                    try:
+                        alt = float(p[2])
+                        pt.append(alt)
+                        props.setdefault('altitude', alt)
+                    except ValueError:
+                        pass
+                pts.append(pt)
+        return pts or None
+
+    def sous_geometries(el, props):
+        """(type, coordonnees GeoJSON) pour un élément Point/LineString/Polygon."""
+        tag = el.tag.rsplit('}', 1)[-1]
+        if tag == 'Point':
+            pts = coords_kml(premier(el, 'coordinates'), props)
+            return [('Point', pts[0])] if pts else []
+        if tag == 'LineString':
+            pts = coords_kml(premier(el, 'coordinates'), props)
+            return [('LineString', pts)] if pts else []
+        if tag == 'Polygon':
+            outer = premier(el, 'outerBoundaryIs/LinearRing/coordinates', chemin=True)
+            pts = coords_kml(outer, props)
+            return [('Polygon', [pts])] if pts else []
+        return []
+
+    geometries = []
+    for pm in placemarks:
+        props = proprietes_kml(pm)
+        multi = premier(pm, 'MultiGeometry')
+        if multi is not None:
+            trouves = []
+            for child in list(multi):
+                trouves.extend(sous_geometries(child, props))
+        else:
+            trouves = []
+            point = premier(pm, 'Point')
+            ligne = premier(pm, 'LineString')
+            poly = premier(pm, 'Polygon')
+            if point is not None:
+                trouves.extend(sous_geometries(point, props))
+            if ligne is not None:
+                trouves.extend(sous_geometries(ligne, props))
+            if poly is not None:
+                trouves.extend(sous_geometries(poly, props))
+        for gtype, gcoords in trouves:
+            geometries.append({'type': gtype, 'coords': gcoords, 'proprietes': dict(props)})
+
+    if not geometries:
+        raise ValueError("Aucune géométrie trouvée dans le fichier KML/KMZ.")
+
+    type_geo = _type_geometries_vers_couche([g['type'] for g in geometries])
+    couche = CoucheGeometrie.objects.create(nom=nom_couche, type_geometrie=type_geo, fichier_source=nom_fichier, srid=4326)
+    for g in geometries:
+        Geometrie.objects.create(couche=couche, type=g['type'], coordonnees=g['coords'], proprietes=g['proprietes'])
+    dim = '3D' if any(any(len(pt) >= 3 for pt in g['coords']) if isinstance(g['coords'][0], list) else len(g['coords']) >= 3 for g in geometries) else '2D'
+    couche._rapport = {
+        'fichier': nom_fichier,
+        'format': 'KMZ' if nom_fichier.endswith('.kmz') else 'KML',
+        'lignes_analysees': len(placemarks),
+        'points_crees': len(geometries),
+        'sans_coordonnees': 0,
+        'invalides': 0,
+        'doublons_position': 0,
+        'colonnes': {'longitude': 'coordinates[0]', 'latitude': 'coordinates[1]', 'altitude': 'coordinates[2]'},
+        'srid': 4326,
+        'crs': 'WGS84 (EPSG:4326)',
+        'dimension': dim,
+    }
+    return couche
+
+
+def _importer_gpx(nom_couche, contenu, nom_fichier='fichier.gpx'):
+    root = ET.fromstring(contenu)
+    ns = {'gpx': 'http://www.topografix.com/GPX/1/1'}
+    geometries = []
+
+    def texte(el, tag):
+        e = el.find(f'gpx:{tag}', ns)
+        return e.text.strip() if e is not None and e.text else ''
+
+    def point_wpt(el):
+        lat = float(el.get('lat'))
+        lon = float(el.get('lon'))
+        props = {'nom': texte(el, 'name') or 'Sans nom'}
+        for tag in ('desc', 'ele', 'time', 'sym', 'type', 'cmt', 'fix'):
+            v = texte(el, tag)
+            if v:
+                if tag == 'ele':
+                    try:
+                        v = float(v)
+                    except ValueError:
+                        pass
+                props[tag] = v
+        coords = [lon, lat]
+        if isinstance(props.get('ele'), (int, float)):
+            coords.append(props['ele'])
+        return {'type': 'Point', 'coords': coords, 'proprietes': props}
+
+    for wpt in root.findall('.//gpx:wpt', ns):
+        geometries.append(point_wpt(wpt))
+
+    for trk in root.findall('.//gpx:trk', ns):
+        props = {'nom': texte(trk, 'name') or 'Track'}
+        desc = texte(trk, 'desc')
+        if desc:
+            props['description'] = desc
+        t = texte(trk, 'time')
+        if t:
+            props['time'] = t
+        trkpts = trk.findall('.//gpx:trkpt', ns)
+        coords = []
+        alts = []
+        temps = []
+        for pt in trkpts:
+            coords.append([float(pt.get('lon')), float(pt.get('lat'))])
+            e = texte(pt, 'ele')
+            if e:
+                try:
+                    alts.append(float(e))
+                except ValueError:
+                    pass
+            tm = texte(pt, 'time')
+            if tm:
+                temps.append(tm)
+        if coords:
+            if alts:
+                props['altitudes'] = alts
+            if temps:
+                props['times'] = temps
+            geometries.append({'type': 'LineString', 'coords': coords, 'proprietes': props})
+
+    for rte in root.findall('.//gpx:rte', ns):
+        props = {'nom': texte(rte, 'name') or 'Route'}
+        desc = texte(rte, 'desc')
+        if desc:
+            props['description'] = desc
+        rtepts = rte.findall('.//gpx:rtept', ns)
+        coords = [[float(pt.get('lon')), float(pt.get('lat'))] for pt in rtepts]
+        if coords:
+            geometries.append({'type': 'LineString', 'coords': coords, 'proprietes': props})
+
+    if not geometries:
+        raise ValueError("Aucune géométrie trouvée dans le fichier GPX.")
+
+    type_geo = _type_geometries_vers_couche([g['type'] for g in geometries])
+    couche = CoucheGeometrie.objects.create(nom=nom_couche, type_geometrie=type_geo, fichier_source='fichier.gpx', srid=4326)
+    for g in geometries:
+        Geometrie.objects.create(couche=couche, type=g['type'], coordonnees=g['coords'], proprietes=g['proprietes'])
+    nb_wpts = len(root.findall('.//gpx:wpt', ns))
+    couche._rapport = {
+        'fichier': nom_fichier,
+        'format': 'GPX',
+        'lignes_analysees': nb_wpts,
+        'points_crees': nb_wpts,
+        'sans_coordonnees': 0,
+        'invalides': 0,
+        'doublons_position': 0,
+        'colonnes': {'longitude': 'lon', 'latitude': 'lat', 'altitude': 'ele'},
+        'srid': 4326,
+        'crs': 'WGS84 (EPSG:4326)',
+        'dimension': '3D' if any(isinstance(g.get('proprietes', {}).get('ele'), (int, float)) for g in geometries if g['type'] == 'Point') else '2D',
+    }
+    return couche
+
+
+def _importer_shapefile(nom_couche, contenu, nom_fichier):
+    import shapefile
+
+    if nom_fichier.endswith('.zip'):
+        with zipfile.ZipFile(io.BytesIO(contenu)) as z:
+            shp_files = [n for n in z.namelist() if n.endswith('.shp')]
+            if not shp_files:
+                raise ValueError("Aucun fichier .shp trouvé dans le ZIP.")
+            memoire = {}
+            for name in z.namelist():
+                ext = name.rsplit('.', 1)[-1] if '.' in name else ''
+                base = name.rsplit('.', 1)[0] if '.' in name else name
+                if ext in ('shp', 'shx', 'dbf', 'prj'):
+                    memoire[f'{base}.{ext}'] = z.read(name)
+            with shapefile.Reader(shp=memoire) as reader:
+                geometries = _lire_shapefile_reader(reader)
+    elif nom_fichier.endswith('.shp'):
+        raise ValueError("Pour un Shapefile, veuillez fournir un dossier ZIP contenant .shp, .shx, .dbf.")
+    else:
+        raise ValueError("Format non supporté.")
+
+    if not geometries:
+        raise ValueError("Aucune géométrie trouvée dans le Shapefile.")
+
+    type_geo = _type_shapefile_vers_couche(geometries[0]['type'])
+    couche = CoucheGeometrie.objects.create(nom=nom_couche, type_geometrie=type_geo, fichier_source=nom_fichier)
+    for g in geometries:
+        Geometrie.objects.create(couche=couche, type=g['type'], coordonnees=g['coords'], proprietes=g['proprietes'])
+    return couche
+
+
+def _lire_shapefile_reader(reader):
+    geometries = []
+    field_names = [f[0] for f in reader.fields if f[0] not in ('DeletionFlag',)]
+    for shape_rec in reader.shapeRecords():
+        shape = shape_rec.shape
+        props = dict(zip(field_names, shape_rec.record)) if shape_rec.record else {}
+        if shape.shapeType in (1, 11):
+            coords = [shape.points[0][0], shape.points[0][1]]
+            geometries.append({'type': 'Point', 'coords': coords, 'proprietes': props})
+        elif shape.shapeType in (3, 13):
+            coords = [[p[0], p[1]] for p in shape.points]
+            geometries.append({'type': 'LineString', 'coords': coords, 'proprietes': props})
+        elif shape.shapeType in (5, 15):
+            parts = list(shape.parts) + [len(shape.points)]
+            rings = []
+            for i in range(len(parts) - 1):
+                ring = [[shape.points[j][0], shape.points[j][1]] for j in range(parts[i], parts[i + 1])]
+                rings.append(ring)
+            geometries.append({'type': 'Polygon', 'coords': rings, 'proprietes': props})
+    return geometries
+
+
+def _type_shapefile_vers_couche(type_geom):
+    return {'Point': 'point', 'LineString': 'ligne', 'Polygon': 'polygone'}.get(type_geom, 'point')
+
+
+def _type_geometries_vers_couche(types):
+    """Type de couche à partir des types GeoJSON des entités (gère les fichiers mixtes)."""
+    if not types:
+        return 'point'
+    if all(t == 'Point' for t in types):
+        return 'point'
+    if any(t == 'Polygon' for t in types):
+        return 'polygone'
+    if any(t == 'LineString' for t in types):
+        return 'ligne'
+    return 'point'
+
+
+def _exploser_geometrie(gtype, coords):
+    """Décompose une géométrie GeoJSON (y compris Multi* et GeometryCollection)
+    en une liste de géométries simples (Point, LineString, Polygon)."""
+    if gtype == 'Point':
+        return [('Point', coords)]
+    if gtype == 'MultiPoint':
+        return [('Point', c) for c in coords]
+    if gtype == 'LineString':
+        return [('LineString', coords)]
+    if gtype == 'MultiLineString':
+        return [('LineString', c) for c in coords]
+    if gtype == 'Polygon':
+        return [('Polygon', coords)]
+    if gtype == 'MultiPolygon':
+        return [('Polygon', c) for c in coords]
+    if gtype == 'GeometryCollection':
+        out = []
+        for g in coords or []:
+            out.extend(_exploser_geometrie(g.get('type'), g.get('coordinates')))
+        return out
+    return []
+
+
+def _importer_geojson(nom_couche, contenu, nom_fichier):
+    data = json.loads(contenu.decode('utf-8-sig', errors='replace'))
+    dtype = data.get('type') if isinstance(data, dict) else None
+    if dtype == 'FeatureCollection':
+        features = data.get('features') or []
+    elif dtype == 'Feature':
+        features = [data]
+    elif dtype in ('Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon', 'GeometryCollection'):
+        features = [{'type': 'Feature', 'geometry': data, 'properties': {}}]
+    else:
+        raise ValueError("GeoJSON non reconnu : type attendu Feature, FeatureCollection ou géométrie.")
+
+    geometries = []
+    for f in features:
+        if not isinstance(f, dict):
+            continue
+        g = f.get('geometry')
+        if not isinstance(g, dict):
+            continue
+        gtype = g.get('type')
+        gcoords = g.get('coordinates')
+        if gtype not in ('Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon', 'GeometryCollection') or gcoords is None:
+            continue
+        props = f.get('properties')
+        if not isinstance(props, dict):
+            props = {'valeur': props} if props is not None else {}
+        props = {k: (json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v)
+                 for k, v in props.items()}
+        if f.get('id') is not None:
+            props.setdefault('id', f['id'])
+        parties = _exploser_geometrie(gtype, gcoords)
+        for idx, (ptype, pcoords) in enumerate(parties):
+            p = dict(props)
+            if len(parties) > 1:
+                p['_partie'] = {'type': gtype, 'numero': idx + 1, 'total': len(parties)}
+            geometries.append({'type': ptype, 'coords': pcoords, 'proprietes': p})
+
+    if not geometries:
+        raise ValueError("Aucune géométrie trouvée dans le fichier GeoJSON.")
+
+    srid = 4326
+    crs_nom = 'WGS84 (EPSG:4326)'
+    crs_membre = data.get('crs') if isinstance(data, dict) else None
+    if isinstance(crs_membre, dict):
+        nom_crs = (crs_membre.get('properties') or {}).get('name', '')
+        if isinstance(nom_crs, str):
+            for code in ('32735', '3857', '2154', '4326', '32635'):
+                if code in nom_crs:
+                    srid = int(code)
+                    break
+            if srid != 4326:
+                crs_nom = f'CRS déclaré : {nom_crs}'
+    dim = '3D' if any(
+        (any(len(p) >= 3 for p in g['coords']) if isinstance(g['coords'][0], list) else len(g['coords']) >= 3)
+        for g in geometries) else '2D'
+    type_geo = _type_geometries_vers_couche([g['type'] for g in geometries])
+    couche = CoucheGeometrie.objects.create(nom=nom_couche, type_geometrie=type_geo, fichier_source=nom_fichier, srid=srid)
+    for g in geometries:
+        Geometrie.objects.create(couche=couche, type=g['type'], coordonnees=g['coords'], proprietes=g['proprietes'])
+    nb_features = len(data['features']) if isinstance(data, dict) and isinstance(data.get('features'), list) else len(geometries)
+    couche._rapport = {
+        'fichier': nom_fichier,
+        'format': 'GEOJSON',
+        'lignes_analysees': nb_features,
+        'points_crees': len(geometries),
+        'sans_coordonnees': 0,
+        'invalides': 0,
+        'doublons_position': 0,
+        'colonnes': {'longitude': 'geometry.coordinates[0]', 'latitude': 'geometry.coordinates[1]', 'altitude': 'geometry.coordinates[2]'},
+        'srid': srid,
+        'crs': crs_nom,
+        'dimension': dim,
+    }
+    return couche
+
+
+def _cle_colonne(nom):
+    """Normalise un nom de colonne : minuscules, sans espaces ni symboles."""
+    return ''.join(c for c in str(nom or '').strip().lower() if c.isalnum())
+
+
+def _coord_decimal(v):
+    """Convertit une valeur en degrés décimaux. Supporte le décimal simple
+    ('24.456', '-0.123', '29.12345°') et le DMS ('1°14'04"S', '29°07'24"E',
+    '12° 30′ 15″ N'). Retourne None si non convertible."""
+    s = str(v or '').strip()
+    if not s:
+        return None
+    if ',' in s and '.' not in s:
+        s = s.replace(',', '.')
+    elif ',' in s and '.' in s:
+        s = s.replace(',', '')
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    m = re.match(
+        r'^\s*([+-]?[\d.]+)\s*(?:°|º|d|deg)?'
+        r'(?:\s*([\d.]+)\s*(?:[\'’‘′]|m|min))?'
+        r'(?:\s*([\d.]+)\s*(?:["”’″]|s|sec))?'
+        r'\s*([NSEOWnseow])?\s*$', s)
+    if not m or m.group(1) is None:
+        return None
+    try:
+        val = float(m.group(1))
+        if m.group(2) is not None:
+            val += float(m.group(2)) / 60.0
+        if m.group(3) is not None:
+            val += float(m.group(3)) / 3600.0
+    except ValueError:
+        return None
+    if m.group(4) in ('S', 's', 'W', 'w'):
+        return -abs(val)
+    if m.group(4) in ('N', 'n', 'E', 'e'):
+        return abs(val)
+    return val
+
+
+class AmbiguiteCoordonnees(Exception):
+    """Plusieurs paires de colonnes de coordonnées plausibles — choix utilisateur requis."""
+
+    def __init__(self, candidats, nom_fichier):
+        super().__init__("Plusieurs colonnes de coordonnées plausibles détectées.")
+        self.candidats = candidats
+        self.nom_fichier = nom_fichier
+
+
+_AXE_LONGITUDE = {
+    'exacts': ('longitude', 'longitud'),
+    'courts': ('lon', 'lng', 'long', 'coordx', 'xcoord', 'xcoordinate'),
+    'racines': ('lon', 'long', 'lng'),
+    'borne': 180,
+}
+_AXE_LATITUDE = {
+    'exacts': ('latitude', 'latitud', 'lattitude'),
+    'courts': ('lat', 'coordy', 'ycoord', 'ycoordinate'),
+    'racines': ('lat',),
+    'borne': 90,
+}
+_AXE_ALTITUDE = {
+    'exacts': ('altitude', 'altitud', 'elevation', 'elevationm', 'height', 'heightm', 'hauteur'),
+    'courts': ('alt', 'elev', 'coordz', 'zcoord', 'zcoordinate'),
+    'racines': ('alt', 'elev', 'height', 'hauteur'),
+    'borne': 9000,
+}
+
+# Parties DMS (Degrés / Minutes / Secondes) à écarter des candidats par nom.
+_DMS_PARTS = (
+    'londeg', 'lonmin', 'lonsec', 'latdeg', 'latmin', 'latsec',
+    'lond', 'lonm', 'lons', 'latd', 'latm', 'lats',
+)
+
+
+def _fit_plage(vals, borne):
+    return sum(1 for v in vals if -borne <= v <= borne) / max(len(vals), 1)
+
+
+def _est_partie_dms(n):
+    return n in _DMS_PARTS or n.endswith(('deg', 'min', 'sec', 'degree', 'minute', 'seconde')) or n in ('d', 'm', 's')
+
+
+def _score_colonne_axe(n, axe, vals):
+    """Score d'une colonne pour un axe : nom (0-60) + adéquation des valeurs (0-40)."""
+    nom = 0
+    if n in axe['exacts']:
+        nom = 60
+    elif n in axe['courts']:
+        nom = 50
+    elif n in ('x', 'y', 'z'):
+        if (n == 'x' and axe['borne'] == 180) or (n == 'y' and axe['borne'] == 90) or (n == 'z' and axe['borne'] == 9000):
+            nom = 35
+    elif n.startswith('coord') or n.endswith('coord') or n.endswith('coordinate'):
+        nom = 40
+    elif any(r in n for r in axe['racines']):
+        nom = 25
+    fit = _fit_plage(vals, axe['borne']) if vals else 0
+    return nom + int(fit * 40)
+
+
+def _detecter_colonnes_coord(champs, lignes):
+    """Détection intelligente des colonnes Longitude / Latitude / Altitude.
+
+    Priorités :
+    1) Alias standards + variantes (insensible à la casse, espaces, _ et -) avec
+       scoring nom + valeurs ; plusieurs candidats départagés intelligemment.
+    2) Ambiguïté non résolue → ('AMBIGU', candidats, None) pour choix utilisateur.
+    3) DMS séparé (Lon_Deg/Lon_Min/Lon_Sec + Lat_Deg/Lat_Min/Lat_Sec).
+    4) Analyse des valeurs : X → Longitude, Y → Latitude, Z → Altitude, plages.
+    Retourne (col_lon, col_lat, col_alt) ou ('DMS', dms, None) ou ('AMBIGU', candidats, None)."""
+    norm = {_cle_colonne(c): c for c in champs}
+
+    def echantillon_vals(col, n=60):
+        vals = []
+        for l in lignes:
+            if len(vals) >= n:
+                break
+            d = _coord_decimal(l.get(col))
+            if d is not None:
+                vals.append(d)
+        return vals
+
+    # ── 1) Candidats par nom + valeurs, avec scoring ─────────────
+    candidats_axes = {}
+    for axe, cfg in (('longitude', _AXE_LONGITUDE), ('latitude', _AXE_LATITUDE), ('altitude', _AXE_ALTITUDE)):
+        liste = []
+        for n, c in norm.items():
+            if _est_partie_dms(n):
+                continue
+            vals = echantillon_vals(c)
+            sc = _score_colonne_axe(n, cfg, vals)
+            if sc > 0:
+                liste.append((sc, c))
+        liste.sort(reverse=True)
+        candidats_axes[axe] = liste
+
+    lon_liste = candidats_axes['longitude']
+    lat_liste = candidats_axes['latitude']
+
+    def ambiguite_axe(liste):
+        """Deux candidats nommés quasi ex-aequo sur le même axe → choix requis."""
+        if len(liste) < 2:
+            return False
+        s1, _ = liste[0]
+        s2, _ = liste[1]
+        return s1 >= 45 and s2 >= 45 and (s1 - s2) <= 5
+
+    if ambiguite_axe(lon_liste) or ambiguite_axe(lat_liste):
+        alt_page = [c for sc, c in candidats_axes['altitude'] if sc > 40]
+        return 'AMBIGU', {
+            'longitude': [c for _, c in lon_liste[:6]],
+            'latitude': [c for _, c in lat_liste[:6]],
+            'altitude': alt_page[:6],
+        }, None
+
+    meilleure = None
+    for s1, c1 in lon_liste[:6]:
+        for s2, c2 in lat_liste[:6]:
+            if c1 == c2:
+                continue
+            total = s1 + s2
+            if meilleure is None or total > meilleure[0]:
+                meilleure = (total, c1, c2)
+
+    if meilleure is not None:
+        score_pair, col_lon, col_lat = meilleure
+        v_lon = echantillon_vals(col_lon)
+        v_lat = echantillon_vals(col_lat)
+        if score_pair >= 100 and _fit_plage(v_lon, 180) >= 0.5 and _fit_plage(v_lat, 90) >= 0.5:
+            # Désambiguïsation X/Y par les valeurs : X prend des latitudes, Y des longitudes.
+            xc, yc = norm.get('x'), norm.get('y')
+            if xc == col_lon and yc == col_lat:
+                fx = _fit_plage(echantillon_vals(xc), 90)
+                fy = _fit_plage(echantillon_vals(yc), 90)
+                if fx == 1 and fy < 1:
+                    col_lon, col_lat = yc, xc
+
+            col_alt = None
+            for sc, c in candidats_axes['altitude']:
+                if c not in (col_lon, col_lat) and sc > 40:
+                    col_alt = c
+                    break
+            return col_lon, col_lat, col_alt
+
+    # ── 2) DMS séparé : Lon_Deg/Lon_Min/Lon_Sec + Lat_Deg/Lat_Min/Lat_Sec ──
+    dms = {
+        'lon_deg': norm.get('londeg') or norm.get('lond'),
+        'lon_min': norm.get('lonmin') or norm.get('lonm'),
+        'lon_sec': norm.get('lonsec') or norm.get('lons'),
+        'lat_deg': norm.get('latdeg') or norm.get('latd'),
+        'lat_min': norm.get('latmin') or norm.get('latm'),
+        'lat_sec': norm.get('latsec') or norm.get('lats'),
+    }
+    if dms['lon_deg'] and dms['lat_deg']:
+        return 'DMS', dms, None
+
+    # ── 3) Analyse intelligente des valeurs : X → Longitude, Y → Latitude, Z → Altitude ──
+    numeriques = {}
+    for c in champs:
+        vals = echantillon_vals(c)
+        if len(vals) >= max(2, int(len(lignes) * 0.6)) if lignes else len(vals) >= 2:
+            numeriques[c] = vals
+    if len(numeriques) >= 2:
+        xc = next((norm[k] for k in ('x', 'coordx', 'xcoord') if norm.get(k) in numeriques), None)
+        yc = next((norm[k] for k in ('y', 'coordy', 'ycoord') if norm.get(k) in numeriques), None)
+        zc = next((norm[k] for k in ('z', 'coordz', 'zcoord', 'altitude', 'alt', 'elevation', 'elev', 'height') if norm.get(k) in numeriques), None)
+        if xc and yc and _fit_plage(numeriques[xc], 180) >= 0.8 and _fit_plage(numeriques[yc], 90) >= 0.8:
+            col_alt = zc if (zc and _fit_plage(numeriques[zc], 180) < 0.8) else None
+            return xc, yc, col_alt
+
+        # Dernier recours : scoring des plages (lat ⊂ lon)
+        tri = sorted(numeriques.keys(), key=lambda c: _fit_plage(numeriques[c], 90), reverse=True)
+        col_lat = tri[0]
+        col_lon = next((c for c in tri[1:] if _fit_plage(numeriques[c], 180) >= 0.8), None)
+        if col_lon is not None and _fit_plage(numeriques[col_lat], 90) >= 0.8:
+            col_alt = next((c for c in numeriques if c not in (col_lon, col_lat) and _fit_plage(numeriques[c], 180) < 0.8), None)
+            return col_lon, col_lat, col_alt
+
+    return None, None, None
+
+
+def _importer_csv(nom_couche, contenu, nom_fichier, colonnes_forcees=None):
+    texte = contenu.decode('utf-8-sig', errors='replace')
+    delim = ','
+    try:
+        snif = csv.Sniffer().sniff(texte[:4096], delimiters=',;\t|')
+        if snif.delimiter:
+            delim = snif.delimiter
+    except csv.Error:
+        pass
+    reader = csv.DictReader(io.StringIO(texte), delimiter=delim)
+    champs = [c for c in (reader.fieldnames or []) if c is not None]
+    if not champs:
+        raise ValueError("Fichier CSV vide ou illisible.")
+    lignes = list(reader)
+
+    if colonnes_forcees:
+        col_lon = colonnes_forcees.get('col_lon') or ''
+        col_lat = colonnes_forcees.get('col_lat') or ''
+        col_alt = colonnes_forcees.get('col_alt') or None
+        if col_lon not in champs or col_lat not in champs:
+            raise ValueError("Colonnes choisies introuvables dans le fichier.")
+        dms_mode = False
+    else:
+        col_lon, col_lat, col_alt = _detecter_colonnes_coord(champs, lignes)
+        if col_lon == 'AMBIGU':
+            raise AmbiguiteCoordonnees(col_lat, nom_fichier)
+        dms_mode = col_lon == 'DMS'
+        if not col_lon or not col_lat or col_lon == col_lat:
+            raise ValueError(
+                "Aucune paire de coordonnées Latitude / Longitude n'a été détectée dans ce fichier. "
+                "Vérifiez qu'il contient des colonnes Latitude/Longitude (Lat, Latitude, Y…) "
+                "et Longitude (Long, Lon, Longitude, X…) avec des valeurs numériques.")
+
+    geometries = []
+    nb_sans = 0
+    nb_invalides = 0
+    positions = {}
+    dimension = 2
+    for ligne in lignes:
+        if dms_mode:
+            lon = _coord_dms_parts(ligne, col_lat, lat=False)
+            lat = _coord_dms_parts(ligne, col_lat, lat=True)
+        else:
+            lon = _coord_decimal(ligne.get(col_lon))
+            lat = _coord_decimal(ligne.get(col_lat))
+        if lon is None or lat is None:
+            nb_sans += 1
+            continue
+        if not (-180 <= lon <= 180):
+            nb_invalides += 1
+            continue
+        if not (-90 <= lat <= 90):
+            nb_invalides += 1
+            continue
+        coords = [lon, lat]
+        if col_alt:
+            alt = _coord_decimal(ligne.get(col_alt))
+            if alt is not None:
+                coords.append(alt)
+                dimension = 3
+        props = {k: v for k, v in ligne.items()}
+        geometries.append({'type': 'Point', 'coords': coords, 'proprietes': props})
+        cle = (round(lon, 6), round(lat, 6))
+        positions[cle] = positions.get(cle, 0) + 1
+
+    if not geometries:
+        raise ValueError("Aucun point valide trouvé dans le CSV (coordonnées manquantes ou invalides).")
+
+    if dms_mode:
+        col_lon_aff, col_lat_aff = col_lat['lon_deg'], col_lat['lat_deg']
+    else:
+        col_lon_aff, col_lat_aff = col_lon, col_lat
+    couche = CoucheGeometrie.objects.create(nom=nom_couche, type_geometrie='point', fichier_source=nom_fichier, srid=4326)
+    Geometrie.objects.bulk_create([
+        Geometrie(couche=couche, type=g['type'], coordonnees=g['coords'], proprietes=g['proprietes'])
+        for g in geometries
+    ])
+    couche._rapport = {
+        'fichier': nom_fichier,
+        'format': 'CSV',
+        'lignes_analysees': len(lignes),
+        'points_detectes': len(lignes) - nb_sans,
+        'points_crees': len(geometries),
+        'sans_coordonnees': nb_sans,
+        'invalides': nb_invalides,
+        'doublons_position': sum(n - 1 for n in positions.values() if n > 1),
+        'colonnes': {'longitude': col_lon_aff, 'latitude': col_lat_aff, 'altitude': col_alt},
+        'srid': 4326,
+        'crs': 'WGS84 (EPSG:4326)',
+        'dimension': '3D' if dimension == 3 else '2D',
+    }
+    return couche
+
+
+def _coord_dms_parts(ligne, colonnes, lat=False):
+    """Construit une valeur décimale à partir de colonnes DMS séparées."""
+    cle = 'lat' if lat else 'lon'
+    deg = _coord_decimal(ligne.get(colonnes.get(cle + '_deg')))
+    if deg is None:
+        return None
+    val = deg
+    mn = _coord_decimal(ligne.get(colonnes.get(cle + '_min')))
+    if mn is not None:
+        val += mn / 60.0
+    sc = _coord_decimal(ligne.get(colonnes.get(cle + '_sec')))
+    if sc is not None:
+        val += sc / 3600.0
+    return val
+
+
+@login_required
+def couche_delete(request, pk):
+    couche = get_object_or_404(CoucheGeometrie, pk=pk)
+    if request.method == "POST":
+        if couche.fichier_kml:
+            try:
+                os.remove(couche.fichier_kml.path)
+            except Exception:
+                pass
+        couche.delete()
+        messages.success(request, f"Couche « {couche.nom} » supprimée.")
+        return redirect('index_cartographie')
+    return render(request, 'cartographie/couche_confirm_delete.html', {'couche': couche})
+
+
+# ─── ÉDITION DES POINTS + MÉDIAS ───────────────────────────────
+
+
+@login_required
+def point_edit(request, pk):
+    point = get_object_or_404(PointGeographique, pk=pk)
+    if not (_est_admin(request.user) or point.auteur == request.user):
+        messages.error(request, "Vous ne pouvez modifier que vos propres points.")
+        return redirect('index_cartographie')
+    if request.method == "POST":
+        point.nom = request.POST.get('nom', point.nom)[:200]
+        point.description = request.POST.get('description', '')
+        point.categorie = request.POST.get('categorie', point.categorie)
+        point.statut = request.POST.get('statut', point.statut)
+        point.province = request.POST.get('province', '')
+        point.commune = request.POST.get('commune', '')
+        point.quartier = request.POST.get('quartier', '')
+        try:
+            point.latitude = float(request.POST.get('latitude', point.latitude))
+            point.longitude = float(request.POST.get('longitude', point.longitude))
+        except (ValueError, TypeError):
+            messages.error(request, "Coordonnées invalides.")
+            return redirect('point_edit', pk=pk)
+        if request.FILES.get('photo'):
+            point.photo = request.FILES['photo']
+        point.save()
+        _creer_medias_point(point, request.FILES.getlist('medias'))
+        _audit(request, "Modification de point", f"Point #{pk} - {point.nom}")
+        messages.success(request, "Point mis à jour.")
+        return redirect('index_cartographie')
+    return render(request, 'cartographie/point_form.html', {
+        'point': point,
+        'medias': point.medias.all(),
+        'categories': PointGeographique.CATEGORIE_CHOICES,
+        'statuts': PointGeographique.STATUT_CHOICES,
+    })
+
+
+@login_required
+def point_delete(request, pk):
+    point = get_object_or_404(PointGeographique, pk=pk)
+    if not (_est_admin(request.user) or point.auteur == request.user):
+        messages.error(request, "Vous ne pouvez supprimer que vos propres points.")
+        return redirect('index_cartographie')
+    if request.method == "POST":
+        _audit(request, "Suppression de point", f"Point #{pk} - {point.nom}")
+        point.delete()
+        messages.success(request, "Point supprimé.")
+        return redirect('index_cartographie')
+    return render(request, 'cartographie/point_confirm_delete.html', {'point': point})
+
+
+@login_required
+def media_delete(request, pk):
+    media = get_object_or_404(MediaPoint, pk=pk)
+    point_id = media.point_id
+    if request.method == "POST":
+        _audit(request, "Suppression de média", f"Média #{pk} du point #{point_id}")
+        media.delete()
+        messages.success(request, "Média supprimé.")
+        return redirect('point_edit', pk=point_id)
+    return redirect('point_edit', pk=point_id)
+
+
+# ─── IMPORT EXCEL INTELLIGENT (v2) ─────────────────────────────
+
+
+@login_required
+def import_page(request):
+    return render(request, 'cartographie/import_excel.html')
+
+
+@login_required
+def importer_excel_v2(request):
+    if request.method != "POST":
+        return redirect('index_cartographie')
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'erreur': "Données invalides."})
+
+    mapping = data.get('mapping', {})
+    lignes = data.get('lignes', [])
+    entetes = data.get('entetes') or []
+    nom_fichier = (data.get('nom_fichier') or '').strip()[:255]
+    format_fichier = (data.get('format') or '').strip()[:20]
+    idx = {k: v for k, v in mapping.items() if v is not None and v != ''}
+
+    if not lignes or 'latitude' not in idx or 'longitude' not in idx:
+        return JsonResponse({'ok': False, 'erreur': "Colonnes Latitude/Longitude requises et au moins une ligne de données."})
+
+    importes = 0
+    invalides = 0
+    doublons = 0
+    doublons_maj = 0
+    projet_doublons = ''
+    for row in lignes:
+        try:
+            lat = float(str(row[idx['latitude']]).replace(',', '.'))
+            lng = float(str(row[idx['longitude']]).replace(',', '.'))
+        except (ValueError, TypeError, IndexError):
+            invalides += 1
+            continue
+        if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+            invalides += 1
+            continue
+        nom = str(row[idx['nom']])[:200] if 'nom' in idx and row[idx['nom']] else f"Point {lat:.5f}, {lng:.5f}"
+        categorie = str(row[idx['categorie']]).strip().lower() if 'categorie' in idx and row[idx['categorie']] else 'autre'
+        categorie_valide = dict(PointGeographique.CATEGORIE_CHOICES).get(categorie)
+        if not categorie_valide:
+            categorie = 'autre'
+        statut = str(row[idx['statut']]).strip().lower() if 'statut' in idx and row[idx['statut']] else 'actif'
+        if statut not in dict(PointGeographique.STATUT_CHOICES):
+            statut = 'actif'
+        description = str(row[idx['description']]) if 'description' in idx and row[idx['description']] else ''
+        province = str(row[idx['province']]) if 'province' in idx and row[idx['province']] else ''
+        commune = str(row[idx['commune']]) if 'commune' in idx and row[idx['commune']] else ''
+
+        donnees_pt = {}
+        for i, h in enumerate(entetes):
+            v = row[i] if i < len(row) else ''
+            if h:
+                donnees_pt[str(h).strip()] = (str(v) if v is not None else '').strip()
+
+        existe = PointGeographique.objects.filter(
+            nom=nom, latitude=lat, longitude=lng
+        ).first()
+        if existe:
+            doublons += 1
+            if not projet_doublons and existe.projet is not None:
+                projet_doublons = existe.projet.nom
+            if existe.donnees != donnees_pt or not existe.source_fichier:
+                existe.donnees = donnees_pt
+                existe.source_fichier = nom_fichier or existe.source_fichier
+                existe.source_format = format_fichier or existe.source_format
+                existe.save(update_fields=['donnees', 'source_fichier', 'source_format'])
+                doublons_maj += 1
+            continue
+
+        PointGeographique.objects.create(
+            nom=nom, description=description, latitude=lat, longitude=lng,
+            categorie=categorie, statut=statut,
+            province=province, commune=commune,
+            donnees=donnees_pt,
+            source_fichier=nom_fichier, source_format=format_fichier,
+            projet=_projet_actif(request),
+            auteur=request.user if request.user.is_authenticated else None,
+        )
+        importes += 1
+
+    _audit(request, "Import Excel intelligent", f"{importes} importés, {doublons} doublons ({doublons_maj} actualisés), {invalides} invalides")
+    projet_actif = _projet_actif(request)
+    return JsonResponse({
+        'ok': True, 'importes': importes, 'ignores': doublons + invalides,
+        'doublons': doublons, 'invalides': invalides, 'doublons_maj': doublons_maj,
+        'projet': projet_doublons or (projet_actif.nom if projet_actif is not None else ''),
+    })
+
+
+@login_required
+def points_liste(request):
+    """Tableau de tous les points géographiques, tous projets confondus."""
+    qs = PointGeographique.objects.select_related('projet', 'auteur', 'activite')
+
+    q = (request.GET.get('q') or '').strip()
+    if q:
+        qs = qs.filter(db_models.Q(nom__icontains=q) | db_models.Q(province__icontains=q) |
+                       db_models.Q(commune__icontains=q) | db_models.Q(description__icontains=q))
+    projet_id = request.GET.get('projet') or ''
+    if projet_id:
+        qs = qs.filter(projet_id=projet_id)
+    categorie = request.GET.get('categorie') or ''
+    if categorie:
+        qs = qs.filter(categorie=categorie)
+    statut = request.GET.get('statut') or ''
+    if statut:
+        qs = qs.filter(statut=statut)
+
+    points = qs.all()
+    return render(request, 'cartographie/points_liste.html', {
+        'points': points,
+        'total': points.count(),
+        'projets': Projet.objects.all().order_by('nom'),
+        'categories': PointGeographique.CATEGORIE_CHOICES,
+        'statuts': PointGeographique.STATUT_CHOICES,
+        'f_q': q, 'f_projet': projet_id, 'f_categorie': categorie, 'f_statut': statut,
+    })
+
+
+# ─── EXPORTS (GeoJSON / KML / GPX) ─────────────────────────────
+
+
+@login_required
+def export_points(request, format):
+    points = PointGeographique.objects.select_related('auteur')
+    projet_actif = _projet_actif(request)
+    if projet_actif is not None:
+        points = points.filter(projet=projet_actif)
+    points = points.all()
+    date_str = date.today().strftime('%Y%m%d')
+
+    if format == 'geojson':
+        features = []
+        for p in points:
+            features.append({
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [p.longitude, p.latitude]},
+                "properties": {
+                    "nom": p.nom, "description": p.description,
+                    "categorie": p.get_categorie_display(), "statut": p.get_statut_display(),
+                    "province": p.province, "commune": p.commune, "quartier": p.quartier,
+                    "auteur": p.auteur.get_full_name() or p.auteur.username if p.auteur else '',
+                    "date": p.date_creation.strftime('%d/%m/%Y %H:%M'),
+                },
+            })
+        content = json.dumps({"type": "FeatureCollection", "features": features}, ensure_ascii=False, indent=2)
+        nom_fichier = f"points_{date_str}.geojson"
+        content_type = 'application/geo+json'
+
+    elif format == 'kml':
+        parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+                 '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>',
+                 f'<name>Points {date_str}</name>']
+        for p in points:
+            parts.append('<Placemark>')
+            parts.append(f'<name>{_xml_safe(p.nom)}</name>')
+            desc = f"{p.get_categorie_display()} - {p.get_statut_display()}"
+            if p.description:
+                desc += f" - {p.description}"
+            parts.append(f'<description>{_xml_safe(desc)}</description>')
+            parts.append(f'<Point><coordinates>{p.longitude},{p.latitude},0</coordinates></Point>')
+            parts.append('</Placemark>')
+        parts.append('</Document></kml>')
+        content = '\n'.join(parts)
+        nom_fichier = f"points_{date_str}.kml"
+        content_type = 'application/vnd.google-earth.kml+xml'
+
+    elif format == 'gpx':
+        parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+                 '<gpx version="1.1" creator="PIP Cartographie" xmlns="http://www.topografix.com/GPX/1/1">']
+        for p in points:
+            parts.append(
+                f'<wpt lat="{p.latitude}" lon="{p.longitude}">'
+                f'<name>{_xml_safe(p.nom)}</name>'
+                f'<desc>{_xml_safe(p.get_categorie_display())}</desc>'
+                f'</wpt>'
+            )
+        parts.append('</gpx>')
+        content = '\n'.join(parts)
+        nom_fichier = f"points_{date_str}.gpx"
+        content_type = 'application/gpx+xml'
+
+    else:
+        messages.error(request, "Format non supporté.")
+        return redirect('index_cartographie')
+
+    response = HttpResponse(content, content_type=content_type)
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}"'
+    return response
+
+
+# ─── DESSIN (SAUVEGARDE GÉOMÉTRIES) ────────────────────────────
+
+
+def _couche_dessins(projet=None):
+    if projet is not None:
+        couche, _ = CoucheGeometrie.objects.get_or_create(
+            nom='Dessins', projet=projet, defaults={'type_geometrie': 'point', 'style_couleur': '#8b5cf6'}
+        )
+        return couche
+    couche, _ = CoucheGeometrie.objects.get_or_create(
+        nom='Dessins', defaults={'type_geometrie': 'point', 'style_couleur': '#8b5cf6'}
+    )
+    return couche
+
+
+@login_required
+def dessin_save(request):
+    if request.method != "POST":
+        return JsonResponse({'ok': False, 'erreur': "Méthode non autorisée."})
+    projet_actif = _projet_actif(request)
+    if projet_actif is None:
+        return JsonResponse({'ok': False, 'erreur': "Veuillez sélectionner un projet avant de dessiner."})
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'erreur': "Données invalides."})
+
+    nom = str(data.get('nom', 'Dessin'))[:200]
+    type_geom = data.get('type', 'LineString')
+    coords = data.get('coordonnees')
+
+    if coords is None:
+        return JsonResponse({'ok': False, 'erreur': "Coordonnées manquantes."})
+
+    type_dessin = type_geom
+    if type_geom in ('Circle', 'Rectangle'):
+        type_geom = 'Polygon'
+
+    couche = _couche_dessins(projet_actif)
+    if type_geom == 'Point':
+        couche.type_geometrie = 'point'
+        couche.save()
+    elif type_geom == 'LineString':
+        couche.type_geometrie = 'ligne'
+        couche.save()
+    elif type_geom in ('Polygon',):
+        couche.type_geometrie = 'polygone'
+        couche.save()
+
+    geo = Geometrie.objects.create(
+        couche=couche, type=type_geom, coordonnees=coords,
+        proprietes={'nom': nom, 'type_dessin': type_dessin, 'auteur': request.user.username if request.user.is_authenticated else ''},
+    )
+    _audit(request, "Dessin enregistré", f"{type_dessin} - {nom} ({projet_actif.nom})")
+    return JsonResponse({'ok': True, 'id': geo.pk, 'couche_id': couche.pk, 'couleur': couche.style_couleur})
+
+
+@login_required
+def geometrie_delete(request, pk):
+    if request.method != "POST":
+        return JsonResponse({'ok': False, 'erreur': "Méthode non autorisée."})
+    geo = get_object_or_404(Geometrie, pk=pk)
+    if geo.couche.nom == 'Dessins':
+        _audit(request, "Suppression de dessin", f"Géométrie #{pk}")
+        geo.delete()
+        return JsonResponse({'ok': True})
+    return JsonResponse({'ok': False, 'erreur': "Seuls les dessins peuvent être supprimés ici."})

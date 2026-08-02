@@ -1,0 +1,20 @@
+{% load static %}
+{% if mukmap_langues %}
+<div class="selecteur-langue" title="{% if mukmap_langue == 'fr' %}Langue{% elif mukmap_langue == 'en' %}Language{% elif mukmap_langue == 'sw' %}Lugha{% elif mukmap_langue == 'ln' %}Lokótá{% elif mukmap_langue == 'pt' %}Idioma{% else %}语言{% endif %}">
+    <i data-lucide="globe" style="width:15px;height:15px;"></i>
+    <form method="POST" action="{% url 'changer_langue' %}" id="form-langue">
+        {% csrf_token %}
+        <select name="langue" id="select-langue" aria-label="Langue">
+            {% for code, nom in mukmap_langues %}
+            <option value="{{ code }}" {% if code == mukmap_langue %}selected{% endif %}>{{ code|upper }} — {{ nom }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+<script>
+(function () {
+    var sel = document.getElementById('select-langue');
+    if (sel) sel.addEventListener('change', function () { sel.form.submit(); });
+})();
+</script>
+{% endif %}

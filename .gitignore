@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+serveur.log
+serveur_err.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.sublime-*
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Divers
+*.docx.tmp

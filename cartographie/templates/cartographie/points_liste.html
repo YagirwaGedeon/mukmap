@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tous les points — MUKMAP v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+
+        #topbar { display: flex; align-items: center; gap: 16px; padding: 12px 22px; background: color-mix(in srgb, var(--bg-2) 88%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+        .pastille { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+        .titre { font-weight: 800; font-size: 1rem; }
+        .sous-titre { font-size: .7rem; color: var(--text-3); }
+        nav { display: flex; gap: 6px; margin-left: 24px; flex-wrap: wrap; }
+        nav a { text-decoration: none; color: var(--text-2); font-size: .8rem; font-weight: 600; padding: 8px 14px; border-radius: 10px; transition: all .18s; display: flex; align-items: center; gap: 7px; }
+        nav a:hover { background: var(--bg-3); color: var(--text); }
+        nav a.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+        .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+        button { font-family: 'Inter', Arial, sans-serif; cursor: pointer; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: .85rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-sm { padding: 6px 11px; font-size: .75rem; border-radius: 8px; }
+        .btn-danger { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.35); }
+        .btn-danger:hover { color: #fff; background: var(--red); border-color: var(--red); }
+        .btn-vert { background: rgba(34,197,94,.12); color: var(--green); border: 1px solid rgba(34,197,94,.35); }
+        .btn-vert:hover { color: #fff; background: var(--green); border-color: var(--green); }
+
+        .conteneur { padding: 24px; max-width: 1400px; margin: 0 auto; }
+        .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 22px; margin-bottom: 18px; }
+        .card h2 { font-size: 1.05rem; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+        .card .sous { color: var(--text-3); font-size: .8rem; margin-bottom: 16px; }
+
+        .filtres { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .filtres input, .filtres select { padding: 9px 12px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .82rem; }
+        .filtres input[type="text"] { flex: 1; min-width: 240px; }
+        .filtres input:focus, .filtres select:focus { border-color: var(--accent); }
+
+        .stat { display: flex; gap: 14px; flex-wrap: wrap; margin: 14px 0 0; align-items: center; }
+        .stat .pill { padding: 7px 14px; border-radius: 999px; font-size: .78rem; font-weight: 600; background: var(--bg-3); border: 1px solid var(--border); }
+        .stat .pill.accent { color: var(--accent); border-color: rgba(109,93,246,.4); }
+
+        .tab-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; margin-top: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+        th { position: sticky; top: 0; background: var(--bg-3); text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-2); font-size: .68rem; text-transform: uppercase; letter-spacing: .6px; white-space: nowrap; }
+        td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:hover td { background: var(--bg-3); }
+        tr.ligne-detail td { background: var(--bg); padding: 14px 16px; }
+
+        .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: .7rem; font-weight: 600; background: var(--bg-3); border: 1px solid var(--border); white-space: nowrap; }
+        .badge-projet { color: var(--accent); border-color: rgba(109,93,246,.45); background: rgba(109,93,246,.1); }
+        .badge-sansprojet { color: var(--text-3); }
+        .coords { font-family: Consolas, monospace; font-size: .72rem; color: var(--text-2); white-space: nowrap; }
+        .chevron { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; background: var(--bg-3); border: 1px solid var(--border); cursor: pointer; color: var(--text-2); transition: all .18s; }
+        .chevron:hover { border-color: var(--accent); color: var(--accent); }
+        .chevron.ouvert { transform: rotate(90deg); color: var(--accent); border-color: var(--accent); }
+
+        .grille-details { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px 22px; }
+        .grille-details .ligne { display: flex; gap: 8px; font-size: .76rem; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+        .grille-details .cle { color: var(--text-3); font-weight: 600; min-width: 130px; text-transform: capitalize; }
+        .grille-details .val { color: var(--text); word-break: break-word; }
+        .aucun { text-align: center; padding: 46px 20px; color: var(--text-3); }
+        .aucun .grand { font-size: 2.2rem; margin-bottom: 10px; }
+        .actions { display: flex; gap: 6px; white-space: nowrap; }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<header id="topbar">
+    <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+    <div>
+        <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
+        <div class="sous-titre" data-i18n="liste_points">Liste des points</div>
+    </div>
+    <nav>
+        <a href="{% url 'dashboard' %}"><i>📊</i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i>🗺️</i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'points_liste' %}" class="actif"><i>📍</i> <span data-i18n="tous_points">Tous les points</span></a>
+        <a href="{% url 'import_page' %}"><i>📥</i> <span data-i18n="import_donnees">Import de données</span></a>
+        <a href="{% url 'rapport_generer' %}"><i>📄</i> <span data-i18n="rapports">Rapports</span></a>
+    </nav>
+    <div class="droite">
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <a class="btn" href="{% url 'deconnexion' %}"><span data-i18n="deconnexion">Déconnexion</span></a>
+    </div>
+</header>
+
+<main class="conteneur">
+    <div class="card">
+        <h2>📍 <span data-i18n="tous_points">Tous les points</span></h2>
+        <p class="sous" data-i18n="tous_points_sous">L'ensemble des points enregistrés, tous projets confondus. Cliquez sur ▸ pour voir le détail complet d'un point.</p>
+        <form method="GET" class="filtres">
+            <input type="text" name="q" value="{{ f_q }}" placeholder="Rechercher un point (nom, province, commune…)" data-i18n-ph="rechercher_point">
+            <select name="projet">
+                <option value="" data-i18n="tous_projets">Tous les projets</option>
+                {% for p in projets %}<option value="{{ p.pk }}" {% if f_projet == p.pk|stringformat:'s' %}selected{% endif %}>{{ p.nom }}</option>{% endfor %}
+            </select>
+            <select name="categorie">
+                <option value="" data-i18n="toutes_categories">Toutes les catégories</option>
+                {% for val, lib in categories %}<option value="{{ val }}" {% if f_categorie == val %}selected{% endif %}>{{ lib }}</option>{% endfor %}
+            </select>
+            <select name="statut">
+                <option value="" data-i18n="tous_etats">Tous les états</option>
+                {% for val, lib in statuts %}<option value="{{ val }}" {% if f_statut == val %}selected{% endif %}>{{ lib }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary"><span data-i18n="filtrer">Filtrer</span></button>
+            {% if f_q or f_projet or f_categorie or f_statut %}<a class="btn" href="{% url 'points_liste' %}" data-i18n="reinitialiser">Réinitialiser</a>{% endif %}
+        </form>
+        <div class="stat">
+            <span class="pill accent">{{ total }} <span data-i18n="points">points</span></span>
+            <span class="pill" id="visible-pill"></span>
+        </div>
+        <div class="tab-wrap">
+            <table id="table-points">
+                <thead>
+                    <tr>
+                        <th style="width:34px;"></th>
+                        <th data-i18n="nom_lieu">Nom du lieu</th>
+                        <th data-i18n="categorie">Catégorie</th>
+                        <th data-i18n="etat">État</th>
+                        <th data-i18n="projet">Projet</th>
+                        <th data-i18n="province">Province</th>
+                        <th>Coordonnées</th>
+                        <th data-i18n="agent_role">Agent</th>
+                        <th data-i18n="date_heure">Date</th>
+                        <th style="width:150px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for p in points %}
+                    <tr class="ligne-principale" data-point="{{ p.pk }}">
+                        <td><button type="button" class="chevron" title="Détails">▸</button></td>
+                        <td><b>{{ p.nom }}</b>{% if p.description %}<div style="font-size:.7rem;color:var(--text-3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.description }}</div>{% endif %}</td>
+                        <td><span class="badge" data-cat="{{ p.categorie }}"><span id="cat-emoji-{{ p.pk }}"></span> <span>{{ p.get_categorie_display }}</span></span></td>
+                        <td><span class="badge">{{ p.get_statut_display }}</span></td>
+                        <td>{% if p.projet %}<span class="badge badge-projet">📁 {{ p.projet.nom }}</span>{% else %}<span class="badge badge-sansprojet" data-i18n="sans_projet">Sans projet</span>{% endif %}</td>
+                        <td>{{ p.province|default:'—' }}{% if p.commune %}<div style="font-size:.7rem;color:var(--text-3);">{{ p.commune }}</div>{% endif %}</td>
+                        <td class="coords">{{ p.latitude|floatformat:6 }}, {{ p.longitude|floatformat:6 }}</td>
+                        <td>{% if p.auteur %}{{ p.auteur.get_full_name|default:p.auteur.username }}{% else %}—{% endif %}</td>
+                        <td style="white-space:nowrap;">{{ p.date_creation|date:'d/m/Y H:i' }}</td>
+                        <td><div class="actions">
+                            <a class="btn btn-sm btn-vert" href="{% url 'index_cartographie' %}?point={{ p.pk }}" data-i18n="voir_sur_carte">Voir sur la carte</a>
+                            <a class="btn btn-sm" href="{% url 'point_edit' p.pk %}" data-i18n="modifier">Modifier</a>
+                            <a class="btn btn-sm btn-danger" href="{% url 'point_delete' p.pk %}" data-i18n="supprimer">Supprimer</a>
+                        </div></td>
+                    </tr>
+                    <tr class="ligne-detail" style="display:none;">
+                        <td colspan="10">
+                            <div class="grille-details">
+                                <div class="ligne"><span class="cle">Catégorie</span><span class="val">{{ p.get_categorie_display }}</span></div>
+                                <div class="ligne"><span class="cle">État</span><span class="val">{{ p.get_statut_display }}</span></div>
+                                <div class="ligne"><span class="cle">Projet</span><span class="val">{% if p.projet %}{{ p.projet.nom }}{% else %}—{% endif %}</span></div>
+                                <div class="ligne"><span class="cle">Province</span><span class="val">{{ p.province|default:'—' }}</span></div>
+                                <div class="ligne"><span class="cle">Commune</span><span class="val">{{ p.commune|default:'—' }}</span></div>
+                                <div class="ligne"><span class="cle">Quartier</span><span class="val">{{ p.quartier|default:'—' }}</span></div>
+                                <div class="ligne"><span class="cle">Latitude</span><span class="val">{{ p.latitude }}</span></div>
+                                <div class="ligne"><span class="cle">Longitude</span><span class="val">{{ p.longitude }}</span></div>
+                                <div class="ligne"><span class="cle">Agent</span><span class="val">{% if p.auteur %}{{ p.auteur.get_full_name|default:p.auteur.username }}{% else %}—{% endif %}</span></div>
+                                <div class="ligne"><span class="cle">Date</span><span class="val">{{ p.date_creation|date:'d/m/Y H:i' }}</span></div>
+                                {% if p.description %}<div class="ligne" style="grid-column:1/-1;"><span class="cle">Description</span><span class="val">{{ p.description }}</span></div>{% endif %}
+                                {% if p.donnees %}
+                                <div style="grid-column:1/-1;margin-top:8px;">
+                                    <b style="font-size:.75rem;color:var(--accent);">{{ p.donnees|length }} colonne(s) du fichier importé</b>
+                                </div>
+                                {% for k, v in p.donnees.items %}
+                                <div class="ligne"><span class="cle">{{ k }}</span><span class="val">{{ v }}</span></div>
+                                {% endfor %}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="10">
+                        <div class="aucun"><div class="grand">🔍</div><div data-i18n="aucun_point_trouve">Aucun point ne correspond à votre recherche.</div></div>
+                    </td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<script>
+const CATS = {
+    'hopital': ['🏥', '#ef4444'], 'ecole': ['🎓', '#3b82f6'], 'eglise': ['⛪', '#8b5cf6'],
+    'police': ['🚓', '#2563eb'], 'marche': ['🛒', '#f59e0b'], 'projet': ['📌', '#10b981'],
+    'incident': ['⚠️', '#f97316'], 'village': ['🏘️', '#14b8a6'], 'ville': ['🏙️', '#6366f1'],
+    'pont': ['🌉', '#a16207'], 'route': ['🛣️', '#64748b'], 'entreprise': ['🏢', '#0ea5e9'],
+    'zone_rouge': ['🔴', '#dc2626'], 'zone_verte': ['🟢', '#16a34a'], 'zone_orange': ['🟠', '#ea580c'],
+    'autre': ['📍', '#6b729c'],
+};
+document.querySelectorAll('#table-points tbody tr.ligne-principale').forEach(tr => {
+    const badge = tr.querySelector('.badge[data-cat]');
+    if (badge) {
+        const cat = badge.dataset.cat;
+        const [emoji, couleur] = CATS[cat] || CATS['autre'];
+        const el = document.getElementById('cat-emoji-' + tr.dataset.point);
+        if (el) el.textContent = emoji;
+        badge.style.borderColor = couleur + '55';
+        badge.style.color = couleur;
+    }
+});
+const table = document.getElementById('table-points');
+if (table) {
+    table.querySelectorAll('tr.ligne-principale').forEach(tr => {
+        tr.querySelector('.chevron').addEventListener('click', () => {
+            const det = tr.nextElementSibling;
+            if (!det || !det.classList.contains('ligne-detail')) return;
+            const affiche = det.style.display !== 'none';
+            det.style.display = affiche ? 'none' : '';
+            tr.querySelector('.chevron').classList.toggle('ouvert', !affiche);
+        });
+    });
+}
+const pillVisible = document.getElementById('visible-pill');
+if (pillVisible) {
+    const n = document.querySelectorAll('#table-points tbody tr.ligne-principale').length;
+    if (n) pillVisible.textContent = n + ' affiché(s)';
+}
+const pidPoint = new URLSearchParams(window.location.search).get('point');
+if (pidPoint) {
+    const tr = document.querySelector('#table-points tbody tr.ligne-principale[data-point="' + pidPoint + '"]');
+    if (tr) {
+        const det = tr.nextElementSibling;
+        if (det && det.classList.contains('ligne-detail')) det.style.display = '';
+        tr.querySelector('.chevron').classList.add('ouvert');
+        tr.style.background = 'rgba(109,93,246,.15)';
+        tr.style.outline = '2px solid var(--accent)';
+        setTimeout(() => tr.scrollIntoView({behavior:'smooth', block:'center'}), 150);
+    }
+}
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>
