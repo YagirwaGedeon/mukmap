@@ -180,6 +180,7 @@
                                 {% if p.donnees %}
                                 <div style="grid-column:1/-1;margin-top:8px;">
                                     <b style="font-size:.75rem;color:var(--accent);">{{ p.donnees|length }} colonne(s) du fichier importé</b>
+                                    {% if p.source_fichier %}<span style="font-size:.7rem;color:var(--text-3);margin-left:8px;">({{ p.source_fichier }})</span>{% endif %}
                                 </div>
                                 {% for k, v in p.donnees.items %}
                                 <div class="ligne"><span class="cle">{{ k }}</span><span class="val">{{ v }}</span></div>
