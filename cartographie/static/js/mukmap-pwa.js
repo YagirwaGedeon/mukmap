@@ -105,20 +105,4 @@
       });
     }
   }
-
-  if (window.mukmapPWA && typeof window.mukmapPWA.enAttente === 'function') {
-    window.mukmapPWA.enAttente(function () {
-      badge(
-        '<img class="mukmap-pwa-logo" src="' + (window.mukmap_logo || '') + '" alt="MUKMAP">' +
-        '<div class="mukmap-pwa-txt"><p class="mukmap-pwa-titre">' + T('pwa_maj_dispo') + '</p>' +
-        '<p class="mukmap-pwa-desc">' + T('pwa_maj_desc') + '</p></div>' +
-        '<button class="mukmap-pwa-btn mukmap-pwa-btn-prim" data-refresh="1">' + T('pwa_maj_btn') + '</button>',
-        [function (badgeEl) {
-          badgeEl.querySelector('[data-refresh]').addEventListener('click', function () {
-            window.mukmapPWA.actualiser();
-          });
-        }]
-      );
-    });
-  }
 })();

@@ -19,6 +19,7 @@ from django.contrib.auth.models import User
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.db import models as db_models
+from django.db.models import Q
 from django.db.models.functions import TruncMonth
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -26,7 +27,8 @@ from django.utils import timezone
 from .models import (
     PointGeographique, Projet, Activite, ActiviteModele, PhotoActivite,
     ProfilAgent, ZoneSecurite, Itineraire,
-    CoucheGeometrie, Geometrie, JournalAudit, MediaPoint
+    CoucheGeometrie, Geometrie, JournalAudit, MediaPoint,
+    CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, CoucheWMS, ImageAerienne
 )
 from .i18n import langue_active
 
@@ -41,6 +43,11 @@ def _xml_safe(texte):
 
 def _est_admin(user):
     return user.is_authenticated and user.is_superuser
+
+
+def _est_admin_principal(user):
+    """L'administrateur principal (YAGIRWA) dispose du contrôle total (Full Control)."""
+    return user.is_authenticated and user.username == 'YAGIRWA'
 
 
 def _projet_actif(request):
@@ -366,6 +373,8 @@ def index_cartographie(request):
         'session_projet_id': request.session.get('projet_actif_id') or 0,
         'rapport_import': json.dumps(request.session.pop('rapport_import', None)),
         'couche_importee': request.GET.get('importe', ''),
+        'est_admin_principal': _est_admin_principal(request.user),
+        'mode_json': json.dumps(_etat_mode(request)),
     }
     return render(request, 'cartographie/carte.html', ctx)
 
@@ -393,6 +402,7 @@ def geometrie_donnees(request):
         donnees.append({
             "id": couche.pk, "nom": couche.nom, "type": couche.type_geometrie,
             "couleur": couche.style_couleur,
+            "style_options": couche.style_options or {},
             "fichier_source": couche.fichier_source or '',
             "date_import": couche.date_import.isoformat() if couche.date_import else '',
             "nb_geometries": couche.geometries.count(),
@@ -1790,9 +1800,13 @@ def importer_geometrie(request):
     if request.method != "POST":
         return redirect('index_cartographie')
 
+    est_ajax = request.POST.get('ajax') == '1' or request.GET.get('ajax') == '1'
+
     fichier = request.FILES.get('fichier_geom')
     nom_couche = request.POST.get('nom_couche', '').strip()
     if not fichier or not nom_couche:
+        if est_ajax:
+            return JsonResponse({'ok': False, 'erreur': "Nom de couche et fichier requis."}, status=400)
         messages.error(request, "Nom de couche et fichier requis.")
         return redirect('index_cartographie')
 
@@ -1811,23 +1825,58 @@ def importer_geometrie(request):
         elif nom_fichier.endswith('.csv'):
             couche = _importer_csv(nom_couche, contenu, nom_fichier)
         else:
+            if est_ajax:
+                return JsonResponse({'ok': False, 'erreur': "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp/.zip"}, status=400)
             messages.error(request, "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp/.zip")
             return redirect('index_cartographie')
     except AmbiguiteCoordonnees as e:
+        if est_ajax:
+            return JsonResponse({'ok': False, 'erreur': "Plusieurs colonnes de coordonnées plausibles : utilisez la page d'import classique pour choisir les colonnes."}, status=400)
         if len(contenu) > 8 * 1024 * 1024:
             messages.error(request, "Fichier trop volumineux pour la sélection interactive des colonnes.")
             return redirect('index_cartographie')
+        style_brut = request.POST.get('style_options')
+        if style_brut:
+            try:
+                style_valide = json.loads(style_brut)
+            except (ValueError, TypeError):
+                style_valide = {}
+        else:
+            style_valide = {}
         request.session['import_ambig'] = {
             'nom_fichier': nom_fichier,
             'nom_couche': nom_couche,
             'contenu': base64.b64encode(contenu).decode('ascii'),
             'candidats': e.candidats,
+            'style_options': style_valide,
         }
         messages.info(request, "Plusieurs colonnes de coordonnées plausibles ont été détectées. Choisissez celles à utiliser.")
         return redirect('import_choix_colonnes')
     except Exception as e:
+        if est_ajax:
+            return JsonResponse({'ok': False, 'erreur': f"Erreur lors de l'import : {e}"}, status=400)
         messages.error(request, f"Erreur lors de l'import : {e}")
         return redirect('index_cartographie')
+
+    style_brut = request.POST.get('style_options')
+    if style_brut:
+        try:
+            _appliquer_style_couche(couche, json.loads(style_brut))
+        except (ValueError, TypeError):
+            pass
+
+    if est_ajax:
+        nb = couche.geometries.count()
+        projet_actif = _projet_actif(request)
+        if projet_actif is not None:
+            couche.projet = projet_actif
+            couche.save(update_fields=['projet'])
+        _audit(request, "Import SIG", f"Couche {couche.nom} - {nb} géométries")
+        return JsonResponse({
+            'ok': True, 'couche_id': couche.pk, 'nom': couche.nom,
+            'importes': nb, 'type': couche.type_geometrie,
+            'style': couche.style_options or {},
+        })
 
     return _terminer_import(request, couche, nom_fichier)
 
@@ -1880,6 +1929,7 @@ def import_choix_colonnes(request):
             couche = _importer_csv(
                 donnees['nom_couche'], contenu, donnees['nom_fichier'],
                 colonnes_forcees={'col_lon': col_lon, 'col_lat': col_lat, 'col_alt': col_alt or None})
+            _appliquer_style_couche(couche, donnees.get('style_options') or {})
         except Exception as e:
             messages.error(request, f"Erreur lors de l'import : {e}")
             return redirect('import_choix_colonnes')
@@ -1891,6 +1941,68 @@ def import_choix_colonnes(request):
         'couche': donnees['nom_couche'],
         'candidats': donnees['candidats'],
     })
+
+
+_COULEURS_OK = re.compile(r'^#[0-9a-fA-F]{6}$')
+_SYMBOLES_OK = {'cercle', 'carre', 'triangle', 'losange', 'croix', 'etoile', 'point'}
+
+
+def _appliquer_style_couche(couche, style=None, couleur=None):
+    """Applique des options de style validées sur une couche (import ou mise à jour).
+
+    style : dict JSON client {couleur, symbole, taille, opacite, etiquette,
+            categories: {champ, classes: [{valeur, couleur, label}]}}
+    Retourne le dict nettoyé (utile pour la réponse API)."""
+    brut = style if isinstance(style, dict) else {}
+    propre = {}
+
+    def _couleur_valide(v, defaut='#3388ff'):
+        return v if isinstance(v, str) and _COULEURS_OK.match(v) else defaut
+
+    couleur_finale = _couleur_valide(brut.get('couleur'), _couleur_valide(couleur, '#3388ff'))
+    propre['couleur'] = couleur_finale
+
+    symbole = str(brut.get('symbole', 'cercle')).lower()
+    propre['symbole'] = symbole if symbole in _SYMBOLES_OK else 'cercle'
+
+    try:
+        taille = float(brut.get('taille', 6))
+    except (TypeError, ValueError):
+        taille = 6.0
+    propre['taille'] = round(min(max(taille, 1.0), 20.0), 1)
+
+    try:
+        opacite = float(brut.get('opacite', 1))
+    except (TypeError, ValueError):
+        opacite = 1.0
+    propre['opacite'] = round(min(max(opacite, 0.0), 1.0), 2)
+
+    etiquette = str(brut.get('etiquette', '') or '').strip()
+    propre['etiquette'] = etiquette[:100]
+
+    categories = brut.get('categories')
+    if isinstance(categories, dict) and isinstance(categories.get('champ'), str) and categories['champ'].strip():
+        classes = categories.get('classes')
+        if isinstance(classes, list) and classes:
+            cls_propres = []
+            for k in classes[:100]:
+                if not isinstance(k, dict):
+                    continue
+                valeur = k.get('valeur')
+                if valeur is None or str(valeur) == '':
+                    continue
+                cls_propres.append({
+                    'valeur': str(valeur)[:200],
+                    'couleur': _couleur_valide(k.get('couleur'), couleur_finale),
+                    'label': str(k.get('label') or valeur)[:200],
+                })
+            if cls_propres:
+                propre['categories'] = {'champ': categories['champ'].strip()[:100], 'classes': cls_propres}
+
+    couche.style_options = propre
+    couche.style_couleur = couleur_finale
+    couche.save(update_fields=['style_options', 'style_couleur'])
+    return propre
 
 
 def _importer_kml_kmz(nom_couche, contenu, nom_fichier):
@@ -2898,6 +3010,96 @@ def export_points(request, format):
     return response
 
 
+# ─── EXPORT DE LA CARTE (PDF / JPEG) ────────────────────────────
+
+FORMATS_PAPIER_MM = {
+    'A4': (210, 297),
+    'A3': (297, 420),
+    'A2': (420, 594),
+    'A1': (594, 841),
+    'A0': (841, 1189),
+}
+
+
+@login_required
+def export_carte_pdf(request):
+    """Compose un PDF de mise en page cartographique à partir de l'image
+    de la carte rendue par le client (titre, légende, échelle, nord et pied
+    de page déjà composés) et des paramètres de page choisis."""
+    if request.method != 'POST':
+        return redirect('index_cartographie')
+
+    try:
+        donnees = json.loads(request.body or b'{}')
+    except (ValueError, TypeError):
+        return JsonResponse({'ok': False, 'erreur': 'Requête JSON invalide.'}, status=400)
+
+    image_b64 = donnees.get('image', '')
+    if not image_b64:
+        return JsonResponse({'ok': False, 'erreur': 'Image manquante.'}, status=400)
+    try:
+        entete, _, b64 = image_b64.partition(',')
+        image_bytes = base64.b64decode(b64)
+    except Exception:
+        return JsonResponse({'ok': False, 'erreur': 'Image illisible.'}, status=400)
+
+    format_page = str(donnees.get('format_page', 'A4')).upper()
+    if format_page not in FORMATS_PAPIER_MM:
+        format_page = 'A4'
+    orientation = str(donnees.get('orientation', 'L')).upper()
+    if orientation not in ('P', 'L'):
+        orientation = 'L'
+    try:
+        marge_mm = float(donnees.get('marge_mm', 12))
+    except (TypeError, ValueError):
+        marge_mm = 12.0
+    marge_mm = min(max(marge_mm, 5.0), 40.0)
+
+    from fpdf import FPDF
+    from PIL import Image as ImgPil
+
+    try:
+        with ImgPil.open(io.BytesIO(image_bytes)) as img_check:
+            img_check.verify()
+    except Exception:
+        return JsonResponse({'ok': False, 'erreur': 'Image corrompue ou non supportée.'}, status=400)
+
+    from .branding import NOM, VERSION
+
+    pdf = FPDF(orientation=orientation, unit='mm', format=format_page)
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+    largeur, hauteur = FORMATS_PAPIER_MM[format_page]
+    if orientation == 'L':
+        largeur, hauteur = hauteur, largeur
+
+    pdf.set_fill_color(255, 255, 255)
+    pdf.rect(0, 0, largeur, hauteur, 'F')
+    pdf.set_draw_color(77, 67, 246)
+    pdf.set_line_width(0.8)
+    pdf.rect(marge_mm - 2, marge_mm - 2, largeur - 2 * (marge_mm - 2), hauteur - 2 * (marge_mm - 2))
+
+    utile_w = largeur - 2 * marge_mm
+    utile_h = hauteur - 2 * marge_mm
+    try:
+        pdf.image(io.BytesIO(image_bytes), x=marge_mm, y=marge_mm, w=utile_w, h=utile_h)
+    except Exception as e:
+        return JsonResponse({'ok': False, 'erreur': f"Insertion de l'image impossible : {e}"}, status=400)
+
+    projet_nom = str(donnees.get('projet', '') or 'carte')
+    date_str = date.today().strftime('%Y%m%d')
+    base_fichier = re.sub(r'[^\w\-\u00C0-\u017F]+', '_', projet_nom)[:60] or 'carte'
+    nom_fichier = f"carte_{base_fichier}_{date_str}"
+    if orientation == 'P':
+        nom_fichier += '_portrait'
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.pdf"'
+    response.write(bytes(pdf.output()))
+    _audit(request, "Export carte PDF", f"{nom_fichier}.pdf ({format_page} {orientation})")
+    return response
+
+
 # ─── DESSIN (SAUVEGARDE GÉOMÉTRIES) ────────────────────────────
 
 
@@ -2965,3 +3167,628 @@ def geometrie_delete(request, pk):
         geo.delete()
         return JsonResponse({'ok': True})
     return JsonResponse({'ok': False, 'erreur': "Seuls les dessins peuvent être supprimés ici."})
+
+
+# ─── MODE AVANCÉ / CODES D'ACCÈS ──────────────────────────────
+
+
+def _etat_mode(request):
+    """État courant du mode (classique / avancé) + droit d'accès, sans créer de préférence."""
+    user = request.user
+    if user.is_authenticated:
+        pref = PreferenceUtilisateur.objects.filter(utilisateur=user).first()
+        a_preference = pref is not None
+        mode_pref = pref.mode if pref else 'classique'
+        acces = False
+        if _est_admin_principal(user):
+            acces = True
+        elif request.session.get('mode_avance_autorise'):
+            acces = True
+        elif pref and pref.code_lie and pref.code_lie.est_valide():
+            acces = True
+    else:
+        a_preference = False
+        mode_pref = 'classique'
+        acces = bool(request.session.get('mode_avance_autorise'))
+    return {
+        'mode': mode_pref,
+        'acces_avance': bool(acces),
+        'a_preference': a_preference,
+        'est_admin_principal': _est_admin_principal(user),
+        'authentifie': user.is_authenticated,
+    }
+
+
+def api_mode(request):
+    """État du mode d'utilisation (lecture)."""
+    return JsonResponse(_etat_mode(request))
+
+
+def _valider_code(request, code, user):
+    empreinte = CodeAccesAvance.hacher(code)
+    obj = CodeAccesAvance.objects.filter(code_hash=empreinte).first()
+    if obj is None or not obj.est_valide():
+        _audit(request, "Échec de validation d'un code Mode Avancé")
+        return JsonResponse({'ok': False, 'besoin_code': True, 'erreur': 'Code invalide ou expiré.'}, status=403)
+    obj.utiliser()
+    request.session['mode_avance_autorise'] = True
+    if user.is_authenticated:
+        pref, _ = PreferenceUtilisateur.objects.get_or_create(utilisateur=user)
+        pref.mode = 'avance'
+        if obj.type == 'permanent':
+            pref.code_lie = obj
+        pref.save()
+    _audit(request, "Mode Avancé activé par code", obj.get_type_display())
+    return JsonResponse({'ok': True, 'mode': 'avance', 'acces_avance': True})
+
+
+def api_mode_changer(request):
+    """Change le mode d'utilisation (POST JSON {mode, code?})."""
+    if request.method != 'POST':
+        return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        data = {}
+    demande = str(data.get('mode') or 'classique').lower()
+    if demande not in ('classique', 'avance'):
+        return JsonResponse({'erreur': 'Mode inconnu.'}, status=400)
+
+    user = request.user
+    if demande == 'classique':
+        if user.is_authenticated:
+            pref = PreferenceUtilisateur.objects.filter(utilisateur=user).first()
+            if pref:
+                pref.mode = 'classique'
+                pref.save()
+        request.session.pop('mode_avance_autorise', None)
+        _audit(request, "Passage en Mode Classique")
+        return JsonResponse({'ok': True, 'mode': 'classique', 'acces_avance': False})
+
+    # Demande du Mode Avancé
+    if _est_admin_principal(user):
+        pref, _ = PreferenceUtilisateur.objects.get_or_create(utilisateur=user)
+        pref.mode = 'avance'
+        pref.save()
+        request.session['mode_avance_autorise'] = True
+        _audit(request, "Passage en Mode Avancé (administrateur principal)")
+        return JsonResponse({'ok': True, 'mode': 'avance', 'acces_avance': True})
+
+    if user.is_authenticated:
+        pref = PreferenceUtilisateur.objects.filter(utilisateur=user).first()
+        if pref and pref.code_lie and pref.code_lie.est_valide():
+            pref.mode = 'avance'
+            pref.save()
+            request.session['mode_avance_autorise'] = True
+            _audit(request, "Passage en Mode Avancé (code permanent)")
+            return JsonResponse({'ok': True, 'mode': 'avance', 'acces_avance': True})
+
+    code = str(data.get('code') or '').strip()
+    if not code:
+        _audit(request, "Demande de code Mode Avancé (code manquant)")
+        return JsonResponse({'ok': False, 'besoin_code': True, 'erreur': 'Un code d\u2019accès est requis pour le Mode Avancé.'}, status=403)
+    return _valider_code(request, code, user)
+
+
+@login_required
+def mode_avance_admin(request):
+    """Page de gestion des codes d'accès — réservée à l'administrateur principal."""
+    if not _est_admin_principal(request.user):
+        messages.error(request, "Seul l'administrateur principal peut gérer les codes d'accès au Mode Avancé.")
+        return redirect('index_cartographie')
+    return render(request, 'cartographie/mode_avance_admin.html', {
+        'codes': CodeAccesAvance.objects.all(),
+        'est_admin_principal': True,
+    })
+
+
+@login_required
+def api_codes_mode(request):
+    """Génération / liste des codes d'accès (POST/GET) — réservée à l'administrateur principal."""
+    if not _est_admin_principal(request.user):
+        return JsonResponse({'erreur': 'Accès refusé.'}, status=403)
+
+    if request.method == 'GET':
+        return JsonResponse({'codes': [
+            {
+                'id': c.pk, 'libelle': c.libelle, 'type': c.type,
+                'expire_le': c.expire_le.strftime('%d/%m/%Y %H:%M') if c.expire_le else '',
+                'max_utilisations': c.max_utilisations,
+                'utilisations': c.utilisations,
+                'actif': c.actif,
+                'date_creation': c.date_creation.strftime('%d/%m/%Y %H:%M'),
+            }
+            for c in CodeAccesAvance.objects.all()
+        ]})
+
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body or '{}')
+        except ValueError:
+            data = {}
+        type_code = str(data.get('type') or 'permanent').lower()
+        if type_code not in ('temporaire', 'permanent'):
+            return JsonResponse({'erreur': 'Type de code invalide.'}, status=400)
+
+        expire_le = None
+        max_util = None
+        if type_code == 'temporaire':
+            heures = data.get('duree_heures')
+            if heures is not None:
+                try:
+                    expire_le = timezone.now() + timedelta(hours=float(heures))
+                except (ValueError, TypeError):
+                    return JsonResponse({'erreur': 'Durée de validité invalide.'}, status=400)
+        max_util_data = data.get('max_utilisations')
+        if max_util_data is not None and max_util_data != '':
+            try:
+                max_util = int(max_util_data)
+                if max_util < 1:
+                    raise ValueError
+            except (ValueError, TypeError):
+                return JsonResponse({'erreur': "Nombre d'utilisations invalide."}, status=400)
+
+        code_clair = CodeAccesAvance.generer()
+        obj = CodeAccesAvance.objects.create(
+            libelle=str(data.get('libelle') or '')[:200],
+            code_hash=CodeAccesAvance.hacher(code_clair),
+            type=type_code,
+            expire_le=expire_le,
+            max_utilisations=max_util,
+            cree_par=request.user,
+        )
+        _audit(request, "Génération de code Mode Avancé", f"Code #{obj.pk} ({obj.get_type_display()})")
+        return JsonResponse({'ok': True, 'id': obj.pk, 'code': code_clair})
+
+    return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+
+
+@login_required
+def api_code_revoquer(request, pk):
+    """Révocation d'un code — réservée à l'administrateur principal."""
+    if not _est_admin_principal(request.user):
+        return JsonResponse({'erreur': 'Accès refusé.'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+    obj = get_object_or_404(CodeAccesAvance, pk=pk)
+    obj.actif = False
+    obj.save(update_fields=['actif'])
+    _audit(request, "Révocation de code Mode Avancé", f"Code #{obj.pk}")
+    return JsonResponse({'ok': True})
+
+
+def _fonds_carte_json(obj, user=None):
+    d = {
+        'id': f'ext-{obj.pk}',
+        'pk': obj.pk,
+        'nom': obj.nom,
+        'type': obj.type_fond,
+        'url': obj.url,
+        'attribution': obj.attribution,
+        'categorie': obj.categorie,
+        'crs': obj.crs,
+        'layers': obj.layers,
+        'projet': obj.projet_id,
+        'portee': 'projet' if obj.projet_id else 'personnel',
+    }
+    if user is not None and user.is_authenticated and (obj.auteur == user or _est_admin_principal(user)):
+        d['cle_api'] = obj.cle_api
+    return d
+
+
+@login_required
+def api_fonds_personnalises(request):
+    """Liste (GET) / création (POST) de fonds de carte personnalisés — Mode Avancé requis en écriture."""
+    if request.method == 'GET':
+        qs = FondCartePersonnalise.objects.filter(visible=True)
+        if not (_est_admin_principal(request.user) or _etat_mode(request)['acces_avance']):
+            qs = qs.filter(Q(auteur=request.user) | Q(projet__statut='actif'))
+        return JsonResponse({'fonds': [_fonds_carte_json(o, request.user) for o in qs]})
+
+    if request.method == 'POST':
+        if not _etat_mode(request)['acces_avance']:
+            return JsonResponse({'erreur': 'Mode Avancé requis pour créer un fond de carte.'}, status=403)
+        try:
+            data = json.loads(request.body or '{}')
+        except ValueError:
+            data = {}
+        nom = str(data.get('nom') or '').strip()
+        url = str(data.get('url') or '').strip()
+        if not nom:
+            return JsonResponse({'erreur': 'Le nom est requis.'}, status=400)
+        if not url.startswith('http://') and not url.startswith('https://'):
+            return JsonResponse({'erreur': 'URL invalide (http/https requis).'}, status=400)
+        type_fond = str(data.get('type') or 'xyz').lower()
+        if type_fond not in dict(FondCartePersonnalise.TYPE_CHOICES):
+            return JsonResponse({'erreur': 'Type de fond invalide.'}, status=400)
+        if type_fond in ('xyz', 'wms', 'wmts', 'vector', 'arcgis'):
+            if '{' not in url or '}' not in url:
+                return JsonResponse({'erreur': "L'URL doit contenir un modèle de tuiles, ex. {z}/{x}/{y}, {TileMatrix}/{TileCol}/{TileRow} ou {bbox-epsg-3857}."}, status=400)
+        if type_fond == 'wms' and '{bbox-epsg-3857}' not in url:
+            return JsonResponse({'erreur': "L'URL WMS doit contenir le paramètre BBOX={bbox-epsg-3857}."}, status=400)
+        categorie = str(data.get('categorie') or 'geologie').lower()
+        if categorie not in dict(FondCartePersonnalise.CATEGORIE_CHOICES):
+            categorie = 'geologie'
+        projet = None
+        try:
+            projet_id = int(data.get('projet') or 0)
+        except (TypeError, ValueError):
+            projet_id = 0
+        if projet_id:
+            projet = Projet.objects.filter(pk=projet_id, statut='actif').first()
+        elif str(data.get('portee') or '') == 'projet':
+            session_pid = request.session.get('projet_actif_id')
+            if session_pid:
+                projet = Projet.objects.filter(pk=session_pid, statut='actif').first()
+        obj = FondCartePersonnalise.objects.create(
+            nom=nom[:120],
+            type_fond=type_fond,
+            url=url,
+            attribution=str(data.get('attribution') or '')[:255],
+            categorie=categorie,
+            cle_api=str(data.get('cle_api') or '')[:200],
+            crs=str(data.get('crs') or 'EPSG:3857')[:30],
+            layers=str(data.get('layers') or '')[:300],
+            projet=projet,
+            auteur=request.user,
+        )
+        _audit(request, "Création d'un fond de carte personnalisé", f"#{obj.pk} {obj.nom} ({type_fond})")
+        return JsonResponse({'ok': True, 'fond': _fonds_carte_json(obj, request.user)})
+
+    return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+
+
+@login_required
+def api_fond_personnalise_detail(request, pk):
+    """Mise à jour (PATCH) / suppression (DELETE) d'un fond personnalisé — auteur ou administrateur principal."""
+    obj = get_object_or_404(FondCartePersonnalise, pk=pk)
+    if obj.auteur != request.user and not _est_admin_principal(request.user):
+        return JsonResponse({'erreur': 'Accès refusé.'}, status=403)
+
+    if request.method == 'PATCH':
+        try:
+            data = json.loads(request.body or '{}')
+        except ValueError:
+            data = {}
+        for champ, max_len in (('nom', 120), ('attribution', 255), ('cle_api', 200), ('crs', 30), ('layers', 300)):
+            if champ in data and isinstance(data[champ], str):
+                setattr(obj, champ, data[champ][:max_len])
+        if 'type' in data and str(data['type']) in dict(FondCartePersonnalise.TYPE_CHOICES):
+            obj.type_fond = str(data['type'])
+        if 'url' in data and isinstance(data['url'], str) and data['url'].strip():
+            obj.url = data['url'].strip()
+        if 'categorie' in data and str(data['categorie']) in dict(FondCartePersonnalise.CATEGORIE_CHOICES):
+            obj.categorie = str(data['categorie'])
+        if 'visible' in data:
+            obj.visible = bool(data['visible'])
+        if 'projet' in data:
+            try:
+                pid = int(data['projet']) or None
+            except (TypeError, ValueError):
+                pid = None
+            obj.projet = Projet.objects.filter(pk=pid, statut='actif').first() if pid else None
+        obj.save()
+        _audit(request, "Modification d'un fond de carte personnalisé", f"#{obj.pk} {obj.nom}")
+        return JsonResponse({'ok': True, 'fond': _fonds_carte_json(obj, request.user)})
+
+    if request.method == 'DELETE':
+        _audit(request, "Suppression d'un fond de carte personnalisé", f"#{obj.pk} {obj.nom}")
+        obj.delete()
+        return JsonResponse({'ok': True})
+
+    return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+
+
+# ─── COUCHES WMS (superposables, opacité réglable) ─────
+
+
+def _couche_wms_json(obj):
+    return {
+        'id': obj.pk,
+        'nom': obj.nom,
+        'url': obj.url,
+        'layers': obj.layers,
+        'version': obj.version,
+        'attribution': obj.attribution,
+        'opacite': obj.opacite,
+        'visible': obj.visibilite,
+        'ordre': obj.ordre,
+        'auteur': obj.auteur.username if obj.auteur else '',
+    }
+
+
+@login_required
+def api_couches_wms(request):
+    """Liste (GET) / création (POST) de couches WMS — Mode Avancé requis en écriture."""
+    if request.method == 'GET':
+        qs = CoucheWMS.objects.all()
+        if not (_est_admin_principal(request.user) or _etat_mode(request)['acces_avance']):
+            qs = qs.filter(auteur=request.user)
+        return JsonResponse({'couches': [_couche_wms_json(o) for o in qs]})
+
+    if request.method == 'POST':
+        if not _etat_mode(request)['acces_avance']:
+            return JsonResponse({'erreur': 'Mode Avancé requis pour créer une couche WMS.'}, status=403)
+        try:
+            data = json.loads(request.body or '{}')
+        except ValueError:
+            data = {}
+        nom = str(data.get('nom') or '').strip()
+        url = str(data.get('url') or '').strip()
+        if not nom:
+            return JsonResponse({'erreur': 'Le nom est requis.'}, status=400)
+        if not url.startswith('http://') and not url.startswith('https://'):
+            return JsonResponse({'erreur': 'URL invalide (http/https requis).'}, status=400)
+        if '{bbox-epsg-3857}' not in url:
+            return JsonResponse({'erreur': "L'URL WMS doit contenir le paramètre BBOX={bbox-epsg-3857}."}, status=400)
+        try:
+            opacite = float(data.get('opacite') or 0.7)
+            opacite = max(0.0, min(1.0, opacite))
+        except (TypeError, ValueError):
+            opacite = 0.7
+        obj = CoucheWMS.objects.create(
+            nom=nom[:150],
+            url=url,
+            layers=str(data.get('layers') or '')[:500],
+            version=str(data.get('version') or '1.1.1')[:20],
+            attribution=str(data.get('attribution') or '')[:255],
+            opacite=opacite,
+            visibilite=bool(data.get('visible', True)),
+            ordre=int(data.get('ordre') or 0),
+            projet=None,
+            auteur=request.user,
+        )
+        _audit(request, "Création d'une couche WMS", f"#{obj.pk} {obj.nom}")
+        return JsonResponse({'ok': True, 'couche': _couche_wms_json(obj)}, status=201)
+
+    return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+
+
+@login_required
+def api_couche_wms_detail(request, pk):
+    """Mise à jour (PATCH) / suppression (DELETE) — auteur ou administrateur principal."""
+    obj = get_object_or_404(CoucheWMS, pk=pk)
+    if obj.auteur != request.user and not _est_admin_principal(request.user):
+        return JsonResponse({'erreur': 'Accès refusé.'}, status=403)
+
+    if request.method == 'PATCH':
+        try:
+            data = json.loads(request.body or '{}')
+        except ValueError:
+            data = {}
+        if 'nom' in data:
+            obj.nom = str(data['nom'] or '').strip()[:150] or obj.nom
+        if 'attribution' in data:
+            obj.attribution = str(data['attribution'] or '')[:255]
+        if 'opacite' in data:
+            try:
+                obj.opacite = max(0.0, min(1.0, float(data['opacite'])))
+            except (TypeError, ValueError):
+                pass
+        if 'visible' in data:
+            obj.visibilite = bool(data['visible'])
+        if 'ordre' in data:
+            try:
+                obj.ordre = max(0, int(data['ordre']))
+            except (TypeError, ValueError):
+                pass
+        if 'layers' in data:
+            obj.layers = str(data['layers'] or '')[:500]
+        obj.save()
+        _audit(request, "Mise à jour d'une couche WMS", f"#{obj.pk} {obj.nom}")
+        return JsonResponse({'ok': True, 'couche': _couche_wms_json(obj)})
+
+    if request.method == 'DELETE':
+        _audit(request, "Suppression d'une couche WMS", f"#{obj.pk} {obj.nom}")
+        obj.delete()
+        return JsonResponse({'ok': True})
+
+    return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+
+
+# ─── IMAGERIE (orthophotos / images drone géoréférencées) ───────
+
+
+def _coordonnees_exif(fichier):
+    """Extrait la position GPS des métadonnées EXIF — (lon, lat) ou None."""
+    try:
+        from PIL import ExifTags, Image as PILImage
+        fichier.seek(0)
+        with PILImage.open(fichier) as img:
+            exif = img.getexif()
+            if not exif:
+                return None
+            gps = exif.get_ifd(ExifTags.IFD.GPSInfo)
+            if not gps or 2 not in gps or 4 not in gps:
+                return None
+
+            def degres(valeurs, ref):
+                d, m, s = [float(x) for x in valeurs]
+                v = d + m / 60.0 + s / 3600.0
+                return -v if ref in ('S', 'W') else v
+
+            return (degres(gps[4], gps.get(3, 'E')), degres(gps[2], gps.get(1, 'N')))
+    except Exception:
+        return None
+
+
+def _coordonnees_worldfile(worldfile, dimensions):
+    """Applique les 6 coefficients du WorldFile aux dimensions (w, h) de l'image."""
+    try:
+        valeurs = []
+        for ligne in worldfile.read().decode('utf-8', errors='replace').splitlines():
+            ligne = ligne.strip()
+            if not ligne or ligne.startswith('#'):
+                continue
+            valeurs.append(float(ligne))
+            if len(valeurs) == 6:
+                break
+        if len(valeurs) < 6:
+            return None
+        A, D, B, E, C, F = valeurs  # X = C + A*col + B*row ; Y = F + D*col + E*row
+        w, h = dimensions
+        coins = [
+            [C, F],                                   # (0,0) haut-gauche
+            [C + A * w, F + D * w],                   # (w,0) haut-droite
+            [C + A * w + B * h, F + D * w + E * h],   # (w,h) bas-droite
+            [C + B * h, F + E * h],                   # (0,h) bas-gauche
+        ]
+        lons = [c[0] for c in coins]
+        lats = [c[1] for c in coins]
+        return {
+            'coords': coins,
+            'min_lon': min(lons), 'max_lon': max(lons),
+            'min_lat': min(lats), 'max_lat': max(lats),
+        }
+    except (ValueError, UnicodeDecodeError, TypeError):
+        return None
+
+
+def _image_aerienne_json(obj):
+    return {
+        'id': obj.pk,
+        'nom': obj.nom,
+        'url': obj.fichier.url if obj.fichier else '',
+        'type': obj.type_imagerie,
+        'mode_geo': obj.mode_geo,
+        'min_lon': obj.min_lon, 'min_lat': obj.min_lat,
+        'max_lon': obj.max_lon, 'max_lat': obj.max_lat,
+        'coords': obj.coords,
+        'visible': obj.visibilite,
+        'date_prise': obj.date_prise.isoformat() if obj.date_prise else '',
+        'description': obj.description,
+    }
+
+
+@login_required
+def api_imagerie(request):
+    """Liste (GET) / ajout (POST multipart) d'images aériennes — Mode Avancé requis en écriture."""
+    if request.method == 'GET':
+        return JsonResponse({'images': [_image_aerienne_json(o) for o in ImageAerienne.objects.all()]})
+
+    if request.method == 'POST':
+        if not _etat_mode(request)['acces_avance']:
+            return JsonResponse({'erreur': 'Mode Avancé requis pour ajouter une image.'}, status=403)
+        fichier = request.FILES.get('fichier')
+        if not fichier:
+            return JsonResponse({'erreur': 'Fichier image requis.'}, status=400)
+        nom = str(request.POST.get('nom') or '').strip() or (getattr(fichier, 'name', '') or 'Image')
+        type_imagerie = str(request.POST.get('type') or 'ortho').lower()
+        if type_imagerie not in dict(ImageAerienne.TYPE_CHOICES):
+            type_imagerie = 'ortho'
+
+        bbox = {}
+        try:
+            min_lon = float(request.POST.get('min_lon') or '')
+            min_lat = float(request.POST.get('min_lat') or '')
+            max_lon = float(request.POST.get('max_lon') or '')
+            max_lat = float(request.POST.get('max_lat') or '')
+            bbox = {'min_lon': min_lon, 'min_lat': min_lat, 'max_lon': max_lon, 'max_lat': max_lat}
+        except ValueError:
+            pass
+
+        try:
+            from PIL import Image as PILImage
+            fichier.seek(0)
+            with PILImage.open(fichier) as img:
+                dimensions = img.size
+        except Exception:
+            dimensions = None
+        try:
+            fichier.seek(0)
+        except Exception:
+            pass
+
+        mode_geo = 'bbox'
+        coords = None
+        worldfile = request.FILES.get('worldfile')
+        if worldfile and dimensions:
+            geo = _coordonnees_worldfile(worldfile, dimensions)
+            if geo:
+                bbox = geo
+                coords = geo['coords']
+                mode_geo = 'worldfile'
+            else:
+                return JsonResponse({'erreur': 'WorldFile illisible (6 coefficients numériques attendus).'}, status=400)
+        elif not bbox:
+            geo = _coordonnees_exif(fichier)
+            if geo:
+                lon, lat = geo
+                demi = 0.0015
+                bbox = {'min_lon': lon - demi, 'min_lat': lat - demi,
+                        'max_lon': lon + demi, 'max_lat': lat + demi}
+                mode_geo = 'exif'
+        if not bbox:
+            return JsonResponse({'erreur': 'Coordonnées manquantes : fournissez une emprise (bbox), un WorldFile ou des métadonnées EXIF GPS.'}, status=400)
+
+        altitude_val = None
+        altitude = request.POST.get('altitude') or ''
+        if altitude:
+            try:
+                altitude_val = float(altitude)
+            except ValueError:
+                altitude_val = None
+        date_val = None
+        date_prise = request.POST.get('date_prise') or ''
+        if date_prise:
+            try:
+                from datetime import datetime
+                date_val = datetime.strptime(date_prise, '%Y-%m-%d').date()
+            except ValueError:
+                date_val = None
+
+        obj = ImageAerienne.objects.create(
+            nom=nom[:150],
+            fichier=fichier,
+            type_imagerie=type_imagerie,
+            mode_geo=mode_geo,
+            min_lon=bbox.get('min_lon'), min_lat=bbox.get('min_lat'),
+            max_lon=bbox.get('max_lon'), max_lat=bbox.get('max_lat'),
+            coords=coords,
+            altitude_m=altitude_val,
+            date_prise=date_val,
+            description=str(request.POST.get('description') or '')[:2000],
+            projet_id=request.session.get('projet_actif_id') or None,
+            auteur=request.user,
+        )
+        _audit(request, "Ajout d'une image aérienne", f"#{obj.pk} {obj.nom} ({mode_geo})")
+        return JsonResponse({'ok': True, 'image': _image_aerienne_json(obj)})
+
+    return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+
+
+@login_required
+def api_imagerie_detail(request, pk):
+    """Suppression (DELETE) d'une image aérienne — auteur ou administrateur principal."""
+    if request.method != 'DELETE':
+        return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+    obj = get_object_or_404(ImageAerienne, pk=pk)
+    if obj.auteur != request.user and not _est_admin_principal(request.user):
+        return JsonResponse({'erreur': 'Accès refusé.'}, status=403)
+    _audit(request, "Suppression d'une image aérienne", f"#{obj.pk} {obj.nom}")
+    if obj.fichier:
+        try:
+            obj.fichier.delete(save=False)
+        except Exception:
+            pass
+    obj.delete()
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def api_imagerie_visibilite(request, pk):
+    """Bascule la visibilité d'une image aérienne (POST {visible: bool})."""
+    if request.method != 'POST':
+        return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+    if not _etat_mode(request)['acces_avance']:
+        return JsonResponse({'erreur': 'Mode Avancé requis.'}, status=403)
+    obj = get_object_or_404(ImageAerienne, pk=pk)
+    if obj.auteur != request.user and not _est_admin_principal(request.user):
+        return JsonResponse({'erreur': 'Accès refusé.'}, status=403)
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        data = {}
+    obj.visibilite = bool(data.get('visible', not obj.visibilite))
+    obj.save(update_fields=['visibilite'])
+    return JsonResponse({'ok': True, 'visible': obj.visibilite})

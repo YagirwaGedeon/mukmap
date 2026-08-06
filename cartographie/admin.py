@@ -2,7 +2,8 @@ from django.contrib import admin
 from .models import (
     PointGeographique, Projet, Activite, PhotoActivite,
     ProfilAgent, ZoneSecurite, Itineraire,
-    CoucheGeometrie, Geometrie, JournalAudit, MediaPoint
+    CoucheGeometrie, Geometrie, JournalAudit, MediaPoint,
+    CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, ImageAerienne, CoucheWMS
 )
 
 admin.site.register(PointGeographique)
@@ -16,3 +17,8 @@ admin.site.register(CoucheGeometrie)
 admin.site.register(Geometrie)
 admin.site.register(JournalAudit)
 admin.site.register(MediaPoint)
+admin.site.register(CodeAccesAvance)
+admin.site.register(PreferenceUtilisateur)
+admin.site.register(FondCartePersonnalise)
+admin.site.register(ImageAerienne)
+admin.site.register(CoucheWMS)

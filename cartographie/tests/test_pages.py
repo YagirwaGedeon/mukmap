@@ -51,10 +51,87 @@ class TestsPages(BaseCartographieTest):
                          '/points/?point='):
             self.assertIn(marqueur, contenu, f'marqueur {marqueur}')
 
+    def test_carte_export_modale(self):
+        contenu = self.page_carte()
+        for marqueur in ('btn-exporter-carte', 'modale-export', 'export-format', 'export-zone',
+                         'export-orientation', 'export-format-page', 'export-dpi', 'export-marges',
+                         'export-qualite', 'export-taille', 'export-el-legende', 'export-el-echelle',
+                         'export-el-nord', 'export-champ-titre', 'export-champ-auteur',
+                         'export-apercu', 'export-lancer', 'export-annuler', 'export-options-toggle',
+                         'export-csrf', "js/export-carte.js", 'window.map = map;',
+                         'window.CATS = CATS;'):
+            self.assertIn(marqueur, contenu, f'marqueur export {marqueur}')
+
+    def test_carte_export_modale_cachee_invite(self):
+        self.client.logout()
+        r = self.client.get('/')
+        contenu = r.content.decode('utf-8', errors='replace')
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('btn-exporter-carte', contenu, 'pas de bouton export pour l’invité')
+
+    def test_export_carte_pdf_poste_image(self):
+        import base64
+        import io
+
+        from PIL import Image as ImgPil
+
+        buf = io.BytesIO()
+        ImgPil.new('RGB', (100, 80), (200, 120, 30)).save(buf, 'PNG')
+        b64 = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+        r = self.client.post('/export/carte-pdf/', data={
+            'image': b64, 'format_page': 'A4', 'orientation': 'L', 'marge_mm': 12, 'projet': 'Test',
+        }, content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('application/pdf', r['Content-Type'])
+        self.assertIn('attachment', r['Content-Disposition'])
+        self.assertIn('carte_Test_', r['Content-Disposition'])
+        self.assertTrue(r.content.startswith(b'%PDF'), 'le corps est bien un PDF')
+
+    def test_export_carte_pdf_portrait_nom(self):
+        import base64
+        import io
+
+        from PIL import Image as ImgPil
+
+        buf = io.BytesIO()
+        ImgPil.new('RGB', (80, 100), (10, 200, 90)).save(buf, 'PNG')
+        b64 = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+        r = self.client.post('/export/carte-pdf/', data={
+            'image': b64, 'format_page': 'A3', 'orientation': 'P', 'projet': 'Nord Kivu',
+        }, content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('carte_Nord_Kivu_', r['Content-Disposition'])
+        self.assertIn('_portrait', r['Content-Disposition'])
+
+    def test_export_carte_pdf_requetes_invalides(self):
+        r = self.client.post('/export/carte-pdf/', data={}, content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post('/export/carte-pdf/', data='pas du json', content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post('/export/carte-pdf/', data={'image': 'data:image/png;base64,zzz'},
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+        r = self.client.get('/export/carte-pdf/')
+        self.assertEqual(r.status_code, 302, 'GET redirige vers la carte')
+
+
     def test_carte_non_connecte_accessible(self):
         self.client.logout()
         r = self.client.get('/')
         self.assertEqual(r.status_code, 200)
+
+    def test_import_wizard_page(self):
+        r = self.client.get('/import/')
+        self.assertEqual(r.status_code, 200)
+        contenu = r.content.decode('utf-8', errors='replace')
+        for marqueur in ('data-etape', 'zone-drop', 'btn-importer', 'liste-fichiers',
+                         'panneau-points', 'panneau-sig', 'panneau-style-sig',
+                         'panneau-style-points', 'style-cat-active', 'cat-champ',
+                         'btn-regenerer', 'legende-preview', 'sig-nom-couche',
+                         'URL_IMPORT_POINTS', 'URL_IMPORT_COUCHE',
+                         "/import/excel-intelligent/'", "/geometrie/importer/'",
+                         'EXT_POINTS', 'EXT_SIG', 'PRESETS'):
+            self.assertIn(marqueur, contenu, f'marqueur wizard {marqueur}')
 
     def test_export_points_geojson(self):
         r = self.client.get('/export/geojson/')

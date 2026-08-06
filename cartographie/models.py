@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 
 class PointGeographique(models.Model):
@@ -186,6 +187,8 @@ class CoucheGeometrie(models.Model):
     fichier_source = models.CharField(max_length=255, blank=True, verbose_name="Fichier source")
     srid = models.IntegerField(default=4326, verbose_name="SRID", help_text="Système de coordonnées (EPSG)")
     style_couleur = models.CharField(max_length=7, default='#3388ff', verbose_name="Couleur de style")
+    style_options = models.JSONField(default=dict, blank=True, verbose_name="Options de style",
+                                     help_text="Couleur, symbole, taille, opacité, étiquette et catégorisation")
     projet = models.ForeignKey(Projet, on_delete=models.SET_NULL, null=True, blank=True, related_name='couches', verbose_name="Projet")
     fichier_kml = models.FileField(upload_to='kml_imports/', blank=True, verbose_name="Fichier KML généré")
     date_import = models.DateTimeField(auto_now_add=True, verbose_name="Date d'import")
@@ -261,3 +264,182 @@ class ActiviteModele(models.Model):
 
     def __str__(self):
         return f"{self.nom} ({self.projet.nom})"
+
+
+class CodeAccesAvance(models.Model):
+    """Code d'accès au Mode Avancé (temporaire ou permanent). Seul le hash est stocké."""
+    TYPE_CHOICES = [
+        ('temporaire', 'Code temporaire'),
+        ('permanent', 'Code permanent'),
+    ]
+    libelle = models.CharField(max_length=200, blank=True, verbose_name="Libellé")
+    code_hash = models.CharField(max_length=64, verbose_name="Code (empreinte SHA-256)")
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='permanent', verbose_name="Type")
+    expire_le = models.DateTimeField(null=True, blank=True, verbose_name="Valable jusqu'au")
+    max_utilisations = models.PositiveIntegerField(null=True, blank=True, verbose_name="Nombre d'utilisations max", help_text="Vide = illimité")
+    utilisations = models.PositiveIntegerField(default=0, verbose_name="Utilisations effectuées")
+    actif = models.BooleanField(default=True, verbose_name="Actif")
+    cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='codes_crees', verbose_name="Créé par")
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+
+    class Meta:
+        ordering = ['-date_creation']
+        verbose_name = "Code d'accès au Mode Avancé"
+        verbose_name_plural = "Codes d'accès au Mode Avancé"
+
+    def __str__(self):
+        return f"{self.get_type_display()} #{self.pk} ({self.utilisations} utilisations)"
+
+    @staticmethod
+    def hacher(code):
+        import hashlib
+        return hashlib.sha256(('mukmap|' + str(code)).strip().upper().encode('utf-8')).hexdigest()
+
+    @staticmethod
+    def generer():
+        import secrets
+        import string
+        alphabet = string.ascii_uppercase + string.digits
+        return '-'.join(''.join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3))
+
+    def est_valide(self):
+        if not self.actif:
+            return False
+        if self.expire_le and timezone.now() > self.expire_le:
+            return False
+        if self.max_utilisations is not None and self.utilisations >= self.max_utilisations:
+            return False
+        return True
+
+    def utiliser(self):
+        self.utilisations += 1
+        self.save(update_fields=['utilisations'])
+
+
+class PreferenceUtilisateur(models.Model):
+    """Préférences persistantes de l'utilisateur (mode, profil métier, fond par défaut)."""
+    MODE_CHOICES = [
+        ('classique', 'Classique'),
+        ('avance', 'Avancé'),
+    ]
+    utilisateur = models.OneToOneField(User, on_delete=models.CASCADE, related_name='preference', verbose_name="Utilisateur")
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default='classique', verbose_name="Mode d'utilisation")
+    profil_metier = models.CharField(max_length=30, blank=True, verbose_name="Profil métier")
+    basemap_defaut = models.CharField(max_length=100, blank=True, verbose_name="Fond de carte par défaut")
+    code_lie = models.ForeignKey(CodeAccesAvance, on_delete=models.SET_NULL, null=True, blank=True, related_name='utilisateurs_lies', verbose_name="Code permanent utilisé")
+    date_maj = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
+
+    class Meta:
+        verbose_name = "Préférence utilisateur"
+        verbose_name_plural = "Préférences utilisateurs"
+
+    def __str__(self):
+        return f"{self.utilisateur.username} — {self.get_mode_display()}"
+
+
+class FondCartePersonnalise(models.Model):
+    """Fond de carte défini par l'utilisateur (XYZ / WMS / WMTS / MVT / GeoTIFF…), pour le Mode Avancé."""
+    TYPE_CHOICES = [
+        ('xyz', 'XYZ / tuiles raster'),
+        ('wms', 'WMS'),
+        ('wmts', 'WMTS'),
+        ('vector', 'Vectoriel (MVT)'),
+        ('geotiff', 'GeoTIFF (COG)'),
+        ('mbtiles', 'MBTiles'),
+        ('arcgis', 'ArcGIS REST (tuiles)'),
+    ]
+    CATEGORIE_CHOICES = [
+        ('geologie', 'Géologie'),
+        ('mines', 'Mines'),
+        ('environnement', 'Environnement'),
+        ('topographie', 'Topographie'),
+        ('imagerie', 'Imagerie'),
+        ('generale', 'Cartographie générale'),
+    ]
+    nom = models.CharField(max_length=120, verbose_name="Nom")
+    type_fond = models.CharField(max_length=8, choices=TYPE_CHOICES, default='xyz', verbose_name="Type")
+    url = models.TextField(verbose_name="URL des tuiles", help_text="Modèle d'URL : {z}/{x}/{y} (XYZ/MVT), {bbox-epsg-3857} (WMS), ou {TileMatrix}/{TileCol}/{TileRow} (WMTS)")
+    attribution = models.CharField(max_length=255, blank=True, verbose_name="Attribution")
+    categorie = models.CharField(max_length=30, choices=CATEGORIE_CHOICES, default='geologie', verbose_name="Catégorie")
+    cle_api = models.CharField(max_length=200, blank=True, verbose_name="Clé API (optionnelle)", help_text="Placez {cle_api} dans l'URL : la clé est injectée à l'affichage.")
+    crs = models.CharField(max_length=30, default='EPSG:3857', verbose_name="Projection / CRS", help_text="MapLibre n'affiche que le Web Mercator (EPSG:3857) — autre CRS = fond documenté uniquement.")
+    layers = models.CharField(max_length=300, blank=True, verbose_name="Source-layer (MVT)", help_text="Nom de la couche du tuilage vectoriel à afficher (optionnel hors MVT).")
+    projet = models.ForeignKey('Projet', on_delete=models.SET_NULL, null=True, blank=True, related_name='fonds_cartes', verbose_name="Projet (portée)", help_text="Si défini, le fond est partagé dans le projet ; sinon il reste dans les préférences de l'utilisateur.")
+    auteur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='fonds_cartes', verbose_name="Créé par")
+    visible = models.BooleanField(default=True, verbose_name="Visible")
+    ordre = models.PositiveIntegerField(default=0, verbose_name="Ordre d'affichage")
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+
+    class Meta:
+        ordering = ['-visible', 'ordre', 'nom']
+        verbose_name = "Fond de carte personnalisé"
+        verbose_name_plural = "Fonds de carte personnalisés"
+
+    def __str__(self):
+        return f"{self.nom} ({self.get_type_fond_display()})"
+
+
+class CoucheWMS(models.Model):
+    """Couche WMS superposable au fond de carte, avec opacité réglable (Mode Avancé)."""
+    nom = models.CharField(max_length=150, verbose_name="Nom")
+    url = models.TextField(verbose_name="URL WMS (GetMap)", help_text="Ex. https://serveur/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=nom&STYLES=&SRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png")
+    layers = models.CharField(max_length=500, blank=True, verbose_name="Noms de couches (séparés par des virgules)")
+    version = models.CharField(max_length=20, default='1.1.1', verbose_name="Version WMS")
+    attribution = models.CharField(max_length=255, blank=True, verbose_name="Attribution")
+    opacite = models.FloatField(default=0.7, verbose_name="Opacité (0-1)")
+    visibilite = models.BooleanField(default=True, verbose_name="Visible sur la carte")
+    ordre = models.PositiveIntegerField(default=0, verbose_name="Ordre d'affichage")
+    projet = models.ForeignKey('Projet', on_delete=models.SET_NULL, null=True, blank=True, related_name='couches_wms', verbose_name="Projet")
+    auteur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='couches_wms', verbose_name="Créé par")
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+
+    class Meta:
+        ordering = ['ordre', 'nom']
+        verbose_name = "Couche WMS"
+        verbose_name_plural = "Couches WMS"
+
+    def __str__(self):
+        return self.nom
+
+
+class ImageAerienne(models.Model):
+    """Orthophoto / image drone géoréférencée superposée à la carte (Mode Avancé).
+
+    Géoréférencement : WorldFile compagnon (.pgw/.jgw/.tfw), coordonnées EXIF GPS
+    de l'appareil, ou emprise (bbox) saisie manuellement.
+    """
+    TYPE_CHOICES = [
+        ('ortho', 'Orthophoto'),
+        ('drone', 'Image drone'),
+        ('satellite', 'Imagerie satellite'),
+        ('photo', 'Photo géolocalisée'),
+    ]
+    MODE_GEO_CHOICES = [
+        ('worldfile', 'WorldFile'),
+        ('exif', 'Coordonnées EXIF GPS'),
+        ('bbox', 'Emprise manuelle'),
+    ]
+    nom = models.CharField(max_length=150, verbose_name="Nom")
+    fichier = models.ImageField(upload_to='imagerie/', verbose_name="Image")
+    type_imagerie = models.CharField(max_length=20, choices=TYPE_CHOICES, default='ortho', verbose_name="Type d'imagerie")
+    mode_geo = models.CharField(max_length=20, choices=MODE_GEO_CHOICES, default='bbox', verbose_name="Mode de géoréférencement")
+    min_lon = models.FloatField(null=True, blank=True, verbose_name="Longitude min (ouest)")
+    min_lat = models.FloatField(null=True, blank=True, verbose_name="Latitude min (sud)")
+    max_lon = models.FloatField(null=True, blank=True, verbose_name="Longitude max (est)")
+    max_lat = models.FloatField(null=True, blank=True, verbose_name="Latitude max (nord)")
+    coords = models.JSONField(null=True, blank=True, verbose_name="Coins exacts de l'image", help_text="[[lon,lat] ×4] SW, SE, NE, NW — issu du WorldFile")
+    altitude_m = models.FloatField(null=True, blank=True, verbose_name="Altitude de vol (m)")
+    date_prise = models.DateField(null=True, blank=True, verbose_name="Date de prise de vue")
+    description = models.TextField(blank=True, verbose_name="Description")
+    visibilite = models.BooleanField(default=True, verbose_name="Visible sur la carte")
+    projet = models.ForeignKey('Projet', on_delete=models.SET_NULL, null=True, blank=True, related_name='images_aeriennes', verbose_name="Projet")
+    auteur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='images_aeriennes', verbose_name="Ajouté par")
+    cree_le = models.DateTimeField(auto_now_add=True, verbose_name="Date d'ajout")
+
+    class Meta:
+        ordering = ['-cree_le']
+        verbose_name = "Image aérienne"
+        verbose_name_plural = "Images aériennes (orthophotos)"
+
+    def __str__(self):
+        return self.nom

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Import de données intelligent — MUKMAP v1.0</title>
+    <title>Import de données — MUKMAP v1.0</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -40,18 +40,37 @@
         .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
         .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
         .btn:disabled { opacity: .5; pointer-events: none; }
+        .btn-ico { padding: 6px 10px; font-size: .78rem; }
 
         .conteneur { padding: 24px; max-width: 1200px; margin: 0 auto; }
         .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 22px; margin-bottom: 18px; }
         .card h2 { font-size: 1.05rem; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
         .card .sous { color: var(--text-3); font-size: .8rem; margin-bottom: 16px; }
 
+        /* ── Stepper ── */
+        .stepper { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+        .step { flex: 1; min-width: 150px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--border); color: var(--text-3); font-weight: 600; font-size: .8rem; opacity: .7; }
+        .step .num { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .75rem; flex: none; }
+        .step.actif { border-color: var(--accent); color: var(--text); opacity: 1; box-shadow: 0 0 0 3px rgba(109,93,246,.12); }
+        .step.actif .num { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .step.fait { border-color: rgba(34,197,94,.4); color: var(--green); opacity: 1; }
+        .step.fait .num { background: var(--green); color: #fff; border: none; }
+
         .zone-drop {
             border: 2px dashed var(--border-2); border-radius: 16px; padding: 44px 20px; text-align: center;
             color: var(--text-3); transition: all .2s; cursor: pointer;
         }
-        .zone-drop:hover, .zone-drop.survol { border-color: var(--accent); color: var(--accent); background: rgba(109,93,246,.06); }
+        .zone-drop:hover, .zone-drop.survol { border-color: var(--accent); color: var(--accent); background: rgba(109,93,246,.06); transform: translateY(-1px); }
         .zone-drop .grand { font-size: 2rem; }
+
+        /* ── Liste des fichiers ── */
+        .fichier-ligne { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--border); margin-top: 8px; }
+        .fichier-ligne.actif { border-color: var(--accent); }
+        .fichier-nom { flex: 1; font-weight: 600; font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fichier-taille { color: var(--text-3); font-size: .72rem; white-space: nowrap; }
+        .badge { font-size: .62rem; font-weight: 800; letter-spacing: .5px; padding: 3px 8px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--border); color: var(--text-2); white-space: nowrap; text-transform: uppercase; }
+        .badge.points { color: var(--green); border-color: rgba(34,197,94,.35); }
+        .badge.sig { color: var(--accent); border-color: rgba(109,93,246,.35); }
 
         .mapping { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
         .mapping label { display: block; font-size: .72rem; font-weight: 600; color: var(--text-2); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px; }
@@ -70,6 +89,35 @@
         .stat .pill.rouge { color: var(--red); border-color: rgba(239,68,68,.35); }
         .stat .pill.verte { color: var(--green); border-color: rgba(34,197,94,.35); }
 
+        .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+        .chip { padding: 5px 10px; border-radius: 8px; background: var(--bg-3); border: 1px solid var(--border); font-size: .72rem; font-weight: 600; color: var(--text-2); }
+
+        label { display: block; font-size: .72rem; font-weight: 600; color: var(--text-2); margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .5px; }
+        input, select, textarea {
+            width: 100%; padding: 9px 12px; background: var(--bg-2); color: var(--text);
+            border: 1px solid var(--border); border-radius: 10px; font-size: .85rem;
+            outline: none; transition: border .2s, box-shadow .2s; font-family: 'Inter', Arial, sans-serif;
+        }
+        input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(109,93,246,.18); }
+        input[type="color"] { padding: 2px; width: 64px; height: 36px; cursor: pointer; }
+        input[type="range"] { padding: 0; accent-color: var(--accent); height: 30px; }
+        .cb { display: flex; align-items: center; gap: 8px; font-size: .8rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text); margin: 12px 0 4px; cursor: pointer; }
+        .cb input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+
+        .style-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 720px) { .style-2col { grid-template-columns: 1fr; } }
+        .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+        .swatch { width: 26px; height: 26px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: all .15s; }
+        .swatch:hover { transform: scale(1.1); }
+        .swatch.actif { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+        .val-range { font-size: .8rem; font-weight: 700; color: var(--text-2); }
+        .classe-ligne { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: var(--bg-3); border: 1px solid var(--border); margin-top: 6px; }
+        .classe-valeur { flex: 1; font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .legende-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+        .legende-preview .lp-item { display: flex; align-items: center; gap: 10px; font-size: .8rem; font-weight: 600; }
+        .legende-preview .lp-pastille { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+
         #progression { display: none; text-align: center; padding: 30px; }
         .spin { width: 44px; height: 44px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 14px; animation: tourner .8s linear infinite; }
         @keyframes tourner { to { transform: rotate(360deg); } }
@@ -77,6 +125,10 @@
         #resultat { display: none; padding: 20px; border-radius: 12px; margin-top: 14px; font-weight: 600; font-size: .9rem; text-align: center; }
         #resultat.ok { background: rgba(34,197,94,.12); color: var(--green); border: 1px solid rgba(34,197,94,.3); }
         #resultat.err { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
+
+        .alerte { display: none; margin-top: 12px; padding: 12px 14px; border-radius: 10px; font-size: .82rem; font-weight: 600; }
+        .alerte.err { display: block; background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
+        .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
     </style>
 {% include 'cartographie/_pwa_head.html' %}
 </head>
@@ -101,265 +153,711 @@
 </header>
 
 <main class="conteneur">
-    <div class="card">
-        <h2>📥 <span data-i18n="etape1_fichier">1. Choisissez votre fichier</span></h2>
-        <p class="sous" data-i18n="formats_supportes">Formats supportés : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b>, <b>.zip</b> (Shapefile), <b>.shp + .dbf</b> — la prévisualisation s'affiche automatiquement.</p>
+    <div class="stepper" id="stepper">
+        <div class="step actif" data-etape="1"><span class="num">1</span><span data-i18n="etape_importer">Importer</span></div>
+        <div class="step" data-etape="2"><span class="num">2</span><span data-i18n="etape_verifier">Vérifier</span></div>
+        <div class="step" data-etape="3"><span class="num">3</span><span data-i18n="etape_configurer">Configurer</span></div>
+        <div class="step" data-etape="4"><span class="num">4</span><span data-i18n="etape_afficher">Afficher</span></div>
+    </div>
+
+    <div class="card" id="etape-1">
+        <h2>📥 <span data-i18n="etape1_titre">1. Choisissez vos fichiers</span></h2>
+        <p class="sous" data-i18n="formats_supportes">Formats supportés : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (points) · <b>.zip</b>/<b>.shp</b> (Shapefile) · <b>.geojson</b>, <b>.kml</b>, <b>.kmz</b>, <b>.gpx</b> (couches SIG).</p>
         <div class="zone-drop" id="zone-drop">
             <div class="grand">📂</div>
-            <div><span data-i18n="glissez_deposez"><b>Glissez-déposez</b> votre fichier ici ou cliquez pour parcourir</span></div>
-            <div style="font-size:.75rem;margin-top:6px;opacity:.8;" data-i18n="aide_shapefile">Excel/CSV : un fichier · Shapefile : un .zip ou sélectionnez ensemble les fichiers .shp et .dbf</div>
-            <input type="file" id="fichier" accept=".xlsx,.xls,.csv,.zip,.shp,.dbf" multiple hidden>
+            <div><span data-i18n="glissez_deposez"><b>Glissez-déposez</b> vos fichiers ici ou cliquez pour parcourir</span></div>
+            <div style="font-size:.75rem;margin-top:6px;opacity:.8;" data-i18n="aide_shapefile">Plusieurs fichiers possibles — la nature de chaque fichier est détectée automatiquement.</div>
+            <input type="file" id="fichier" accept=".xlsx,.xls,.csv,.zip,.shp,.dbf,.geojson,.json,.kml,.kmz,.gpx" multiple hidden>
+        </div>
+        <div id="liste-fichiers"></div>
+        <div class="alerte err" id="err-1"></div>
+    </div>
+
+    <div class="card" id="etape-2" style="display:none;">
+        <h2>🧭 <span data-i18n="etape2_titre">2. Vérifiez vos données</span></h2>
+        <p class="sous" id="etape2-sous"></p>
+        <div id="panneau-points" style="display:none;">
+            <div class="mapping" id="mapping"></div>
+            <div class="stat">
+                <span class="pill" id="stat-lignes">—</span>
+                <span class="pill" id="stat-nom"></span>
+                <span class="pill" id="stat-lat"></span>
+                <span class="pill" id="stat-lng"></span>
+                <span class="pill rouge" id="stat-notes" style="display:none;"></span>
+            </div>
+            <div class="apercu" id="apercu"></div>
+        </div>
+        <div id="panneau-sig" style="display:none;">
+            <div class="stat">
+                <span class="pill verte" id="sig-type"></span>
+                <span class="pill" id="sig-count"></span>
+            </div>
+            <div style="margin-top:10px;">
+                <div style="font-size:.72rem;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;" data-i18n="colonnes_detectees">Colonnes / attributs détectés</div>
+                <div class="chips" id="sig-colonnes"></div>
+            </div>
+        </div>
+        <div class="alerte err" id="err-2"></div>
+        <div class="actions">
+            <button class="btn" id="retour-2">← <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="suivant-3"><span data-i18n="suivant">Suivant</span> →</button>
         </div>
     </div>
 
-    <div class="card" id="card-mapping" style="display:none;">
-        <h2>🧭 <span data-i18n="etape2_associez">2. Associez vos colonnes</span></h2>
-        <p class="sous" data-i18n="correspondance_auto">La correspondance est détectée automatiquement (vert). Ajustez si nécessaire.</p>
-        <div class="mapping" id="mapping"></div>
+    <div class="card" id="etape-3" style="display:none;">
+        <h2>🎨 <span data-i18n="etape3_titre">3. Configurez le style</span></h2>
+        <p class="sous" id="etape3-sous"></p>
+
+        <div id="panneau-style-sig" style="display:none;">
+            <label data-i18n="nom_couche_label">Nom de la couche</label>
+            <input id="sig-nom-couche" placeholder="Ma couche">
+            <div class="style-2col">
+                <div>
+                    <label data-i18n="style_couleur_lib">Couleur</label>
+                    <div class="swatches" id="swatches"></div>
+                    <input type="color" id="style-couleur" value="#3388ff">
+                </div>
+                <div>
+                    <label data-i18n="style_symbole_lib">Symbole</label>
+                    <select id="style-symbole">
+                        <option value="cercle">● Cercle</option>
+                        <option value="carre">■ Carré</option>
+                        <option value="triangle">▲ Triangle</option>
+                        <option value="losange">◆ Losange</option>
+                        <option value="croix">✚ Croix</option>
+                        <option value="etoile">★ Étoile</option>
+                        <option value="point">• Point</option>
+                    </select>
+                </div>
+            </div>
+            <div class="style-2col">
+                <div>
+                    <label data-i18n="style_taille_lib">Taille</label>
+                    <input type="range" id="style-taille" min="1" max="20" step="1" value="6">
+                    <span class="val-range" id="style-taille-val">6</span>
+                </div>
+                <div>
+                    <label data-i18n="style_opacite_lib">Transparence</label>
+                    <input type="range" id="style-opacite" min="0" max="1" step="0.05" value="1">
+                    <span class="val-range" id="style-opacite-val">100 %</span>
+                </div>
+            </div>
+            <div>
+                <label data-i18n="style_etiquette_lib">Étiquette affichée</label>
+                <select id="style-etiquette"></select>
+            </div>
+            <div>
+                <label class="cb"><input type="checkbox" id="style-cat-active"> <span data-i18n="style_categorisation_lib">Catégorisation (couleur par valeur)</span></label>
+                <div id="panneau-cat" style="display:none;">
+                    <div class="style-2col">
+                        <div>
+                            <label data-i18n="style_champ_cat_lib">Colonne de catégorisation</label>
+                            <select id="cat-champ"></select>
+                        </div>
+                        <div style="display:flex;align-items:flex-end;padding-bottom:2px;">
+                            <button class="btn btn-ico" id="btn-regenerer" style="width:100%;">🔄 <span data-i18n="style_regenerer">Régénérer les couleurs</span></button>
+                        </div>
+                    </div>
+                    <div id="classes-cat"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="panneau-style-points" style="display:none;">
+            <p class="sous" data-i18n="points_colores_categorie">Les points sont colorés automatiquement selon leur catégorie sur la carte.</p>
+            <div class="legende-preview" id="legende-preview"></div>
+        </div>
+
+        <div class="alerte err" id="err-3"></div>
+        <div class="actions">
+            <button class="btn" id="retour-3">← <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="btn-importer">🚀 <span data-i18n="valider_importer">Valider et importer</span></button>
+        </div>
     </div>
 
-    <div class="card" id="card-apercu" style="display:none;">
-        <h2>👁️ <span data-i18n="etape3_previsualisation">3. Prévisualisation</span></h2>
-        <p class="sous" data-i18n="apercu_10_lignes">10 premières lignes — les doublons (même nom + mêmes coordonnées) seront ignorés à l'import.</p>
-        <div class="stat">
-            <span class="pill" id="stat-lignes">— lignes</span>
-            <span class="pill" id="stat-nom">Nom : —</span>
-            <span class="pill" id="stat-lat">Latitude : —</span>
-            <span class="pill" id="stat-lng">Longitude : —</span>
-            <span class="pill rouge" id="stat-notes" style="display:none;"></span>
+    <div class="card" id="etape-4" style="display:none;">
+        <h2>✅ <span data-i18n="etape4_titre">4. Résultat</span></h2>
+        <p class="sous" data-i18n="import_termine">Import terminé</p>
+        <div id="progression">
+            <div class="spin"></div>
+            <div data-i18n="import_en_cours">Import en cours… analyse et déduplication des données.</div>
         </div>
-        <div class="apercu" id="apercu"></div>
         <div id="resultat"></div>
-        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
-            <button class="btn btn-primary" id="btn-importer"><span data-i18n="valider_importer">🚀 Valider et importer</span></button>
-            <a class="btn" href="{% url 'index_cartographie' %}"><span data-i18n="voir_carte">🗺️ Voir la carte</span></a>
-        </div>
     </div>
-
-    <div class="card" id="progression">
-        <div class="spin"></div>
-        <div data-i18n="import_en_cours">Import en cours… analyse et déduplication des données.</div>    </div>
 </main>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js" defer></script>
 <script>
+'use strict';
 const CSRF = '{{ csrf_token }}';
-const zoneDrop = document.getElementById('zone-drop');
-const inpFichier = document.getElementById('fichier');
-let lignesBrutes = [], entetes = [], fichierSelectionne = null;
+const URL_IMPORT_POINTS = '{% url "importer_excel_v2" %}';
+const URL_IMPORT_COUCHE = '{% url "importer_geometrie" %}';
+const URL_CARTE = '{% url "index_cartographie" %}';
+const t = (cle, defaut) => (window.mukmapT ? window.mukmapT(cle, defaut) : (defaut || cle));
+const EXT_POINTS = ['.xlsx', '.xls', '.csv'];
+const EXT_SIG = ['.zip', '.shp', '.geojson', '.json', '.kml', '.kmz', '.gpx'];
+const PALETTE = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#ec4899'];
+const PRESETS = ['#3388ff', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#14b8a6'];
+const CATS_LEGENDE = {
+    'activite': '#ef4444', 'ecole': '#3b82f6', 'hopital': '#22c55e', 'riverain': '#f59e0b', 'service': '#8b5cf6', 'autre': '#64748b'
+};
+const NOMS_COLS = {
+    nom: ['nom', 'name', 'libelle', 'libellé', 'designation', 'désignation', 'titre', 'intitule'],
+    latitude: ['latitude', 'lat', 'lat_deg', 'latitude_deg', 'y', 'latitud'],
+    longitude: ['longitude', 'lon', 'lng', 'long', 'long_deg', 'lng_deg', 'x', 'longitud'],
+    categorie: ['categorie', 'catégorie', 'type', 'nature', 'category', 'classe'],
+    statut: ['statut', 'status', 'etat', 'état', 'fonctionnel', 'fonctionnel?'],
+    description: ['description', 'desc', 'details', 'détails', 'commentaire', 'remarque', 'notes', 'note'],
+    province: ['province', 'region', 'région', 'division', 'province/region'],
+    commune: ['commune', 'territoire', 'village', 'localite', 'localité', 'ville']
+};
+let fichiers = [];
+let idSuivant = 1;
+let fichierActif = 0;
+const $ = (id) => document.getElementById(id);
 
-zoneDrop.addEventListener('click', () => inpFichier.click());
-zoneDrop.addEventListener('dragover', e => { e.preventDefault(); zoneDrop.classList.add('survol'); });
-zoneDrop.addEventListener('dragleave', () => zoneDrop.classList.remove('survol'));
-zoneDrop.addEventListener('drop', e => { e.preventDefault(); zoneDrop.classList.remove('survol'); if (e.dataTransfer.files.length) traiterFichiers([...e.dataTransfer.files]); });
-inpFichier.addEventListener('change', () => { if (inpFichier.files.length) traiterFichiers([...inpFichier.files]); });
-
-function traiterFichiers(fichiers) {
-    if ((typeof XLSX === 'undefined' || typeof shp === 'undefined') && !(fichiers.length && fichiers[0].name.toLowerCase().endsWith('.csv'))) {
-        alert(mukmapT('import_en_cours'));
-        return;
+function extDe(nom) {
+    const m = /\.([a-z0-9]+)$/i.exec(nom || '');
+    return m ? '.' + m[1].toLowerCase() : '';
+}
+function tailleLisible(o) {
+    if (o > 1024 * 1024) return (o / 1024 / 1024).toFixed(1) + ' Mo';
+    if (o > 1024) return (o / 1024).toFixed(1) + ' Ko';
+    return o + ' o';
+}
+function typeFichier(ext) {
+    if (EXT_POINTS.includes(ext)) return 'points';
+    if (EXT_SIG.includes(ext)) return 'sig';
+    return null;
+}
+function normalizeEntetes(liste) {
+    return (liste || []).map(h => String(h == null ? '' : h).trim());
+}
+function detecterMapping(entetes) {
+    const m = {};
+    const norm = normalizeEntetes(entetes);
+    for (const cle of Object.keys(NOMS_COLS)) {
+        let trouve = null;
+        for (let i = 0; i < norm.length; i++) {
+            const base = norm[i].toLowerCase();
+            if (!base) continue;
+            if (NOMS_COLS[cle].includes(base)) { trouve = i; break; }
+        }
+        m[cle] = trouve;
     }
-    const aZip = fichiers.find(f => f.name.toLowerCase().endsWith('.zip'));
-    const aShp = fichiers.find(f => f.name.toLowerCase().endsWith('.shp'));
-    if (aZip || aShp) { traiterShapefile(fichiers); return; }
-    const f = fichiers[0];
-    fichierSelectionne = f;
-    const nom = f.name.toLowerCase();
-    if (!nom.endsWith('.xlsx') && !nom.endsWith('.xls') && !nom.endsWith('.csv')) {
-        alert(mukmapT('format_non_supporte'));
-        return;
+    return m;
+}
+function estCoordonneeValide(v, lat) {
+    if (v == null) return false;
+    const n = parseFloat(String(v).replace(',', '.'));
+    if (!isFinite(n)) return false;
+    return lat ? (n >= -90 && n <= 90) : (n >= -180 && n <= 180);
+}
+function valeursDistinctes(lignes, idx, max) {
+    const vus = new Map();
+    for (const l of lignes) {
+        const v = l[idx] == null ? '' : String(l[idx]).trim();
+        if (!v) continue;
+        if (!vus.has(v)) vus.set(v, { valeur: v, couleur: PALETTE[vus.size % PALETTE.length], label: v });
+        if (vus.size >= max) break;
     }
-    const lecteur = new FileReader();
-    lecteur.onload = (e) => {
-        try {
-            const wb = nom.endsWith('.csv') ? XLSX.read(e.target.result, {type:'string'}) : XLSX.read(new Uint8Array(e.target.result), {type:'array'});
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-            entetes = (data[0] || []).map(h => String(h).trim());
-            lignesBrutes = data.slice(1).filter(r => r.some(c => String(c).trim() !== ''));
-            if (!lignesBrutes.length) { alert(mukmapT('fichier_vide')); return; }
-            document.getElementById('stat-notes').style.display = 'none';
-            afficherEtapes();
-        } catch (err) {
-            alert(mukmapT('lecture_impossible').replace('{msg}', err.message));
+    return [...vus.values()];
+}
+function couleurCategorie(cat) {
+    return CATS_LEGENDE[cat] || '#64748b';
+}
+function lireFichier(f, en) {
+    return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = () => rej(r.error || new Error('Lecture impossible'));
+        f[en](r);
+    });
+}
+function csvEnLignes(texte) {
+    const corps = (texte || '').replace(/^\uFEFF/, '');
+    let sep = ';';
+    const premiere = (corps.split(/\r?\n/, 1)[0] || '');
+    if (premiere.includes(';') && !premiere.includes(',')) sep = ';';
+    else if (premiere.includes('\t')) sep = '\t';
+    else sep = ',';
+    const lignes = [];
+    let cur = '', entreQuotes = false;
+    for (let i = 0; i < corps.length; i++) {
+        const c = corps[i];
+        if (entreQuotes) {
+            if (c === '"') {
+                if (corps[i + 1] === '"') { cur += '"'; i++; }
+                else entreQuotes = false;
+            } else cur += c;
+        } else if (c === '"') entreQuotes = true;
+        else if (c === sep) { lignes.push(cur); cur = ''; }
+        else if (c === '\n') { lignes.push(cur); cur = ''; }
+        else if (c !== '\r') cur += c;
+    }
+    lignes.push(cur);
+    const resultat = [];
+    for (let i = 0; i + 1 < lignes.length; i += 2) {
+        const n = parseInt(lignes[i], 10);
+        if (isFinite(n) && n >= 0) {
+            let dec = lignes[i + 1] || '';
+            while (dec.startsWith(',')) dec = dec.slice(1);
+            resultat.push(dec);
+        }
+    }
+    if (resultat.length) return resultat;
+    const lignesBrutes = corps.split(/\r?\n/).filter(l => l.trim() !== '');
+    return lignesBrutes;
+}
+function analyserPoints(csvLignes) {
+    const entetes = normalizeEntetes(csvLignes[0] || []);
+    const lignes = csvLignes.slice(1);
+    const mapping = detecterMapping(entetes);
+    return {
+        type: 'points', entetes, lignes, mapping,
+        stats: {
+            lignes: lignes.length,
+            nom: mapping.nom != null ? entetes[mapping.nom] : '',
+            lat: mapping.latitude != null ? entetes[mapping.latitude] : '',
+            lng: mapping.longitude != null ? entetes[mapping.longitude] : '',
+            latValides: lignes.filter(l => estCoordonneeValide(l[mapping.latitude], true)).length,
+            lngValides: lignes.filter(l => estCoordonneeValide(l[mapping.longitude], false)).length,
+            notes: mapping.description != null || mapping.categorie != null
         }
     };
-    if (nom.endsWith('.csv')) lecteur.readAsText(f);
-    else lecteur.readAsArrayBuffer(f);
 }
-
-async function traiterShapefile(fichiers) {
-    const asArrayBuffer = f => new Promise((res, rej) => {
-        const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(f);
-    });
+async function analyserFichier(entree) {
+    const ext = extDe(entree.file.name);
+    entree.etat = 'analyse';
+    renderListe();
     try {
-        let resultat;
-        const zip = fichiers.find(f => f.name.toLowerCase().endsWith('.zip'));
-        if (zip) {
-            resultat = await shp(await asArrayBuffer(zip));
-        } else {
-            const parNom = {};
-            for (const f of fichiers) parNom[f.name.toLowerCase()] = f;
-            const nomShp = Object.keys(parNom).find(k => k.endsWith('.shp'));
-            if (!nomShp) { alert(mukmapT('shp_manquant')); return; }
-            const prjFile = Object.keys(parNom).find(k => k.endsWith('.prj'));
-            const prj = prjFile ? new TextDecoder('utf-8').decode(await asArrayBuffer(parNom[prjFile])) : null;
-            const shpData = await shp.parseShp(await asArrayBuffer(parNom[nomShp]), prj);
-            const dbfFile = Object.keys(parNom).find(k => k.endsWith('.dbf'));
-            resultat = dbfFile ? await shp.combine([shpData, await shp.parseDbf(await asArrayBuffer(parNom[dbfFile]))]) : shpData;
-        }
-        const notes = shpVersLignes(resultat);
-        if (!lignesBrutes.length) { alert(mukmapT('aucun_point_shapefile')); return; }
-        afficherEtapes();
-        const pill = document.getElementById('stat-notes');
-        if (notes) {
-            pill.textContent = mukmapT('entites_non_ponctuelles').replace('{n}', notes);
-            pill.style.display = 'inline-block';
-            pill.dataset.shp = '1';
-        }
-    } catch (err) {
-        alert(mukmapT('lecture_shapefile_impossible').replace('{msg}', err.message));
-    }
-}
-
-function shpVersLignes(resultat) {
-    const couches = Array.isArray(resultat) ? resultat : [resultat];
-    const champsDbf = new Set();
-    const features = [];
-    let horsPerimetre = 0;
-    for (const couche of couches) {
-        if (!couche || !Array.isArray(couche.features)) continue;
-        for (const f of couche.features) {
-            const g = f.geometry;
-            if (!g || g.type !== 'Point') { horsPerimetre++; continue; }
-            features.push(f);
-            Object.keys(f.properties || {}).forEach(k => champsDbf.add(k));
-        }
-    }
-    const colonnes = [...champsDbf, 'latitude', 'longitude'];
-    entetes = colonnes;
-    lignesBrutes = features.map(f => {
-        const p = f.properties || {};
-        return colonnes.map(c => {
-            if (c === 'latitude') return f.geometry.coordinates[1];
-            if (c === 'longitude') return f.geometry.coordinates[0];
-            const v = p[c];
-            return v instanceof Date ? v.toISOString().slice(0, 10) : (v === null || v === undefined ? '' : v);
-        });
-    });
-    return horsPerimetre;
-}
-
-function afficherEtapes() {
-    document.getElementById('card-mapping').style.display = 'block';
-    document.getElementById('card-apercu').style.display = 'block';
-    construireMapping();
-    construireApercu();
-}
-
-function construireMapping() {
-    const conteneur = document.getElementById('mapping');
-    const champs = [
-        {cle:'latitude', lib:mukmapT('latitude') + ' *', auto:['lat']},
-        {cle:'longitude', lib:mukmapT('longitude') + ' *', auto:['lon','lng','long']},
-        {cle:'nom', lib:mukmapT('nom_lieu'), auto:['nom','name','lieu','site','localité','localite']},
-        {cle:'description', lib:mukmapT('description'), auto:['desc','detail','détail','observation']},
-        {cle:'categorie', lib:mukmapT('categorie'), auto:['cat','categorie','type','category']},
-        {cle:'statut', lib:mukmapT('etat'), auto:['statut','etat','état','status']},
-        {cle:'province', lib:mukmapT('province'), auto:['province','region','région']},
-        {cle:'commune', lib:mukmapT('commune'), auto:['commune','territoire','district']},
-    ];
-    const auto = (cle) => {
-        const def = champs.find(c => c.cle === cle);
-        for (const a of def.auto) {
-            const i = entetes.findIndex(h => h.toLowerCase().includes(a));
-            if (i >= 0) return i;
-        }
-        return '';
-    };
-    conteneur.innerHTML = champs.map(c => `
-        <div>
-            <label>${c.lib}</label>
-            <select data-cle="${c.cle}" class="${auto(c.cle) !== '' ? 'auto' : ''}">
-                <option value="">${mukmapT('non_importe')}</option>
-                ${entetes.map((h, i) => `<option value="${i}" ${auto(c.cle) === i ? 'selected' : ''}>${i + 1}. ${h || mukmapT('colonne_vide')}</option>`).join('')}
-            </select>
-        </div>`).join('');
-}
-
-function construireApercu() {
-    document.getElementById('stat-lignes').textContent = mukmapT('lignes_n').replace('{n}', lignesBrutes.length);
-    const selects = [...document.querySelectorAll('#mapping select')];
-    selects.forEach(s => {
-        const pill = document.getElementById('stat-' + s.dataset.cle);
-        if (pill) pill.textContent = s.options[s.selectedIndex].text;
-    });
-    const iLat = parseInt(selects.find(s => s.dataset.cle === 'latitude')?.value ?? '');
-    const iLng = parseInt(selects.find(s => s.dataset.cle === 'longitude')?.value ?? '');
-    if (!isNaN(iLat) && !isNaN(iLng)) {
-        const hors = lignesBrutes.filter(r => {
-            const lat = parseFloat(String(r[iLat] ?? '').replace(',', '.'));
-            const lng = parseFloat(String(r[iLng] ?? '').replace(',', '.'));
-            return isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180;
-        }).length;
-        const pill = document.getElementById('stat-notes');
-        if (hors) {
-            pill.textContent = mukmapT('lignes_invalides').replace('{n}', hors);
-            pill.style.display = 'inline-block';
-        } else if (pill.dataset.shp !== '1') {
-            pill.style.display = 'none';
-        }
-    }
-    const tete = document.querySelector('#apercu table');
-    const nouvelle = document.createElement('table');
-    nouvelle.innerHTML = '<thead><tr>' + entetes.map(h => `<th>${h || '?'}</th>`).join('') + '</tr></thead>' +
-        '<tbody>' + lignesBrutes.slice(0, 10).map(r => '<tr>' + entetes.map((_, i) => `<td>${String(r[i] ?? '').slice(0, 60)}</td>`).join('') + '</tr>').join('') + '</tbody>';
-    if (tete) tete.replaceWith(nouvelle); else document.getElementById('apercu').appendChild(nouvelle);
-}
-
-document.getElementById('mapping').addEventListener('change', construireApercu);
-
-document.getElementById('btn-importer').addEventListener('click', async () => {
-    const mapping = {};
-    document.querySelectorAll('#mapping select').forEach(s => { mapping[s.dataset.cle] = s.value === '' ? null : parseInt(s.value); });
-    if (mapping.latitude === null || mapping.longitude === null) {
-        alert(mukmapT('colonnes_obligatoires'));
-        return;
-    }
-    document.getElementById('progression').style.display = 'block';
-    document.getElementById('card-apercu').style.display = 'none';
-    document.getElementById('card-mapping').style.display = 'none';
-    try {
-        const rep = await fetch('{% url "importer_excel_v2" %}', {
-            method:'POST',
-            headers:{'Content-Type':'application/json', 'X-CSRFToken':CSRF},
-            body:JSON.stringify({mapping, lignes:lignesBrutes, entetes, nom_fichier: fichierSelectionne && fichierSelectionne.name ? fichierSelectionne.name : '', format: fichierSelectionne && fichierSelectionne.name ? String(fichierSelectionne.name).split('.').pop().toUpperCase() : ''})
-        });
-        const d = await rep.json();
-        const resultat = document.getElementById('resultat');
-        document.getElementById('progression').style.display = 'none';
-        document.getElementById('card-apercu').style.display = 'block';
-        if (d.ok) {
-            let txt = mukmapT('points_importes').replace('{n}', d.importes) + '.';
-            if (d.doublons) {
-                const cle = d.projet ? 'doublons_existants' : 'doublons_existants_sans_projet';
-                txt += '<br>' + mukmapT(cle).replace('{m}', d.doublons).replace('{p}', d.projet || '');
+        if (entree.type === 'points') {
+            let lignes;
+            if (ext === '.csv') {
+                const texte = await lireFichier(entree.file, 'readAsText');
+                const lignesBrutes = csvEnLignes(texte);
+                lignes = lignesBrutes.map(l => l.split(/[;\t,]/));
+            } else {
+                const buf = await lireFichier(entree.file, 'readAsArrayBuffer');
+                const wb = XLSX.read(buf, { type: 'array' });
+                const feuille = wb.Sheets[wb.SheetNames[0]];
+                lignes = XLSX.utils.sheet_to_json(feuille, { header: 1, defval: '' });
             }
-            if (d.doublons_maj) txt += '<br>' + mukmapT('doublons_actualises').replace('{m}', d.doublons_maj);
-            if (d.invalides) txt += '<br>' + mukmapT('invalides_lignes').replace('{m}', d.invalides);
-            resultat.className = 'ok';
-            resultat.style.display = 'block';
-            resultat.innerHTML = txt + '<br><a href="{% url 'index_cartographie' %}" class="btn btn-primary" style="margin-top:12px;">' + mukmapT('voir_points_carte') + '</a>';
+            entree.analyse = analyserPoints(lignes);
+            entree.etat = 'ok';
+            if (!entree.analyse.stats.latValides && !entree.analyse.stats.lngValides) {
+                entree.etat = 'erreur';
+                entree.message = t('erreur_aucune_coordonnee', 'Aucune coordonnée valide détectée dans ce fichier.');
+            }
+        } else if (entree.type === 'sig' && (ext === '.geojson' || ext === '.json')) {
+            const buf = await lireFichier(entree.file, 'readAsArrayBuffer');
+            const geojson = JSON.parse(new TextDecoder().decode(buf));
+            const features = (geojson.type === 'FeatureCollection' ? geojson.features : Array.isArray(geojson) ? geojson : [geojson]).filter(f => f && f.geometry);
+            const types = new Set(features.map(f => f.geometry.type).filter(Boolean));
+            const geomType = [...types][0] || 'Point';
+            const props = features.find(f => f.properties && typeof f.properties === 'object');
+            const colonnes = props ? Object.keys(props.properties || {}).filter(k => !k.startsWith('_')).slice(0, 30) : [];
+            entree.analyse = {
+                type: 'sig', sigType: geomType, sigCount: features.length,
+                colonnes, valeursCat: {},
+                categoriesDispo: colonnes.length > 0,
+                features
+            };
+            entree.etat = 'ok';
+        } else if (entree.type === 'sig' && ext === '.kml') {
+            const texte = await lireFichier(entree.file, 'readAsText');
+            const doc = new DOMParser().parseFromString(texte, 'text/xml');
+            const placemarks = doc.getElementsByTagName('Placemark');
+            const premier = placemarks[0];
+            let geomType = 'Point';
+            if (premier) {
+                if (premier.getElementsByTagName('LineString').length) geomType = 'LineString';
+                else if (premier.getElementsByTagName('Polygon').length) geomType = 'Polygon';
+            }
+            const colonnes = [];
+            if (premier) {
+                const nom = premier.getElementsByTagName('name')[0];
+                const desc = premier.getElementsByTagName('description')[0];
+                if (nom) colonnes.push('name');
+                if (desc) colonnes.push('description');
+                const sData = premier.getElementsByTagName('SimpleData');
+                for (let i = 0; i < sData.length && colonnes.length < 30; i++) {
+                    if (sData[i].getAttribute('name')) colonnes.push(sData[i].getAttribute('name'));
+                }
+            }
+            entree.analyse = {
+                type: 'sig', sigType: geomType, sigCount: placemarks.length,
+                colonnes, valeursCat: {}, categoriesDispo: false
+            };
+            entree.etat = 'ok';
+        } else if (entree.type === 'sig' && ext === '.gpx') {
+            const texte = await lireFichier(entree.file, 'readAsText');
+            const doc = new DOMParser().parseFromString(texte, 'text/xml');
+            const wpts = doc.getElementsByTagName('wpt');
+            const trks = doc.getElementsByTagName('trk');
+            const rtes = doc.getElementsByTagName('rte');
+            let geomType = 'Point', count = wpts.length;
+            if (trks.length) { geomType = 'LineString'; count = trks.length; }
+            else if (rtes.length) { geomType = 'LineString'; count = rtes.length; }
+            const premier = wpts[0] || trks[0] || rtes[0];
+            const colonnes = [];
+            if (premier) {
+                for (const el of ['name', 'desc', 'cmt', 'type', 'sym']) {
+                    if (premier.getElementsByTagName(el).length) colonnes.push(el);
+                }
+            }
+            entree.analyse = {
+                type: 'sig', sigType: geomType, sigCount: count,
+                colonnes, valeursCat: {}, categoriesDispo: false
+            };
+            entree.etat = 'ok';
         } else {
-            resultat.className = 'err';
-            resultat.style.display = 'block';
-            resultat.textContent = '❌ ' + d.erreur;
+            entree.analyse = {
+                type: 'sig', sigType: null, sigCount: null,
+                colonnes: [], valeursCat: {}, categoriesDispo: false
+            };
+            entree.etat = 'ok';
         }
     } catch (e) {
-        alert(mukmapT('erreur_reseau') + ' ' + e.message);
+        entree.etat = 'erreur';
+        entree.message = String(e && e.message || e);
     }
-});
+    renderListe();
+}
+const ICO_ETAT = { ok: '✅', erreur: '⚠️', analyse: '⏳' };
+function renderListe() {
+    const zone = $('liste-fichiers');
+    if (!fichiers.length) { zone.innerHTML = ''; return; }
+    zone.innerHTML = fichiers.map((f, i) => `
+        <div class="fichier-ligne ${i === fichierActif ? 'actif' : ''}" data-idx="${i}">
+            <span>${ICO_ETAT[f.etat] || '📄'}</span>
+            <div class="fichier-nom" title="${f.file.name}">${f.file.name}</div>
+            <span class="badge ${f.type || ''}">${f.type === 'points' ? t('badge_points', 'Points') : t('badge_sig', 'Couche SIG')}</span>
+            <span class="fichier-taille">${tailleLisible(f.file.size)}</span>
+            <button class="btn btn-ico" data-retirer="${i}">🗑️</button>
+        </div>`).join('');
+    zone.querySelectorAll('[data-idx]').forEach(l => l.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-retirer]')) return;
+        fichierActif = parseInt(l.dataset.idx, 10);
+        renderListe();
+        goStep(2);
+    }));
+    zone.querySelectorAll('[data-retirer]').forEach(b => b.addEventListener('click', () => {
+        fichiers.splice(parseInt(b.dataset.retirer, 10), 1);
+        if (fichierActif >= fichiers.length) fichierActif = Math.max(0, fichiers.length - 1);
+        if (!fichiers.length) goStep(1);
+        renderListe();
+    }));
+}
+function goStep(n) {
+    [1, 2, 3, 4].forEach(i => {
+        const c = $('etape-' + i);
+        if (c) c.style.display = i === n ? '' : 'none';
+    });
+    document.querySelectorAll('.step').forEach(s => {
+        const num = parseInt(s.dataset.etape, 10);
+        s.classList.toggle('actif', num === n);
+        s.classList.toggle('fait', num < n);
+    });
+    if (n === 2) renderEtape2();
+    if (n === 3) renderEtape3();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function actif() { return fichiers[fichierActif]; }
+function renderEtape2() {
+    const f = actif();
+    if (!f) { goStep(1); return; }
+    const a = f.analyse;
+    if (!a) { goStep(1); return; }
+    if (a.type === 'points') {
+        $('panneau-points').style.display = '';
+        $('panneau-sig').style.display = 'none';
+        $('etape2-sous').textContent = f.file.name;
+        const m = a.mapping;
+        $('stat-lignes').textContent = `${a.stats.lignes} ${t('lignes', 'lignes')}`;
+        $('stat-nom').textContent = a.stats.nom ? `${t('col_nom', 'Nom')}: ${a.stats.nom}` : t('col_nom_manquante', 'Colonne nom manquante');
+        $('stat-lat').textContent = a.stats.lat ? `${t('col_lat', 'Latitude')}: ${a.stats.lat} ✓` : t('col_lat_manquante', 'Latitude manquante');
+        $('stat-lng').textContent = a.stats.lng ? `${t('col_lng', 'Longitude')}: ${a.stats.lng} ✓` : t('col_lng_manquante', 'Longitude manquante');
+        const notes = $('stat-notes');
+        notes.style.display = a.stats.notes ? '' : 'none';
+        notes.textContent = a.stats.notes ? t('notes_detectees', 'Notes/description détectées') : '';
+        const mappingEl = $('mapping');
+        mappingEl.innerHTML = '';
+        const champs = [
+            ['nom', t('col_nom', 'Nom')], ['latitude', t('col_lat', 'Latitude')],
+            ['longitude', t('col_lng', 'Longitude')], ['categorie', t('col_categorie', 'Catégorie')],
+            ['statut', t('col_statut', 'Statut')], ['description', t('col_notes', 'Notes/Description')],
+            ['province', t('col_province', 'Province')], ['commune', t('col_commune', 'Commune')]
+        ];
+        for (const [cle, lib] of champs) {
+            const wrap = document.createElement('div');
+            const lab = document.createElement('label');
+            lab.textContent = lib;
+            const sel = document.createElement('select');
+            sel.dataset.cle = cle;
+            sel.innerHTML = `<option value="">— ${t('non_importe', 'non importé')} —</option>` +
+                a.entetes.map((h, i) => `<option value="${i}" ${i === m[cle] ? 'selected' : ''}>${h}</option>`).join('');
+            if (m[cle] != null) sel.classList.add('auto');
+            sel.addEventListener('change', () => {
+                const val = sel.value;
+                a.mapping[cle] = val === '' ? null : parseInt(val, 10);
+                sel.classList.toggle('auto', val !== '');
+            });
+            wrap.appendChild(lab); wrap.appendChild(sel);
+            mappingEl.appendChild(wrap);
+        }
+        const ap = $('apercu');
+        const lignesAp = a.lignes.slice(0, 12);
+        ap.innerHTML = `<table><thead><tr>${a.entetes.map(h => `<th>${h}</th>`).join('')}</tr></thead>` +
+            `<tbody>${lignesAp.map(l => `<tr>${a.entetes.map((_, i) => `<td>${l[i] == null ? '' : l[i]}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    } else {
+        $('panneau-sig').style.display = '';
+        $('panneau-points').style.display = 'none';
+        $('etape2-sous').textContent = f.file.name;
+        const types = { Point: t('type_point', 'Points'), LineString: t('type_ligne', 'Lignes'), Polygon: t('type_polygone', 'Polygones') };
+        $('sig-type').textContent = a.sigType ? types[a.sigType] || a.sigType : t('type_inconnu', 'Type inconnu');
+        $('sig-count').textContent = a.sigCount != null ? `${a.sigCount} ${t('geometries', 'géométrie(s)')}` : t('analyse_serveur', 'Analyse côté serveur');
+        $('sig-colonnes').innerHTML = a.colonnes.length ? a.colonnes.map(c => `<span class="chip">${c}</span>`).join('') : `<span class="chip">${t('aucune_colonne', 'aucun attribut détecté')}</span>`;
+    }
+    $('err-2').style.display = 'none';
+}
+function renderEtape3() {
+    const f = actif();
+    if (!f || !f.analyse) { goStep(2); return; }
+    $('etape3-sous').textContent = f.file.name;
+    const a = f.analyse;
+    if (a.type === 'points') {
+        $('panneau-style-points').style.display = '';
+        $('panneau-style-sig').style.display = 'none';
+        const categs = new Set();
+        a.lignes.forEach(l => {
+            const c = a.mapping.categorie != null ? l[a.mapping.categorie] : null;
+            if (c != null && String(c).trim()) categs.add(String(c).trim().toLowerCase());
+        });
+        const entrees = categs.size ? [...categs].map(c => [c, couleurCategorie(c)]) : Object.entries(CATS_LEGENDE);
+        $('legende-preview').innerHTML = entrees.map(([c, col]) =>
+            `<div class="lp-item"><span class="lp-pastille" style="background:${col}"></span>${c}</div>`).join('');
+    } else {
+        $('panneau-style-points').style.display = 'none';
+        $('panneau-style-sig').style.display = '';
+        $('sig-nom-couche').value = f.file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim();
+        const sw = $('swatches');
+        sw.innerHTML = '';
+        PRESETS.forEach(c => {
+            const s = document.createElement('div');
+            s.className = 'swatch' + (c === '#3388ff' ? ' actif' : '');
+            s.style.background = c;
+            s.addEventListener('click', () => { $('style-couleur').value = c; swatchesMaj(); });
+            sw.appendChild(s);
+        });
+        const etq = $('style-etiquette');
+        etq.innerHTML = `<option value="">${t('style_aucune_etiquette', '— aucune étiquette —')}</option>` +
+            a.colonnes.map(c => `<option value="${c}">${c}</option>`).join('');
+        const catChamp = $('cat-champ');
+        catChamp.innerHTML = a.colonnes.map(c => `<option value="${c}">${c}</option>`).join('');
+        const catDispo = a.categoriesDispo && a.colonnes.length > 0;
+        $('style-cat-active').disabled = !catDispo;
+        if (!catDispo) $('style-cat-active').checked = false;
+        $('panneau-cat').style.display = 'none';
+        swatchesMaj();
+    }
+    $('err-3').style.display = 'none';
+}
+function swatchesMaj() {
+    const c = $('style-couleur').value;
+    document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('actif', s.style.background === c));
+}
+function categoriesMaj() {
+    const f = actif();
+    const a = f && f.analyse;
+    if (!a || a.type !== 'sig') return;
+    const champ = $('cat-champ').value;
+    const idx = a.colonnes.indexOf(champ);
+    let classes = [];
+    if (idx >= 0 && a.features) {
+        const vus = new Map();
+        for (const feat of a.features) {
+            const v = feat.properties ? feat.properties[champ] : null;
+            if (v == null || v === '') continue;
+            const s = String(v).trim();
+            if (!s) continue;
+            if (!vus.has(s)) vus.set(s, { valeur: s, couleur: PALETTE[vus.size % PALETTE.length], label: s });
+        }
+        classes = [...vus.values()].slice(0, 50);
+    } else if (idx >= 0 && a.features) {
+    }
+    $('classes-cat').innerHTML = classes.map((cl, i) => `
+        <div class="classe-ligne">
+            <input type="color" value="${cl.couleur}" data-classe="${i}" style="width:40px;height:26px;padding:0;border:none;background:none;flex:none;">
+            <div class="classe-valeur" title="${cl.valeur}">${cl.valeur}</div>
+        </div>`).join('');
+    $('classes-cat').querySelectorAll('input[data-classe]').forEach(inp => inp.addEventListener('input', () => {
+        classes[parseInt(inp.dataset.classe, 10)].couleur = inp.value;
+    }));
+    $('classes-cat').closest('div').style.display = classes.length ? '' : 'none';
+}
+function styleCategorieActive() {
+    return $('style-cat-active').checked;
+}
+function styleCourant() {
+    const style = {
+        couleur: $('style-couleur').value,
+        symbole: $('style-symbole').value,
+        taille: parseInt($('style-taille').value, 10),
+        opacite: parseFloat($('style-opacite').value),
+        etiquette: $('style-etiquette').value
+    };
+    if (styleCategorieActive() && $('cat-champ').value) {
+        const classes = [];
+        $('classes-cat').querySelectorAll('.classe-ligne').forEach(ligne => {
+            const valeur = ligne.querySelector('.classe-valeur').textContent;
+            const couleur = ligne.querySelector('input[type=color]').value;
+            classes.push({ valeur, couleur, label: valeur });
+        });
+        if (classes.length) style.categories = { champ: $('cat-champ').value, classes };
+    }
+    return style;
+}
+async function importerPoints(f) {
+    const a = f.analyse;
+    const m = {};
+    Object.entries(a.mapping).forEach(([cle, idx]) => { if (idx != null) m[cle] = idx; });
+    const corps = {
+        mapping: m, lignes: a.lignes, entetes: a.entetes,
+        nom_fichier: f.file.name, format: extDe(f.file.name).replace('.', '')
+    };
+    const rep = await fetch(URL_IMPORT_POINTS, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify(corps)
+    });
+    return { ok: rep.ok, donnees: await rep.json() };
+}
+async function importerCouche(f) {
+    const nom = $('sig-nom-couche').value.trim() || f.file.name;
+    const fd = new FormData();
+    fd.append('fichier_geom', f.file);
+    fd.append('nom_couche', nom);
+    fd.append('ajax', '1');
+    fd.append('style_options', JSON.stringify(styleCourant()));
+    const rep = await fetch(URL_IMPORT_COUCHE, {
+        method: 'POST', credentials: 'same-origin', headers: { 'X-CSRFToken': CSRF }, body: fd
+    });
+    let donnees = {};
+    try { donnees = await rep.json(); } catch (e) { /* corps non JSON */ }
+    return { ok: rep.ok, donnees };
+}
+function validerEtape2() {
+    const f = actif();
+    if (!f) { $('err-2').textContent = t('fichier_requis', 'Choisissez au moins un fichier.'); $('err-2').style.display = ''; return false; }
+    if (f.etat === 'erreur') { $('err-2').textContent = f.message || t('fichier_invalide', 'Fichier invalide.'); $('err-2').style.display = ''; return false; }
+    if (f.analyse && f.analyse.type === 'points') {
+        const m = f.analyse.mapping;
+        if (m.latitude == null || m.longitude == null) {
+            $('err-2').textContent = t('colonnes_requises', 'Sélectionnez les colonnes Latitude et Longitude.');
+            $('err-2').style.display = '';
+            return false;
+        }
+    }
+    $('err-2').style.display = 'none';
+    return true;
+}
+async function lancerImport() {
+    if (!fichiers.length) return;
+    $('progression').style.display = '';
+    $('resultat').style.display = 'none';
+    const res = { points: 0, doublons: 0, invalides: 0, couches: [], erreurs: [], coucheIds: [] };
+    for (let i = 0; i < fichiers.length; i++) {
+        const f = fichiers[i];
+        try {
+            if (f.etat === 'erreur') { res.erreurs.push(`${f.file.name} : ${f.message || '?'}`); continue; }
+            if (!f.analyse) { res.erreurs.push(`${f.file.name} : non analysé`); continue; }
+            if (f.analyse.type === 'points') {
+                const { ok, donnees } = await importerPoints(f);
+                if (ok && donnees.ok) {
+                    res.points += donnees.importes || 0;
+                    res.doublons += donnees.doublons || 0;
+                    res.invalides += donnees.invalides || 0;
+                } else res.erreurs.push(`${f.file.name} : ${donnees.erreur || 'erreur serveur'}`);
+            } else {
+                const { ok, donnees } = await importerCouche(f);
+                if (ok && donnees.ok) {
+                    res.couches.push(donnees.nom || f.file.name);
+                    if (donnees.couche_id) res.coucheIds.push(donnees.couche_id);
+                } else res.erreurs.push(`${f.file.name} : ${donnees.erreur || 'erreur serveur'}`);
+            }
+        } catch (e) {
+            res.erreurs.push(`${f.file.name} : ${String(e && e.message || e)}`);
+        }
+    }
+    $('progression').style.display = 'none';
+    const r = $('resultat');
+    const lignes = [];
+    if (res.points > 0) lignes.push(`📍 <b>${res.points}</b> ${t('points_importes', 'point(s) importé(s)')}${res.doublons ? ` · ${res.doublons} ${t('doublons', 'doublon(s)')}` : ''}${res.invalides ? ` · ${res.invalides} ${t('invalides', 'invalide(s)')}` : ''}`);
+    if (res.couches.length) lignes.push(`🗺️ <b>${res.couches.length}</b> ${t('couches_importees', 'couche(s) créée(s)')} : ${res.couches.join(', ')}`);
+    if (res.erreurs.length) lignes.push(`<div style="color:var(--red);margin-top:6px;">${t('erreurs_import', 'Erreurs')} : ${res.erreurs.join(' · ')}</div>`);
+    if (!lignes.length) lignes.push(`<div style="color:var(--red);">${t('aucun_import', 'Aucune donnée importée.')}</div>`);
+    const okGlobal = !res.erreurs.length && (res.points > 0 || res.couches.length);
+    r.className = okGlobal ? 'ok' : 'err';
+    r.innerHTML = lignes.join('<br>') + `<div class="actions" style="justify-content:center;">
+        <a class="btn btn-primary" href="${URL_CARTE}${res.coucheIds.length ? '?importe=' + res.coucheIds[0] : ''}">🗺️ ${t('voir_carte', 'Voir sur la carte')}</a>
+        <button class="btn" onclick="location.reload()">📥 ${t('importer_autres', 'Importer d\'autres fichiers')}</button>
+    </div>`;
+    r.style.display = '';
+}
+function ajouterFichiers(liste) {
+    for (const fichier of liste) {
+        const ext = extDe(fichier.name);
+        const type = typeFichier(ext);
+        const entree = {
+            id: idSuivant++, file: fichier, ext, type,
+            etat: type ? 'attente' : 'erreur',
+            message: type ? '' : t('format_non_supporte', 'Format non supporté.'),
+            analyse: null
+        };
+        fichiers.push(entree);
+    }
+    if (fichiers.length) {
+        fichierActif = fichiers.length - 1;
+        renderListe();
+        fichiers.forEach(entree => { if (entree.type) analyserFichier(entree); });
+    }
+}
+function initialiser() {
+    const zone = $('zone-drop'), input = $('fichier');
+    zone.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => { ajouterFichiers([...input.files]); input.value = ''; });
+    ['dragover', 'dragenter'].forEach(ev => zone.addEventListener(ev, (e) => {
+        e.preventDefault(); zone.classList.add('survol');
+    }));
+    ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, (e) => {
+        e.preventDefault(); zone.classList.remove('survol');
+    }));
+    zone.addEventListener('drop', (e) => { ajouterFichiers([...e.dataTransfer.files]); });
+    $('retour-2').addEventListener('click', () => goStep(1));
+    $('suivant-3').addEventListener('click', () => { if (validerEtape2()) goStep(3); });
+    $('retour-3').addEventListener('click', () => goStep(2));
+    $('btn-importer').addEventListener('click', lancerImport);
+    $('style-taille').addEventListener('input', () => { $('style-taille-val').textContent = $('style-taille').value; });
+    $('style-opacite').addEventListener('input', () => {
+        const v = Math.round(parseFloat($('style-opacite').value) * 100);
+        $('style-opacite-val').textContent = v + ' %';
+    });
+    $('style-couleur').addEventListener('input', swatchesMaj);
+    $('style-cat-active').addEventListener('change', () => {
+        $('panneau-cat').style.display = $('style-cat-active').checked ? '' : 'none';
+        if ($('style-cat-active').checked) categoriesMaj();
+    });
+    $('cat-champ').addEventListener('change', categoriesMaj);
+    $('btn-regenerer').addEventListener('click', () => {
+        const inputCouleurs = [...$('classes-cat').querySelectorAll('input[type=color]')];
+        let decal = Math.floor(Math.random() * PALETTE.length);
+        inputCouleurs.forEach((inp, i) => { inp.value = PALETTE[(i + decal) % PALETTE.length]; });
+    });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialiser);
+else initialiser();
 </script>
 {% include 'cartographie/_i18n.html' %}
 {% include 'cartographie/_pwa_body.html' %}

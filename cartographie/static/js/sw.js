@@ -1,7 +1,9 @@
 /* MUKMAP — Service Worker v1.0 */
-const VERSION = 'mukmap-v1.0.1';
-const PRECACHE = [VERSION, '/', '/manifest.webmanifest'];
-const STATIC_CACHE = 'mukmap-static-v2';
+const VERSION = 'mukmap-v1.0.27';
+const PRECACHE = ['/', '/manifest.webmanifest'];
+/* Cache statique versionné : chaque déploiement crée un nouveau cache,
+ * les anciens sont purgés à l'activation → jamais de JS périmé. */
+const STATIC_CACHE = 'mukmap-static-' + VERSION;
 const PAGE_CACHE = 'mukmap-pages-v2';
 
 const staticRequest = (req) => {
@@ -14,7 +16,6 @@ const staticRequest = (req) => {
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(STATIC_CACHE);
-    for (const res of await cache.keys()) cache.delete(res);
     try {
       await cache.addAll(PRECACHE);
     } catch (e) { /* page hors-ligne au premier lancement : ignorée */ }

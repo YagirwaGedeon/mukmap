@@ -55,6 +55,27 @@ class TestsJSPanneauIdentifier(BaseCartographieTest):
     def test_sections_donnees(self):
         self._lancer(DOSSIER_JS / 'test_sections.js')
 
+    def test_export_carte_core(self):
+        self._lancer(DOSSIER_JS / 'test_export_carte.js')
+
+    def test_mode_avance_core(self):
+        self._lancer(DOSSIER_JS / 'test_mode_avance.js')
+
+    def test_mode_3d_core(self):
+        self._lancer(DOSSIER_JS / 'test_mode_3d.js')
+
+    def test_topographie_core(self):
+        self._lancer(DOSSIER_JS / 'test_topographie.js')
+
+    def test_basemap_selector_core(self):
+        self._lancer(DOSSIER_JS / 'test_basemap_selector.js')
+
+    def test_imagerie_core(self):
+        self._lancer(DOSSIER_JS / 'test_imagerie.js')
+
+    def test_couches_wms_core(self):
+        self._lancer(DOSSIER_JS / 'test_couches_wms.js')
+
     def test_panneau_identifier(self):
         fichier = DOSSIER_JS / '_donnees_points_rendues.json'
         fichier.write_text(json.dumps(self._donnees_points(), ensure_ascii=False), encoding='utf-8')

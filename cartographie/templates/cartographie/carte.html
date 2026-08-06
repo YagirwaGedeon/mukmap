@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="fr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
@@ -49,6 +50,26 @@
         .btn-ghost { background: transparent; border-color: transparent; }
         .btn-sm { padding: 6px 12px; font-size: .78rem; }
         .btn-icon { width: 36px; height: 36px; padding: 0; border-radius: 10px; flex-shrink: 0; }
+        .btn-mode { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border-radius: 10px; font-size: .7rem; font-weight: 700; letter-spacing: .4px; flex-shrink: 0; }
+        .btn-mode .mode-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); transition: all .2s; }
+        .btn-mode.pro { background: linear-gradient(135deg, rgba(109,93,246,.16), rgba(245,158,11,.1)); border-color: rgba(109,93,246,.45); color: var(--accent); }
+        .btn-mode.pro .mode-dot { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+        .mode-cartes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .mode-carte { border: 1px solid var(--border); border-radius: 14px; padding: 16px; background: var(--bg-3); cursor: pointer; transition: all .18s; }
+        .mode-carte:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .mode-carte .mc-icone { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; background: var(--bg-2); border: 1px solid var(--border); color: var(--accent); }
+        .mode-carte.avance .mc-icone { color: var(--orange); }
+        .mode-carte h4 { font-size: .88rem; margin-bottom: 5px; }
+        .mode-carte p { font-size: .72rem; color: var(--text-2); line-height: 1.55; margin-bottom: 12px; }
+        .mode-carte .btn { width: 100%; }
+        #overlay-mode .modale { max-width: 660px; width: 94vw; }
+        #overlay-code .modale { max-width: 420px; }
+        .champ-code { width: 100%; padding: 11px 13px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--border); color: var(--texte); font-size: .9rem; letter-spacing: 3px; text-transform: uppercase; font-family: 'Consolas', 'Courier New', monospace; outline: none; }
+        .champ-code:focus { border-color: var(--accent); }
+        .erreur-code { display: none; font-size: .75rem; color: var(--red); margin-top: 8px; }
+        .erreur-code.visible { display: block; }
+        .lien-admin-mode { display: inline-flex; align-items: center; gap: 7px; font-size: .75rem; color: var(--text-2); text-decoration: none; margin-top: 14px; font-weight: 600; }
+        .lien-admin-mode:hover { color: var(--accent); }
         .btn-tool { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--bg-2); border: 1px solid var(--border); transition: all .15s; }
         .btn-tool:hover { border-color: var(--accent); color: var(--accent); }
         .btn-tool.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; box-shadow: 0 4px 16px rgba(79,70,229,.4); }
@@ -100,7 +121,7 @@
 
         #conteneur { position: fixed; top: 62px; left: 0; right: 0; bottom: 0; display: flex; }
         #sidebar {
-            width: 330px; height: 100%; overflow-y: auto; z-index: 1000; padding: 16px 16px 24px;
+            position: relative; width: 330px; height: 100%; overflow-y: auto; z-index: 1000; padding: 16px 16px 24px;
             background: color-mix(in srgb, var(--bg-2) 92%, transparent); backdrop-filter: blur(14px);
             border-right: 1px solid var(--border); transition: margin-left .25s ease;
         }
@@ -117,6 +138,9 @@
         .bm-btn:hover { color: var(--text); border-color: var(--border-2); }
         .bm-btn.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
         .bm-btn .sw { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; background-size: cover; }
+        .bm-btn.btn-fonds-pro { grid-column: 1 / -1; justify-content: center; gap: 7px; padding: 9px; color: var(--text-2); }
+        .bm-btn.btn-fonds-pro:hover { color: var(--accent); border-color: var(--accent); }
+        .bm-btn.btn-fonds-pro [data-lucide] { width: 14px; height: 14px; }
 
         #outils-dessin { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
         #mesure-barre {
@@ -274,6 +298,19 @@
         }
         .btn-identify-ctrl:hover { color: var(--accent); border-color: var(--accent); }
         .btn-identify-ctrl.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; box-shadow: 0 4px 16px rgba(79,70,229,.4); }
+        .panneau-3d { width: 224px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; box-shadow: var(--shadow); font-size: .72rem; color: var(--text-2); }
+        .panneau-3d .p3d-titre { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text); margin-bottom: 9px; }
+        .panneau-3d .p3d-titre [data-lucide] { width: 14px; height: 14px; color: var(--accent); }
+        .panneau-3d .p3d-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+        .panneau-3d .p3d-valeur { text-align: center; font-weight: 800; color: var(--accent); margin: 4px 0 8px; font-size: .8rem; }
+        .panneau-3d .p3d-presets { display: flex; gap: 4px; margin-bottom: 9px; }
+        .panneau-3d .p3d-presets button { flex: 1; padding: 4px 0; font-size: .64rem; font-weight: 700; border-radius: 7px; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); cursor: pointer; transition: all .15s; }
+        .panneau-3d .p3d-presets button:hover { border-color: var(--accent); color: var(--accent); }
+        .panneau-3d .p3d-presets button.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
+        .panneau-3d .p3d-vues { display: flex; gap: 4px; }
+        .panneau-3d .p3d-vues .p3d-vue { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 0; font-size: .66rem; font-weight: 700; border-radius: 8px; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); cursor: pointer; transition: all .15s; }
+        .panneau-3d .p3d-vues .p3d-vue:hover { border-color: var(--accent); color: var(--accent); }
+        .panneau-3d .p3d-vues .p3d-vue [data-lucide] { width: 12px; height: 12px; }
         #identify-liste {
             position: fixed; z-index: 1500; min-width: 240px; max-width: 340px; display: none;
             background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px;
@@ -347,6 +384,18 @@
         #rapport-modal .rapport-corps .rp-titre { font-size: .64rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); margin: 10px 0 4px; }
         #rapport-modal .rapport-corps .rp-cle { color: var(--text-2); font-weight: 600; }
         #rapport-modal .rapport-corps .rp-val { color: var(--text); word-break: break-word; }
+        #modale-export .modale { max-width: 940px; width: 92vw; max-height: 88vh; overflow-y: auto; }
+        #modale-export .modale-version { white-space: nowrap; }
+        .export-grille { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 6px; }
+        @media (max-width: 860px) { .export-grille { grid-template-columns: 1fr; } }
+        .export-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .export-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+        .exp-cb { display: flex; align-items: center; gap: 8px; font-size: .8rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text); margin: 3px 0; cursor: pointer; }
+        .exp-cb input { width: 15px; height: 15px; accent-color: var(--accent); flex: none; }
+        .export-apercu { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; min-height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-size: .8rem; color: var(--text-2); text-align: center; }
+        .export-apercu img { border-radius: 6px; box-shadow: var(--shadow); max-height: 340px; }
+        .spin { width: 26px; height: 26px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 {% include 'cartographie/_pwa_head.html' %}
 </head>
@@ -372,7 +421,7 @@
     <div class="logo">
         <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
         <div>
-            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span class="badge-v">v1.0</span></div>
+            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span class="badge-v" id="badge-version" title="Version du code actif">v1.0.27</span></div>
             <div class="sous-titre">Plateforme SIG professionnelle — collecte, suivi et sécurité</div>
         </div>
     </div>
@@ -387,7 +436,11 @@
             <span id="badge-notif">0</span>
             <div id="dropdown-notif"></div>
         </div>
+        {% if not est_invite %}
+        <button class="btn btn-icon" id="btn-exporter-carte" title="Exporter la carte" data-i18n-title="exporter_carte"><span data-lucide="file-down"></span></button>
+        {% endif %}
         <button class="btn btn-icon" id="btn-apropos" title="À propos" data-i18n-title="a_propos"><span data-lucide="info"></span></button>
+        <button class="btn btn-mode" id="btn-mode" data-i18n-title="mode_titre"><span class="mode-dot" id="mode-dot"></span><span id="mode-label">Classique</span></button>
         {% include 'cartographie/_selecteur_langue.html' %}
         <button class="btn btn-icon" id="btn-theme" title="Changer de thème" data-i18n-title="theme"><span data-lucide="moon"></span></button>
         <button class="btn btn-icon" id="btn-plein-ecran" title="Plein écran" data-i18n-title="plein_ecran"><span data-lucide="maximize"></span></button>
@@ -424,6 +477,39 @@
 
         <div class="titre-section" data-i18n="fond_carte">Fond de carte</div>
         <div id="basemaps"></div>
+
+        <hr class="separateur">
+        <div class="titre-section" data-i18n="imagerie_titre" id="titre-imagerie" style="display:none">🛰️ Imagerie aérienne</div>
+        <div id="panel-imagerie" style="display:none">
+            <button class="btn btn-sm" id="btn-imagerie-ajouter" style="width:100%;"><span data-lucide="plus"></span> <span data-i18n="imagerie_ajouter">Ajouter une image</span></button>
+            <div id="liste-imagerie" style="display:grid;gap:6px;margin-top:6px;"></div>
+        </div>
+        <style>
+            .img-item { display:flex; align-items:center; gap:6px; background:var(--bg-3); border:1px solid var(--border); border-radius:9px; padding:6px 8px; }
+            .img-item .img-nom { flex:1; font-size:.72rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+            .img-item .img-oeil, .img-item .img-suppr { border:1px solid var(--border); background:var(--bg-2); border-radius:7px; width:26px; height:26px; cursor:pointer; font-size:.72rem; display:flex; align-items:center; justify-content:center; color:var(--text-2); }
+            .img-item .img-oeil:hover { border-color:var(--accent); }
+            .img-item .img-suppr:hover { border-color:var(--red); color:var(--red); }
+        </style>
+
+        <hr class="separateur">
+        <div class="titre-section" data-i18n="couches_titre" id="titre-couches" style="display:none">🗺️ Couches WMS</div>
+        <div id="panel-couches" style="display:none">
+            <button class="btn btn-sm" id="btn-couches-ajouter" style="width:100%;"><span data-lucide="plus"></span> <span data-i18n="couches_ajouter">Ajouter une couche</span></button>
+            <div id="liste-couches" style="display:grid;gap:6px;margin-top:6px;"></div>
+        </div>
+        <style>
+            .wms-item { display:flex; flex-wrap:wrap; align-items:center; gap:6px; background:var(--bg-3); border:1px solid var(--border); border-radius:9px; padding:6px 8px; }
+            .wms-item .wms-nom { flex:1; min-width:90px; font-size:.72rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+            .wms-item .wms-oeil, .wms-item .wms-suppr { border:1px solid var(--border); background:var(--bg-2); border-radius:7px; width:26px; height:26px; cursor:pointer; font-size:.72rem; display:flex; align-items:center; justify-content:center; color:var(--text-2); }
+            .wms-item .wms-oeil:hover { border-color:var(--accent); }
+            .wms-item .wms-suppr:hover { border-color:var(--red); color:var(--red); }
+            .wms-item .wms-opacite { flex:1 0 100%; display:flex; align-items:center; }
+            .wms-item .wms-opacite-lbl { display:flex; align-items:center; gap:6px; width:100%; font-size:.68rem; color:var(--text-3); }
+            .wms-item .wms-opacite-lbl [data-lucide] { width:12px; height:12px; flex:none; }
+            .wms-item .wms-opacite-lbl input[type="range"] { flex:1; accent-color: var(--accent); }
+            .wms-item .wms-opacite-lbl em { width:36px; text-align:right; font-style:normal; }
+        </style>
 
         <hr class="separateur">
         <div class="titre-section"><span data-i18n="filtres">Filtres dynamiques</span> <button class="btn btn-sm btn-ghost" onclick="reinitialiserFiltres()" style="color:var(--accent);font-size:.72rem;" data-i18n="reinitialiser">Réinitialiser</button></div>
@@ -657,11 +743,184 @@
     </div>
 </div>
 
+<div id="modale-export" class="overlay" style="display:none;">
+    <div class="modale modale-export">
+        <div class="modale-tete">
+            <div class="modale-titre"><span data-lucide="file-down"></span> <span data-i18n="export_titre">Exporter la carte</span></div>
+            <div class="modale-version">A4 → A0 · PDF / JPEG</div>
+        </div>
+        <div class="export-grille">
+            <div class="export-col">
+                <label data-i18n="export_format">Format</label>
+                <select id="export-format">
+                    <option value="pdf" data-i18n="export_format_pdf">PDF (recommandé)</option>
+                    <option value="jpeg">JPEG</option>
+                </select>
+
+                <label data-i18n="export_zone">Zone à exporter</label>
+                <select id="export-zone">
+                    <option value="vue" data-i18n="export_zone_vue">Vue actuelle de la carte</option>
+                    <option value="toutes" data-i18n="export_zone_toutes">Toutes les données</option>
+                </select>
+
+                <div class="export-2col">
+                    <div>
+                        <label data-i18n="export_format_page">Format de page</label>
+                        <select id="export-format-page">
+                            <option value="A4">A4</option><option value="A3">A3</option>
+                            <option value="A2">A2</option><option value="A1">A1</option><option value="A0">A0</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label data-i18n="export_orientation">Orientation</label>
+                        <select id="export-orientation">
+                            <option value="L" selected data-i18n="export_paysage">Paysage</option>
+                            <option value="P" data-i18n="export_portrait">Portrait</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="export-2col">
+                    <div>
+                        <label data-i18n="export_dpi">Résolution (DPI)</label>
+                        <select id="export-dpi">
+                            <option value="150" selected>150</option><option value="300">300</option><option value="600">600</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label data-i18n="export_marges">Marges</label>
+                        <select id="export-marges">
+                            <option value="normales" data-i18n="export_marges_normales">Normales (12 mm)</option>
+                            <option value="reduites" data-i18n="export_marges_reduites">Réduites (8 mm)</option>
+                            <option value="personnalisees" data-i18n="export_marges_perso">Personnalisées</option>
+                        </select>
+                    </div>
+                </div>
+                <input type="number" id="export-marge-custom" min="4" max="40" value="12" style="margin-top:6px;display:none;" data-i18n-ph="export_marges_perso">
+
+                <button type="button" class="btn btn-sm" id="export-options-toggle" style="width:100%;margin-top:10px;justify-content:center;"><span data-lucide="sliders-horizontal"></span> <span data-i18n="export_options">Options avancées</span></button>
+                <div id="export-options" style="display:none;">
+                    <div class="export-2col" style="margin-top:10px;">
+                        <div>
+                            <label data-i18n="export_qualite">Qualité JPEG</label>
+                            <select id="export-qualite">
+                                <option value="haute" data-i18n="export_qualite_haute">Haute</option>
+                                <option value="standard" data-i18n="export_qualite_standard">Standard</option>
+                                <option value="tres-haute" data-i18n="export_qualite_tres_haute">Très haute</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label data-i18n="export_taille">Taille (JPEG)</label>
+                            <select id="export-taille">
+                                <option value="1920x1080">1920 × 1080</option>
+                                <option value="2560x1440">2560 × 1440</option>
+                                <option value="3840x2160">3840 × 2160</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="export-col">
+                <label data-i18n="export_infos">Informations</label>
+                <input id="export-champ-titre" placeholder="Titre de la carte" data-i18n-ph="export_ph_titre">
+                <input id="export-champ-sous-titre" placeholder="Sous-titre (activité)" data-i18n-ph="export_ph_sous_titre">
+                <input id="export-champ-auteur" placeholder="Auteur" data-i18n-ph="export_ph_auteur">
+                <input id="export-champ-source" placeholder="Source des données" data-i18n-ph="export_ph_source">
+                <textarea id="export-champ-notes" rows="2" placeholder="Notes" data-i18n-ph="export_ph_notes"></textarea>
+                <label class="exp-cb" style="margin-top:10px;"><input type="checkbox" id="export-date-auto" checked> <span data-i18n="export_date_auto">Date automatique</span></label>
+
+                <label data-i18n="export_elements" style="margin-top:12px;">Éléments à afficher</label>
+                <div class="export-checks">
+                    <label class="exp-cb"><input type="checkbox" id="export-el-titre" checked> <span data-i18n="export_titre_champ">Titre</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-sous_titre" checked> <span data-i18n="export_sous_titre">Sous-titre</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-legende" checked> <span data-i18n="legende">Légende</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-echelle" checked> <span data-i18n="echelle">Échelle</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-nord" checked> <span data-i18n="export_nord">Flèche nord</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-coordonnees" checked> <span data-i18n="coordonnees">Coordonnées</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-source" checked> <span data-i18n="source">Source</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-date" checked> <span data-i18n="date">Date</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-projection" checked> <span data-i18n="projection">Projection</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-projet" checked> <span data-i18n="projet">Projet</span></label>
+                    <label class="exp-cb"><input type="checkbox" id="export-el-logo" checked> <span data-i18n="export_logo">Logo</span></label>
+                </div>
+
+                <label data-i18n="export_apercu_titre" style="margin-top:12px;">Aperçu</label>
+                <div id="export-apercu-zone" class="export-apercu" style="display:none;"></div>
+            </div>
+        </div>
+        <div class="modale-actions">
+            <button type="button" class="btn" id="export-annuler" data-i18n="annuler">Annuler</button>
+            <button type="button" class="btn" id="export-apercu"><span data-lucide="image"></span> <span data-i18n="export_apercevoir">Aperçu</span></button>
+            <button type="button" class="btn btn-primary" id="export-lancer"><span data-lucide="download"></span> <span data-i18n="export_lancer">Exporter</span></button>
+        </div>
+        <input type="hidden" id="export-csrf" value="{{ csrf_token }}">
+    </div>
+</div>
+
+<div id="overlay-mode" class="overlay" style="display:none;">
+    <div class="modale">
+        <div class="modale-tete">
+            <div class="modale-titre"><span data-lucide="sparkles"></span><span data-i18n="mode_choisir">Choisissez votre mode</span></div>
+            <button type="button" class="btn btn-icon btn-sm" onclick="document.getElementById('overlay-mode').style.display='none'">✕</button>
+        </div>
+        <p class="modale-desc" data-i18n="mode_bienvenue">Comment souhaitez-vous utiliser MUKMAP ?</p>
+        <div class="mode-cartes">
+            <div class="mode-carte" data-mode="classique">
+                <div class="mc-icone"><span data-lucide="map"></span></div>
+                <h4 data-i18n="mode_classique">MUKMAP Classique</h4>
+                <p data-i18n="mode_texte_classique">Simple, rapide et accessible : recherche de lieux, carte, marqueurs, dessin, mesures, export et rapports.</p>
+                <button type="button" class="btn btn-primary" data-i18n="mode_utiliser">Utiliser ce mode</button>
+            </div>
+            <div class="mode-carte avance" data-mode="avance">
+                <div class="mc-icone"><span data-lucide="rocket"></span></div>
+                <h4 data-i18n="mode_avance">MUKMAP Pro / Mode Avancé</h4>
+                <p data-i18n="mode_texte_avance">Environnement professionnel : SIG avancé, fonds de carte, terrain 3D, topographie, géologie, mines, sondages et rapports professionnels.</p>
+                <button type="button" class="btn btn-primary" data-i18n="mode_utiliser">Utiliser ce mode</button>
+            </div>
+        </div>
+        <div id="mode-admin-lien" style="display:none;text-align:center;">
+            <a class="lien-admin-mode" href="{% url 'mode_avance_admin' %}"><span data-lucide="key-round"></span> <span data-i18n="mode_admin_creer">Générer un code</span></a>
+        </div>
+    </div>
+</div>
+
+<div id="overlay-code" class="overlay" style="display:none;">
+    <div class="modale">
+        <div class="modale-tete">
+            <div class="modale-titre"><span data-lucide="key-round"></span><span data-i18n="mode_code_requis">Un code d'accès est requis pour le Mode Avancé.</span></div>
+            <button type="button" class="btn btn-icon btn-sm" onclick="document.getElementById('overlay-code').style.display='none'">✕</button>
+        </div>
+        <p class="modale-desc" data-i18n="mode_code_requis_desc">Saisissez le code permanent ou temporaire fourni par l'administrateur.</p>
+        <input type="text" id="input-code-mode" class="champ-code" autocomplete="off" spellcheck="false" maxlength="16" placeholder="MUK-XXXX-XXXX" data-i18n-ph="mode_code_placeholder">
+        <div class="erreur-code" id="erreur-code"></div>
+        <div class="modale-actions">
+            <button type="button" class="btn btn-primary" id="btn-valider-code"><span data-lucide="check"></span> <span data-i18n="mode_code_valider">Valider le code</span></button>
+        </div>
+    </div>
+</div>
+
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="{% static 'js/export-carte.js' %}?v=27"></script>
+<script src="{% static 'js/mode-avance.js' %}?v=27"></script>
+<script src="{% static 'js/mode-3d.js' %}?v=27"></script>
+<script src="{% static 'js/topographie.js' %}?v=27"></script>
+<script src="{% static 'js/basemap-selector.js' %}?v=27"></script>
+<script src="{% static 'js/imagerie.js' %}?v=27"></script>
+<script src="{% static 'js/couches-wms.js' %}?v=27"></script>
 <script>
 const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_token }}';
+
+// ─── MODE (Classique / Avancé) : état injecté par le serveur ──
+window.ETAT_MODE = {{ mode_json|safe }};
+window.URL_MODE_ADMIN = '{% url 'mode_avance_admin' %}';
+
+// MukmapT (i18n) n'est défini qu'à la fin du body (_i18n.html). Cette déclaration
+// anticipée évite les ReferenceError lors de l'exécution synchrone du script
+// (ex. map.addControl → onAdd → tIdent) tant que le module i18n n'est pas chargé.
+var mukmapT;
 
 // ─── THÈME ────────────────────────────────────────────────────
 function appliquerTheme(theme) {
@@ -843,6 +1102,9 @@ const BASEMAPS = {
     dark: {nom:'Dark',  sw:'linear-gradient(135deg,#1e293b,#0f172a)', tiles:'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attribution:'© CARTO'},
     light:{nom:'Light', sw:'linear-gradient(135deg,#f8fafc,#e2e8f0)', tiles:'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attribution:'© CARTO'},
     hot:  {nom:'Humanitaire', sw:'linear-gradient(135deg,#fbbf24,#d97706)', tiles:'https://tile-{s}.openstreetmap.fr/hot/{z}/{x}/{y}.png', attribution:'© OSM HOT'},
+    admin:{nom:'Administrative', sw:'linear-gradient(135deg,#f1f5f9,#cbd5e1)', tiles:'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', attribution:'© Esri — World Boundaries and Places'},
+    natgeo:{nom:'Internationale', sw:'linear-gradient(135deg,#fef3c7,#f59e0b)', tiles:'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}', attribution:'© Esri, National Geographic'},
+    minimal:{nom:'Minimaliste', sw:'linear-gradient(135deg,#f8fafc,#cbd5e1)', tiles:'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', attribution:'© Esri — Light Gray Canvas'},
 };
 let basemapActif = 'osm';
 function styleComplet() {
@@ -854,20 +1116,37 @@ function styleComplet() {
     return {version:8, glyphs:'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf', sources, layers};
 }
 const FONT = ['Open Sans Regular'];
+function appliquerBasemap(k) {
+    if (!BASEMAPS[k] && !(window.BasemapSelectorCore && BasemapSelectorCore.obtenir(k))) return;
+    basemapActif = k;
+    const fExt = window.BasemapSelectorCore ? BasemapSelectorCore.obtenir(k) : null;
+    const lbl = document.getElementById('label-fonds-pro');
+    if (lbl && fExt) lbl.textContent = fExt.nom;
+    document.querySelectorAll('.bm-btn').forEach(x => x.classList.toggle('active', x.dataset.bm === k));
+    Object.keys(BASEMAPS).forEach(m => map.setLayoutProperty('bm-' + m, 'visibility', m === k ? 'visible' : 'none'));
+    if (mini) mini.setStyle(styleMinimap());
+    try { localStorage.setItem('mukmap_basemap', k); } catch(e) {}
+}
+window.appliquerBasemap = appliquerBasemap;
 const conteneurBasemaps = document.getElementById('basemaps');
 Object.keys(BASEMAPS).forEach(k => {
     const b = document.createElement('button');
     b.className = 'bm-btn' + (k === basemapActif ? ' active' : '');
     b.dataset.bm = k;
     b.innerHTML = `<span class="sw" style="background:${BASEMAPS[k].sw}"></span>${BASEMAPS[k].nom}`;
-    b.addEventListener('click', () => {
-        basemapActif = k;
-        document.querySelectorAll('.bm-btn').forEach(x => x.classList.toggle('active', x.dataset.bm === k));
-        Object.keys(BASEMAPS).forEach(m => map.setLayoutProperty('bm-' + m, 'visibility', m === k ? 'visible' : 'none'));
-        if (mini) mini.setStyle(styleMinimap());
-    });
+    b.addEventListener('click', () => appliquerBasemap(k));
     conteneurBasemaps.appendChild(b);
 });
+const btnFondsPro = document.createElement('button');
+btnFondsPro.id = 'btn-fonds-pro';
+btnFondsPro.className = 'bm-btn btn-fonds-pro';
+btnFondsPro.innerHTML = `<span data-lucide="layers"></span><span id="label-fonds-pro">Fonds de carte</span>`;
+btnFondsPro.addEventListener('click', () => {
+    if (window.BasemapSelector) BasemapSelector.ouvrir(map, basemapActif, appliquerBasemap);
+});
+conteneurBasemaps.appendChild(btnFondsPro);
+const etatModeInitial = window.ETAT_MODE || {};
+btnFondsPro.style.display = (etatModeInitial.mode === 'avance' && etatModeInitial.acces_avance) ? '' : 'none';
 
 // ─── DONNÉES ──────────────────────────────────────────────────
 const donneesPoints = {{ points_json|safe }};
@@ -878,10 +1157,33 @@ const rapportImport = {% if rapport_import %}{{ rapport_import|safe }}{% else %}
 let coucheImporteeCible = '{{ couche_importee }}';
 
 // ─── INITIALISATION CARTE ─────────────────────────────────────
-const map = new maplibregl.Map({container:'map', style:styleComplet(), center:[29.22, -1.67], zoom:9});
+// preserveDrawingBuffer:true → le canvas WebGL garde sa dernière frame en mémoire,
+// indispensable pour l'export PDF/JPEG (toDataURL) sinon le buffer est vidé après affichage.
+const map = new maplibregl.Map({container:'map', style:styleComplet(), center:[29.22, -1.67], zoom:9, preserveDrawingBuffer:true});
+window.map = map;
 map.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'top-right');
 map.addControl(new maplibregl.ScaleControl({maxWidth:120, unit:'metric'}), 'bottom-left');
 map.addControl(new maplibregl.FullscreenControl());
+
+map.on('load', () => {
+    if (window.BasemapSelector) BasemapSelector.installer({map, actif: basemapActif, appliquerExterne: appliquerBasemap});
+    if (window.Imagerie) Imagerie.installer({map});
+    if (window.CouchesWMS) CouchesWMS.installer({map});
+    const chargementPerso = window.BasemapSelector
+        ? BasemapSelector.chargerExternes({map, appliquerExterne: appliquerBasemap})
+        : Promise.resolve();
+    chargementPerso.then(() => {
+        let pref = null;
+        try { pref = localStorage.getItem('mukmap_basemap'); } catch(e) {}
+        if (pref && pref !== 'osm') {
+            const ext = window.BasemapSelectorCore ? BasemapSelectorCore.obtenir(pref) : null;
+            if (BASEMAPS[pref] || ext) {
+                if (ext && !BASEMAPS[pref]) BasemapSelectorCore.appliquer(map, pref);
+                appliquerBasemap(pref);
+            }
+        }
+    });
+});
 
 let mini = null;
 function styleMinimap() {
@@ -979,6 +1281,16 @@ map.on('load', () => {
 });
 
 let couchePointLayers = [];
+function styleCouleurCouche(c, defaut) {
+    const s = c.style_options || {};
+    if (s.categories && s.categories.champ && Array.isArray(s.categories.classes) && s.categories.classes.length) {
+        const stops = [];
+        s.categories.classes.forEach(k => { stops.push(k.valeur, k.couleur || s.couleur || defaut); });
+        return ['match', ['get', s.categories.champ], ...stops, s.couleur || c.couleur || defaut];
+    }
+    return s.couleur || c.couleur || defaut;
+}
+const GLYPHES_SYMBOLES = {cercle:'●', carre:'■', triangle:'▲', losange:'◆', croix:'✚', etoile:'★', point:'•'};
 function rechargerCouches() {
     fetch('{% url "geometrie_donnees" %}').then(r => r.json()).then(data => {
         map.getStyle().layers.forEach(l => { if (l.id.startsWith('couche-')) map.removeLayer(l.id); });
@@ -988,12 +1300,35 @@ function rechargerCouches() {
         data.forEach(c => {
             couchesDonnees.push(c);
             const srcId = 'couche-' + c.id;
+            const s = c.style_options || {};
+            const couleur = styleCouleurCouche(c, '#3388ff');
+            const taille = Math.min(Math.max(Number(s.taille) || 6, 1), 20);
+            const opacite = Math.min(Math.max(Number(s.opacite) || 1, 0), 1);
+            const symbole = GLYPHES_SYMBOLES[s.symbole] ? s.symbole : 'cercle';
+            const champEtiquette = (s.etiquette && s.etiquette.trim()) ? s.etiquette.trim() : 'nom';
             map.addSource(srcId, {type:'geojson', data:c.geojson});
-            map.addLayer({id:'couche-ligne-' + c.id, type:'line', source:srcId, paint:{'line-color':c.couleur,'line-width':2}});
-            map.addLayer({id:'couche-fill-' + c.id, type:'fill', source:srcId, paint:{'fill-color':c.couleur,'fill-opacity':.15}});
-            map.addLayer({id:'couche-point-' + c.id, type:'circle', source:srcId, paint:{'circle-color':c.couleur,'circle-radius':6,'circle-stroke-color':'#fff','circle-stroke-width':2}});
+            map.addLayer({id:'couche-ligne-' + c.id, type:'line', source:srcId, paint:{
+                'line-color':couleur, 'line-width':Math.min(Math.max(taille / 3, 1), 10), 'line-opacity':opacite}});
+            map.addLayer({id:'couche-fill-' + c.id, type:'fill', source:srcId, paint:{
+                'fill-color':couleur, 'fill-opacity':.15 * opacite}});
+            if (c.type === 'point') {
+                map.addLayer({id:'couche-point-' + c.id, type:'circle', source:srcId, paint:{
+                    'circle-color':couleur, 'circle-radius':Math.max(taille, 4),
+                    'circle-stroke-color':'#fff', 'circle-stroke-width':2,
+                    'circle-opacity':symbole === 'cercle' ? opacite : 0.01}});
+                if (symbole !== 'cercle') {
+                    map.addLayer({id:'couche-glyphe-' + c.id, type:'symbol', source:srcId, layout:{
+                        'text-field':GLYPHES_SYMBOLES[symbole], 'text-size':taille * 3.4,
+                        'text-allow-overlap':false}, paint:{'text-color':couleur, 'text-opacity':opacite}});
+                }
+            } else {
+                map.addLayer({id:'couche-point-' + c.id, type:'circle', source:srcId, paint:{
+                    'circle-color':couleur, 'circle-radius':Math.max(taille, 4), 'circle-opacity':0.01}});
+            }
             couchePointLayers.push('couche-point-' + c.id);
-            map.addLayer({id:'couche-symbole-' + c.id, type:'symbol', source:srcId, layout:{'text-field':['get','nom'],'text-size':11,'text-offset':[0,-1.4],'text-font':FONT}, paint:{'text-color':c.couleur,'text-halo-color':'#ffffff','text-halo-width':1.5}});
+            map.addLayer({id:'couche-symbole-' + c.id, type:'symbol', source:srcId, layout:{
+                'text-field':['get', champEtiquette], 'text-size':11, 'text-offset':[0,-1.4],
+                'text-font':FONT}, paint:{'text-color':couleur, 'text-halo-color':'#ffffff', 'text-halo-width':1.5}});
         });
         remonterHighlight();
         initialiserCouchesClic();
@@ -1318,7 +1653,7 @@ function initialiserInteractions() {
     });
     // Remplissage automatique du formulaire
     map.on('click', e => {
-        if (mode && mode !== 'erase' || identifyPanel.style.display !== 'none') return;
+        if (mode && mode !== 'erase' || identifyPanel.style.display !== 'none' || (window.OutilsTopo && window.OutilsTopo.modeActif())) return;
         const latInput = document.getElementById('lat-input');
         const lngInput = document.getElementById('lng-input');
         if (latInput) latInput.value = e.lngLat.lat.toFixed(6);
@@ -1807,6 +2142,7 @@ function basculerIdentifiant() {
 }
 function identifierClic(e) {
     if (mode) return;
+    if (window.OutilsTopo && window.OutilsTopo.modeActif()) return;
     const etaitActif = identifiantActif;
     const candidats = [];
     const vus = new Set();
@@ -2230,6 +2566,19 @@ btnSidebar.addEventListener('click', () => {
     sidebar.classList.toggle('fermee');
     btnSidebar.classList.toggle('actif', !sidebar.classList.contains('fermee'));
 });
+
+// ─── EXPORT CARTE : pont vers les variables globales ─────────
+window.CATS = CATS;
+window.ZONE_STATUTS = ZONE_STATUTS;
+window.BASEMAPS = BASEMAPS;
+window.zones = zones;
+window.activites = activites;
+window.agents = agents;
+window.couchesDonnees = couchesDonnees;
+window.pointsFiltres = pointsFiltres;
+window.userNom = '{{ user.get_full_name|default:user.username|escapejs }}';
+window.activite_actuelle_nom = '{{ activite_actuelle.nom|default:''|escapejs }}';
+Object.defineProperty(window, 'basemapActif', { get: function () { return basemapActif; } });
 
 if (window.lucide) lucide.createIcons();
 </script>

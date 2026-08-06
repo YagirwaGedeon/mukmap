@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """Cahier des charges n°25 : détection automatique des coordonnées, choix interactif,
-formats GeoJSON/KML/GPX, règle « jamais 0 point silencieux »."""
+formats GeoJSON/KML/GPX, règle « jamais 0 point silencieux ».
+Partie 2 : import AJAX avec options de style (couleur, symbole, taille, étiquettes, catégorisation)."""
 
+import io
 import json
+
+from django.core.files.uploadedfile import InMemoryUploadedFile
 
 from cartographie.models import CoucheGeometrie, Geometrie
 
@@ -243,3 +247,109 @@ class TestsGPXTerrain(BaseCartographieTest):
         self.assertGreaterEqual(len(gs), 3, 'waypoints + track + route importés')
         self.assertGreaterEqual(sum(1 for g in gs if g.type == 'LineString'), 2, 'track et route → lignes')
         self.assertGreaterEqual(sum(1 for g in gs if g.type == 'Point'), 1, 'waypoint → point')
+
+
+class TestsStyleImport(BaseCartographieTest):
+    """Partie 2 : import AJAX avec options de style (wizard 4 étapes)."""
+
+    GEOJSON = b'''{"type":"FeatureCollection","features":[
+ {"type":"Feature","properties":{"Nom":"A","Type":"Agri"},"geometry":{"type":"Point","coordinates":[24.456,-0.123]}},
+ {"type":"Feature","properties":{"Nom":"B","Type":"Peche"},"geometry":{"type":"Point","coordinates":[24.512,-0.145]}}
+]}'''
+
+    def post_ajax(self, nom_couche, nom_fichier, contenu, style=None):
+        """POST AJAX (multipart, ajax=1) sur /geometrie/importer/."""
+        fich = InMemoryUploadedFile(
+            io.BytesIO(contenu), 'fichier_geom', nom_fichier,
+            'application/octet-stream', len(contenu), None)
+        donnees = {'nom_couche': nom_couche, 'fichier_geom': fich, 'ajax': '1'}
+        if style is not None:
+            donnees['style_options'] = json.dumps(style)
+        return self.client.post('/geometrie/importer/', donnees)
+
+    def test_import_ajax_avec_style_complet(self):
+        style = {
+            'couleur': '#22c55e', 'symbole': 'losange', 'taille': 9, 'opacite': 0.8,
+            'etiquette': 'Nom',
+            'categories': {'champ': 'Type', 'classes': [
+                {'valeur': 'Agri', 'couleur': '#ef4444', 'label': 'Agriculture'},
+                {'valeur': 'Peche', 'couleur': '#3b82f6', 'label': 'Pêche'},
+            ]},
+        }
+        resp = self.post_ajax('Style Complet', 'style.geojson', self.GEOJSON, style)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['importes'], 2)
+        self.assertEqual(data['type'], 'point')
+        couche = CoucheGeometrie.objects.get(pk=data['couche_id'])
+        self.assertEqual(couche.style_couleur, '#22c55e')
+        so = couche.style_options
+        self.assertEqual(so['symbole'], 'losange')
+        self.assertEqual(so['taille'], 9)
+        self.assertEqual(so['opacite'], 0.8)
+        self.assertEqual(so['etiquette'], 'Nom')
+        self.assertEqual(so['categories']['champ'], 'Type')
+        self.assertEqual(len(so['categories']['classes']), 2)
+        self.assertEqual(so['categories']['classes'][0]['couleur'], '#ef4444')
+        self.assertEqual(data['style']['couleur'], '#22c55e', 'style renvoyé dans la réponse')
+
+    def test_style_invalide_nettoye(self):
+        style = {
+            'couleur': 'rouge', 'symbole': 'cercleXX', 'taille': 99, 'opacite': -2,
+            'etiquette': 'x' * 300,
+            'categories': {'champ': 'Type', 'classes': [
+                {'valeur': '', 'couleur': '#ef4444'}, {'valeur': 'Agri', 'couleur': 'pas-hex'},
+                'poubelle',
+            ]},
+        }
+        resp = self.post_ajax('Style Nettoye', 'net.geojson', self.GEOJSON, style)
+        self.assertEqual(resp.status_code, 200)
+        couche = CoucheGeometrie.objects.get(pk=resp.json()['couche_id'])
+        so = couche.style_options
+        self.assertEqual(so['couleur'], '#3388ff', 'couleur invalide → défaut')
+        self.assertEqual(so['symbole'], 'cercle', 'symbole inconnu → cercle')
+        self.assertEqual(so['taille'], 20, 'taille plafonnée à 20')
+        self.assertEqual(so['opacite'], 0, 'opacité bornée à 0')
+        self.assertEqual(len(so['etiquette']), 100, 'étiquette tronquée à 100')
+        classes = so['categories']['classes']
+        self.assertEqual(len(classes), 1, 'classe sans valeur et entrée non-dict ignorées')
+        self.assertEqual(classes[0]['couleur'], '#3388ff', 'couleur de classe invalide → couleur couche')
+
+    def test_import_ajax_erreurs(self):
+        r = self.post_ajax('', 'vide.geojson', self.GEOJSON)
+        self.assertEqual(r.status_code, 400)
+        r = self.post_ajax('Sans Fichier', 'x.txt', b'plop')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('Format non supporté', r.json()['erreur'])
+        csv = b'ID,lat_a,lat_b,lon_a,lon_b,Nom\n1,-1.234,-1.234,29.321,29.321,A\n'
+        r = self.post_ajax('Ambig AJAX', 'ambig.csv', csv)
+        self.assertEqual(r.status_code, 400, 'ambiguïté en AJAX → 400 explicite')
+        self.assertIn('choisir les colonnes', r.json()['erreur'])
+
+    def test_geometrie_donnees_retourne_style(self):
+        style = {'couleur': '#d946ef', 'symbole': 'etoile', 'taille': 12}
+        resp = self.post_ajax('Style API', 'api2.geojson', self.GEOJSON, style)
+        couche_id = resp.json()['couche_id']
+        data = self.client.get('/geometrie/donnees/').json()
+        couche = [c for c in data if c['id'] == couche_id][0]
+        self.assertEqual(couche['style_options']['couleur'], '#d946ef')
+        self.assertEqual(couche['style_options']['symbole'], 'etoile')
+        self.assertEqual(len(couche['geojson']['features']), 2)
+
+    def test_style_conserve_via_choix_colonnes(self):
+        csv = b'ID,lat_a,lat_b,lon_a,lon_b,Nom\n1,-1.234,-1.234,29.321,29.321,A\n'
+        style = {'couleur': '#f59e0b', 'symbole': 'carre', 'taille': 5}
+        fich = InMemoryUploadedFile(
+            io.BytesIO(csv), 'fichier_geom', 'ambig2.csv',
+            'application/octet-stream', len(csv), None)
+        r = self.client.post('/geometrie/importer/', {
+            'nom_couche': 'Ambig Style', 'fichier_geom': fich,
+            'style_options': json.dumps(style)})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.url, '/import/choix-colonnes/')
+        r = self.client.post('/import/choix-colonnes/', {'col_lon': 'lon_b', 'col_lat': 'lat_a', 'col_alt': ''})
+        self.assertEqual(r.status_code, 302)
+        couche = CoucheGeometrie.objects.get(nom='Ambig Style')
+        self.assertEqual(couche.style_couleur, '#f59e0b', 'style conservé à travers le choix interactif')
+        self.assertEqual(couche.style_options['symbole'], 'carre')

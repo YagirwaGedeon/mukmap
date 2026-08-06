@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codes d'accès au Mode Avancé — MUKMAP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+
+        #topbar { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px; padding: 12px 22px; background: color-mix(in srgb, var(--bg-2) 88%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .pastille { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+        .titre { font-weight: 800; font-size: 1rem; }
+        .sous-titre { font-size: .7rem; color: var(--text-3); }
+        nav { display: flex; gap: 6px; margin-left: 24px; flex-wrap: wrap; }
+        nav a { text-decoration: none; color: var(--text-2); font-size: .8rem; font-weight: 600; padding: 8px 14px; border-radius: 10px; transition: all .18s; display: flex; align-items: center; gap: 7px; }
+        nav a:hover { background: var(--bg-3); color: var(--text); }
+        nav a.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+        .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+        .conteneur { padding: 22px; max-width: 1100px; margin: 0 auto; }
+        .entete { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+        .entete h2 { font-size: 1.2rem; display: flex; align-items: center; gap: 9px; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: .83rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; cursor: pointer; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-rouge { background: rgba(239,68,68,.14); color: var(--red); border-color: rgba(239,68,68,.3); }
+        .btn-vert { background: rgba(34,197,94,.14); color: var(--green); border-color: rgba(34,197,94,.3); }
+        .btn-sm { padding: 6px 12px; font-size: .74rem; border-radius: 8px; }
+
+        .ai { display: flex; align-items: center; justify-content: center; }
+        .ia-centre { justify-content: center; }
+
+        .flash { display: none; padding: 11px 14px; border-radius: 10px; font-size: .8rem; margin-bottom: 16px; }
+        .flash.visible { display: block; }
+        .flash-ok { border: 1px solid var(--green); background: rgba(34,197,94,.1); color: var(--green); }
+        .flash-err { border: 1px solid var(--red); background: rgba(239,68,68,.1); color: var(--red); }
+
+        .form-code { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: end; }
+        .form-code label { display: grid; gap: 6px; font-size: .72rem; font-weight: 700; color: var(--text-2); }
+        .form-code input, .form-code select { padding: 9px 12px; border-radius: 9px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); font-size: .82rem; outline: none; }
+        .form-code input:focus, .form-code select:focus { border-color: var(--accent); }
+        .form-code .pleine { grid-column: 1 / -1; }
+        .champs-cache { display: none; }
+
+        .code-genere { display: none; padding: 14px 16px 16px; border-radius: var(--radius); border: 1px dashed var(--green); background: rgba(34,197,94,.07); margin-bottom: 26px; }
+        .code-genere.visible { display: block; }
+        .code-genere label { font-size: .76rem; font-weight: 700; color: var(--green); }
+        .code-genere .code-valeur { font-family: 'Consolas', 'Courier New', monospace; font-size: 1.35rem; letter-spacing: 4px; color: var(--green); user-select: all; margin: 8px 0 4px; }
+
+        .boite { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+        .boite-entete { padding: 15px 18px; border-bottom: 1px solid var(--border); font-weight: 800; display: flex; align-items: center; gap: 9px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: .7rem; color: var(--text-3); text-transform: uppercase; letter-spacing: .4px; padding: 11px 16px; border-bottom: 1px solid var(--border); }
+        td { padding: 12px 16px; font-size: .8rem; border-bottom: 1px solid var(--border); }
+        tr:last-child td { border-bottom: none; }
+        .badge { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: .66rem; font-weight: 700; }
+        .badge-vert { background: rgba(34,197,94,.15); color: var(--green); }
+        .badge-rouge { background: rgba(239,68,68,.15); color: var(--red); }
+        .badge-jaune { background: rgba(245,158,11,.15); color: var(--orange); }
+        .vide { color: var(--text-3); text-align: center; padding: 50px 0; font-size: .85rem; }
+        .muted { color: var(--text-3); font-size: .74rem; }
+        .retour { display: inline-flex; align-items: center; gap: 7px; color: var(--text-2); text-decoration: none; font-size: .8rem; font-weight: 600; margin-bottom: 14px; }
+        .retour:hover { color: var(--accent); }
+        @media (max-width: 900px) { nav { display: none; } }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<header id="topbar">
+    <div class="logo">
+        <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+        <div>
+            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">PRO</span></div>
+            <div class="sous-titre" data-i18n="mode_admin_titre">Administration · Codes d'accès au Mode Avancé</div>
+        </div>
+    </div>
+    <nav>
+        <a href="{% url 'dashboard' %}"><i data-lucide="layout-dashboard"></i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'projet_list' %}"><i data-lucide="folder-kanban"></i> <span data-i18n="projets">Projets</span></a>
+        <a href="{% url 'audit_list' %}"><i data-lucide="history"></i> <span data-i18n="historique">Historique</span></a>
+        <a href="{% url 'mode_avance_admin' %}" class="actif"><i data-lucide="key-round"></i> <span data-i18n="mode_admin_codes">Codes Mode Avancé</span></a>
+    </nav>
+    <div class="droite">
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <button class="btn btn-icon" id="btn-theme" title="Thème" data-i18n-title="theme"><i data-lucide="moon"></i></button>
+        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+    </div>
+</header>
+
+<main class="conteneur">
+    <a class="retour" href="{% url 'index_cartographie' %}"><i data-lucide="arrow-left"></i> <span data-i18n="cartographie">Cartographie</span></a>
+
+    {% if messages %}
+    <div style="display:grid;gap:8px;margin-bottom:16px;">
+        {% for m in messages %}<div style="padding:11px 14px;border-radius:10px;font-size:.8rem;border:1px solid {% if m.tags == 'error' %}var(--red){% else %}var(--green){% endif %};background:{% if m.tags == 'error' %}rgba(239,68,68,.1){% else %}rgba(34,197,94,.1){% endif %};color:{% if m.tags == 'error' %}var(--red){% else %}var(--green){% endif %};">{{ m }}</div>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div id="flash" class="flash"></div>
+
+    <div class="entete">
+        <h2><i data-lucide="key-round" style="width:22px;height:22px;color:var(--accent);"></i> <span data-i18n="mode_admin_titre">Administration · Codes d'accès au Mode Avancé</span></h2>
+    </div>
+    <div class="muted" style="margin-bottom:18px;" data-i18n="mode_admin_autorisation">Réservé à l'administrateur principal (YAGIRWA).</div>
+
+    <form id="form-code" class="form-code" autocomplete="off">
+        <label>
+            <span data-i18n="mode_admin_libelle">Libellé (optionnel)</span>
+            <input type="text" id="code-libelle" maxlength="200" placeholder="Ex. : Agent Validation Nord">
+        </label>
+        <label>
+            <span data-i18n="mode_admin_type">Type</span>
+            <select id="code-type">
+                <option value="permanent" data-i18n="mode_admin_permanent">Code permanent</option>
+                <option value="temporaire" data-i18n="mode_admin_temporaire">Code temporaire</option>
+            </select>
+        </label>
+        <label id="label-duree" class="champs-cache">
+            <span data-i18n="mode_admin_duree">Durée de validité (heures)</span>
+            <input type="number" id="code-duree" min="1" step="1" value="24" placeholder="Ex. : 24">
+        </label>
+        <label>
+            <span data-i18n="mode_admin_max_util">Utilisations max (vide = illimité)</span>
+            <input type="number" id="code-max-util" min="1" step="1" placeholder="Ex. : 10">
+        </label>
+        <button type="submit" class="btn btn-primary"><i data-lucide="plus"></i> <span data-i18n="mode_admin_generer">Générer</span></button>
+    </form>
+
+    <div id="code-genere" class="code-genere">
+        <label data-i18n="mode_admin_code_genere">Code généré — à partager avec l'utilisateur :</label>
+        <div id="code-valeur" class="code-valeur"></div>
+        <div class="muted">SHA-256 · <span id="code-type-jour"></span></div>
+    </div>
+
+    <div class="boite">
+        <div class="boite-entete"><i data-lucide="list" style="width:18px;height:18px;color:var(--accent);"></i> <span data-i18n="mode_admin_liste">Codes générés</span></div>
+        {% if codes %}
+        <table>
+            <thead>
+                <tr>
+                    <th data-i18n="mode_admin_libelle">Libellé</th>
+                    <th data-i18n="mode_admin_type">Type</th>
+                    <th data-i18n="mode_admin_expire">Expire le</th>
+                    <th data-i18n="mode_admin_utilisations">Utilisations</th>
+                    <th data-i18n="mode_admin_statut">Statut</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in codes %}
+                <tr data-id="{{ c.pk }}">
+                    <td>{{ c.libelle|default:"—" }}</td>
+                    <td>{% if c.type == 'temporaire' %}<span data-i18n="mode_admin_temporaire">Code temporaire</span>{% else %}<span data-i18n="mode_admin_permanent">Code permanent</span>{% endif %}</td>
+                    <td>{% if c.expire_le %}{{ c.expire_le|date:'d/m/Y H:i' }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>{% if c.max_utilisations %}{{ c.utilisations }} / {{ c.max_utilisations }}{% else %}{{ c.utilisations }}{% endif %}</td>
+                    <td>
+                        {% if c.actif and c.est_valide %}<span class="badge badge-vert" data-i18n="mode_admin_actif">Actif</span>
+                        {% else %}<span class="badge badge-rouge" data-i18n="mode_admin_inactif">Révoqué</span>{% endif %}
+                    </td>
+                    <td style="text-align:right;">
+                        {% if c.actif %}
+                        <button class="btn btn-rouge btn-sm btn-revoquer" data-id="{{ c.pk }}" data-confirm="{% if c.type == 'temporaire' %}temp{% else %}perm{% endif %}">
+                            <i data-lucide="ban"></i> <span data-i18n="mode_admin_revoquer">Révoquer</span>
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="vide" data-i18n="mode_admin_aucun">Aucun code généré pour le moment.</div>
+        {% endif %}
+    </div>
+</main>
+
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+function flash(msg, type) {
+    const el = document.getElementById('flash');
+    el.className = 'flash visible ' + (type === 'err' ? 'flash-err' : 'flash-ok');
+    el.textContent = msg;
+    setTimeout(() => el.className = 'flash', 6000);
+}
+const t = (cle, defaut) => (window.mukmapT ? window.mukmapT(cle) || defaut : defaut);
+
+document.getElementById('code-type').addEventListener('change', function () {
+    document.getElementById('label-duree').style.display = this.value === 'temporaire' ? 'grid' : 'none';
+});
+if (document.getElementById('code-type').value === 'temporaire') {
+    document.getElementById('label-duree').style.display = 'grid';
+}
+
+document.getElementById('form-code').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const type = document.getElementById('code-type').value;
+    const data = {
+        type: type,
+        libelle: document.getElementById('code-libelle').value.trim(),
+        max_utilisations: document.getElementById('code-max-util').value || null,
+    };
+    if (type === 'temporaire') {
+        data.duree_heures = parseFloat(document.getElementById('code-duree').value) || 24;
+    }
+    fetch('/api/mode-avance/codes/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify(data),
+    }).then(r => r.json()).then(res => {
+        if (res.code) {
+            document.getElementById('code-valeur').textContent = res.code;
+            document.getElementById('code-type-jour').textContent = (type === 'temporaire' ? t('mode_admin_temporaire', 'Code temporaire') : t('mode_admin_permanent', 'Code permanent'));
+            document.getElementById('code-genere').className = 'code-genere visible';
+            flash(t('mode_ok', 'Code généré avec succès.'), 'ok');
+            location.reload();
+        } else {
+            flash(res.erreur || t('mode_erreur_reseau', 'Erreur réseau.'), 'err');
+        }
+    }).catch(() => flash(t('mode_erreur_reseau', 'Erreur réseau.'), 'err'));
+});
+
+document.querySelectorAll('.btn-revoquer').forEach(btn => {
+    btn.addEventListener('click', function () {
+        const id = this.dataset.id;
+        const conf = t('mode_revoquer_confirm', 'Révoquer ce code ? Les utilisateurs liés perdront l\'accès au Mode Avancé.');
+        if (!confirm(conf)) return;
+        fetch('/api/mode-avance/codes/' + id + '/revoquer/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': CSRF },
+        }).then(r => r.json()).then(res => {
+            if (res.ok) { flash(t('mode_ok_revoque', 'Code révoqué.'), 'ok'); location.reload(); }
+            else flash(res.erreur || t('mode_erreur_reseau', 'Erreur réseau.'), 'err');
+        }).catch(() => flash(t('mode_erreur_reseau', 'Erreur réseau.'), 'err'));
+    });
+});
+
+document.getElementById('btn-theme').addEventListener('click', () => {
+    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+});
+const themeStocke = localStorage.getItem('theme');
+if (themeStocke) document.documentElement.dataset.theme = themeStocke;
+if (window.lucide) lucide.createIcons();
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

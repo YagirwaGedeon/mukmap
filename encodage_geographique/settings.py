@@ -79,4 +79,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 LOGIN_URL = '/connexion/'
 LOGIN_REDIRECT_URL = '/'
 
+# Export de cartes : les images base64 (JPEG haute résolution) sont envoyées
+# au serveur pour composer les PDF — il faut autoriser des corps plus gros.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

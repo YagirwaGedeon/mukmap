@@ -16,6 +16,7 @@ urlpatterns = [
     path('import/excel-intelligent/', views.importer_excel_v2, name='importer_excel_v2'),
     path('import/', views.import_page, name='import_page'),
     path('points/', views.points_liste, name='points_liste'),
+    path('export/carte-pdf/', views.export_carte_pdf, name='export_carte_pdf'),
     path('export/<str:format>/', views.export_points, name='export_points'),
 
     path('dashboard/', views.dashboard, name='dashboard'),
@@ -64,4 +65,24 @@ urlpatterns = [
     path('geometrie/donnees/', views.geometrie_donnees, name='geometrie_donnees'),
     path('dessin/sauvegarder/', views.dessin_save, name='dessin_save'),
     path('geometrie/<int:pk>/supprimer/', views.geometrie_delete, name='geometrie_delete'),
+
+    # ── Mode Avancé / codes d'accès ──────────────────────────
+    path('api/mode/', views.api_mode, name='api_mode'),
+    path('api/mode/changer/', views.api_mode_changer, name='api_mode_changer'),
+    path('mode-avance/administration/', views.mode_avance_admin, name='mode_avance_admin'),
+    path('api/mode-avance/codes/', views.api_codes_mode, name='api_codes_mode'),
+    path('api/mode-avance/codes/<int:pk>/revoquer/', views.api_code_revoquer, name='api_code_revoquer'),
+
+    # ── Fonds de carte personnalisés (Mode Avancé) ────────────
+    path('api/fonds-personnalises/', views.api_fonds_personnalises, name='api_fonds_personnalises'),
+    path('api/fonds-personnalises/<int:pk>/', views.api_fond_personnalise_detail, name='api_fond_personnalise_detail'),
+
+    # ── Couches WMS superposables (Mode Avancé) ───────────────
+    path('api/couches-wms/', views.api_couches_wms, name='api_couches_wms'),
+    path('api/couches-wms/<int:pk>/', views.api_couche_wms_detail, name='api_couche_wms_detail'),
+
+    # ── Imagerie aérienne (orthophotos drone, Mode Avancé) ────
+    path('api/imagerie/', views.api_imagerie, name='api_imagerie'),
+    path('api/imagerie/<int:pk>/', views.api_imagerie_detail, name='api_imagerie_detail'),
+    path('api/imagerie/<int:pk>/visibilite/', views.api_imagerie_visibilite, name='api_imagerie_visibilite'),
 ]
