@@ -194,3 +194,130 @@ class TestAdductionAPI(BaseCartographieTest):
         self.client.logout()
         r = self.client.get('/api/adduction/projets/')
         self.assertEqual(r.status_code, 302)
+
+
+class TestAdductionClassification(BaseCartographieTest):
+    """Classification des points : sous-types source, formulaire source,
+    village (représentation point / polygone / zone) et référentiels."""
+
+    def creer_projet(self):
+        r = self.client.post('/api/adduction/projets/',
+                             data=json.dumps({'nom': 'Adduction Classification'}),
+                             content_type='application/json')
+        return r.json()['projet']['id']
+
+    def test_referentiels_retourne_classification(self):
+        r = self.client.get('/api/adduction/referentiels/')
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual(len(d['sources']), 11)
+        ids = [s['id'] for s in d['sources']]
+        for attendu in ('naturelle', 'amenagee', 'forage', 'puits', 'riviere',
+                        'lac', 'etang', 'captage_source', 'gravitaire', 'resurgence', 'autre'):
+            self.assertIn(attendu, ids)
+        self.assertEqual(len(d['representations']), 3)
+        self.assertTrue(d['potabilite_avertissement'])
+
+    def test_source_sous_type_et_formulaire(self):
+        pid = self.creer_projet()
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'source',
+                                              'sous_type': 'forage', 'nom': 'Forage K4',
+                                              'latitude': 1.4, 'longitude': 30.3,
+                                              'provenance': 'Ituri', 'territoire': 'Irumu',
+                                              'secteur_chefferie': 'Bahema', 'localite': 'Bogoro',
+                                              'village': 'Bogoro I', 'agent_enqueteur': 'J. Maka',
+                                              'organisation': 'UNICEF', 'code_projet': 'FID-01',
+                                              'source': {'debit_mesure': 1.5, 'debit_unite': 'l_s',
+                                                         'profondeur_m': 18, 'ph': 6.8,
+                                                         'code_echantillon': 'ECH-001'}}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        o = r.json()['ouvrage']
+        self.assertEqual(o['sous_type'], 'forage')
+        self.assertEqual(o['provenance'], 'Ituri')
+        self.assertEqual(o['village'], 'Bogoro I')
+        self.assertEqual(o['releve_source']['debit_mesure'], 1.5)
+        self.assertEqual(o['releve_source']['profondeur_m'], 18.0)
+        self.assertEqual(o['releve_source']['ph'], 6.8)
+
+        # sous-type invalide rejeté
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'source',
+                                              'sous_type': 'volcan', 'nom': 'X',
+                                              'latitude': 1, 'longitude': 2}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+
+        # sous-type ignoré pour un non-source
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'borne',
+                                              'sous_type': 'forage', 'nom': 'BF1',
+                                              'latitude': 1, 'longitude': 2}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.json()['ouvrage']['sous_type'], '')
+
+    def test_village_polygone_et_formulaire(self):
+        pid = self.creer_projet()
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'village',
+                                              'nom': 'Bogoro Centre', 'latitude': 1.41,
+                                              'longitude': 30.30, 'altitude_m': 1190,
+                                              'representation': 'polygone',
+                                              'geometrie': [[30.30, 1.41], [30.31, 1.41],
+                                                            [30.31, 1.42], [30.30, 1.42]],
+                                              'village': {'population': 4500, 'menages': 800,
+                                                          'population_cible': 3500,
+                                                          'beneficiaires_estimes': 3100,
+                                                          'ecoles': 3, 'centres_sante': 2,
+                                                          'autres_institutions': 'Marché, église',
+                                                          'source_eau_actuelle': 'puits',
+                                                          'distance_source_m': 1200,
+                                                          'situation_acces': 'partielle'}}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        o = r.json()['ouvrage']
+        self.assertEqual(o['representation'], 'polygone')
+        self.assertEqual(len(o['geometrie']), 4)
+        self.assertEqual(o['releve_village']['population'], 4500)
+        self.assertEqual(o['releve_village']['menages'], 800)
+        self.assertEqual(o['releve_village']['distance_source_m'], 1200.0)
+        self.assertEqual(o['releve_village']['source_eau_actuelle'], 'puits')
+        self.assertEqual(o['releve_village']['situation_acces'], 'partielle')
+        self.assertEqual(o['releve_village']['ecoles'], 3)
+
+        # mise à jour : géométrie + démographie
+        oid = o['id']
+        r = self.client.put(f'/api/adduction/ouvrages/{oid}/',
+                            data=json.dumps({'type': 'village', 'nom': 'Bogoro Centre II',
+                                             'latitude': 1.41, 'longitude': 30.30,
+                                             'representation': 'point',
+                                             'village': {'population': 4800, 'situation_acces': 'adequate'}}),
+                            content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        o2 = r.json()['ouvrage']
+        self.assertEqual(o2['representation'], 'point')
+        self.assertEqual(o2['releve_village']['population'], 4800)
+        self.assertEqual(o2['releve_village']['situation_acces'], 'adequate')
+
+        # geometrie rejetée si non-liste de listes
+        r = self.client.put(f'/api/adduction/ouvrages/{oid}/',
+                            data=json.dumps({'type': 'village', 'nom': 'V3',
+                                             'latitude': 1.41, 'longitude': 30.30,
+                                             'geometrie': 'abc'}),
+                            content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['ouvrage']['geometrie'], [])
+
+    def test_village_zone_sans_village_payload(self):
+        pid = self.creer_projet()
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'village',
+                                              'nom': 'Zone Kpandroma', 'latitude': 1.4,
+                                              'longitude': 30.3, 'representation': 'zone'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201)
+        o = r.json()['ouvrage']
+        self.assertEqual(o['representation'], 'zone')
+        self.assertEqual(o['releve_village']['population'], 0)

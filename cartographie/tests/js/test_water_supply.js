@@ -20,6 +20,29 @@ assert.ok(C.TYPES.source, 'type source présent');
 assert.ok(C.TYPES.borne, 'type borne présent');
 assert.ok(C.TYPES.village, 'type village présent');
 
+// ── Classification SOURCE D'EAU ──────────────────────────────────
+const srcListe = C.sourcesListe();
+assert.strictEqual(srcListe.length, 11, '11 sous-types de source (' + srcListe.length + ')');
+const idsSources = srcListe.map((s) => s.id);
+for (const attendu of ['naturelle', 'amenagee', 'forage', 'puits', 'riviere', 'lac', 'etang',
+                       'captage_source', 'gravitaire', 'resurgence', 'autre']) {
+    assert.ok(idsSources.includes(attendu), 'sous-type présent : ' + attendu);
+}
+assert.strictEqual(C.SOURCES.forage.debit, true, 'forage : débit applicable');
+assert.strictEqual(C.SOURCES.forage.profondeur, true, 'forage : profondeur applicable');
+assert.strictEqual(C.SOURCES.lac.debit, false, 'lac : pas de débit mesuré');
+assert.ok(C.sourceLabel('naturelle').startsWith('src_'), 'labelKey pour i18n');
+assert.strictEqual(C.sourceLabel('inconnu'), 'inconnu', 'label inconnu → id');
+
+// ── Polygon (village : polygone / zone) ──────────────────────────
+const poly = C.polygoneGeoJSON([[0, 0], [0.001, 0], [0.001, 0.001]], {nom: 'V1'});
+assert.strictEqual(poly.geometry.type, 'Polygon');
+assert.strictEqual(poly.geometry.coordinates.length, 1);
+assert.strictEqual(poly.geometry.coordinates[0].length, 4, 'anneau fermé (3 points + fermeture)');
+const polyFerme = C.polygoneGeoJSON([[0, 0], [0.001, 0], [0.001, 0.001], [0, 0]], {});
+assert.strictEqual(polyFerme.geometry.coordinates[0].length, 4, 'anneau déjà fermé conservé');
+assert.strictEqual(C.polygoneGeoJSON([], {}).geometry.coordinates[0].length, 0, 'vide → anneau vide');
+
 // ── distance haversine ───────────────────────────────────────────
 assert.ok(Math.abs(C.distance(0, 0, 0, 0)) < 1e-9, 'même point → 0');
 const dLat = C.distance(0, 0, 1, 0);

@@ -17,7 +17,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404
 
-from .models import ProjetAdduction, OuvrageHydraulique, TraceAdduction
+from .models import ProjetAdduction, OuvrageHydraulique, TraceAdduction, ReleveSource, ReleveVillage
 from .views import _audit
 
 # RAYON_TERRE = 6371000.0
@@ -46,11 +46,29 @@ def _serialiser_projet(p):
 
 
 def _serialiser_ouvrage(o):
+    rs = None
+    if o.type == 'source':
+        try:
+            rs = o.releve_source
+        except ReleveSource.DoesNotExist:
+            rs = None
+    rv = None
+    if o.type == 'village':
+        try:
+            rv = o.releve_village
+        except ReleveVillage.DoesNotExist:
+            rv = None
     return {
         'id': o.pk,
         'projet_id': o.projet_id,
         'type': o.type,
         'type_label': o.get_type_display(),
+        'sous_type': o.sous_type,
+        'sous_type_label': o.get_sous_type_display() if o.sous_type else '',
+        'representation': o.representation,
+        'representation_label': o.get_representation_display(),
+        'geometrie': o.geometrie or [],
+        'code': o.code,
         'nom': o.nom,
         'description': o.description,
         'latitude': o.latitude,
@@ -58,12 +76,71 @@ def _serialiser_ouvrage(o):
         'altitude_m': o.altitude_m,
         'beneficiaires': o.beneficiaires,
         'caracteristiques': o.caracteristiques or {},
+        'qualites_eau': o.qualites_eau or {},
+        'provenance': o.provenance,
+        'territoire': o.territoire,
+        'secteur_chefferie': o.secteur_chefferie,
+        'localite': o.localite,
+        'village': o.village,
+        'agent_enqueteur': o.agent_enqueteur,
+        'organisation': o.organisation,
+        'code_projet': o.code_projet,
         'observations': o.observations,
         'photo': o.photo.url if o.photo else '',
         'statut': o.statut,
         'statut_label': o.get_statut_display(),
         'releve_par': o.releve_par.username if o.releve_par else None,
         'date_releve': o.date_releve.isoformat(),
+        'releve_source': _serialiser_releve_source(rs),
+        'releve_village': _serialiser_releve_village(rv),
+    }
+
+
+def _serialiser_releve_source(rs):
+    """Sérialise le formulaire spécialisé Source d'eau (None si absent)."""
+    if rs is None:
+        return None
+    return {
+        'debit_mesure': rs.debit_mesure,
+        'debit_unite': rs.debit_unite,
+        'methode_mesure': rs.methode_mesure,
+        'niveau_eau_m': rs.niveau_eau_m,
+        'profondeur_m': rs.profondeur_m,
+        'debit_saison_seche': rs.debit_saison_seche,
+        'debit_saison_pluies': rs.debit_saison_pluies,
+        'accessibilite': rs.accessibilite,
+        'etat_source': rs.etat_source,
+        'permanence': rs.permanence,
+        'protection': rs.protection,
+        'distance_village_m': rs.distance_village_m,
+        'distance_consommation_m': rs.distance_consommation_m,
+        'ph': rs.ph,
+        'turbidite_ntu': rs.turbidite_ntu,
+        'conductivite_us': rs.conductivite_us,
+        'temperature_c': rs.temperature_c,
+        'chlore_residuel': rs.chlore_residuel,
+        'resultats_microbiologiques': rs.resultats_microbiologiques,
+        'observation_qualite': rs.observation_qualite,
+        'date_prelevement': rs.date_prelevement.isoformat() if rs.date_prelevement else None,
+        'code_echantillon': rs.code_echantillon,
+    }
+
+
+def _serialiser_releve_village(rv):
+    """Sérialise le formulaire spécialisé Village (None si absent)."""
+    if rv is None:
+        return None
+    return {
+        'population': rv.population,
+        'menages': rv.menages,
+        'population_cible': rv.population_cible,
+        'beneficiaires_estimes': rv.beneficiaires_estimes,
+        'ecoles': rv.ecoles,
+        'centres_sante': rv.centres_sante,
+        'autres_institutions': rv.autres_institutions,
+        'source_eau_actuelle': rv.source_eau_actuelle,
+        'distance_source_m': rv.distance_source_m,
+        'situation_acces': rv.situation_acces,
     }
 
 
@@ -109,6 +186,25 @@ def _creer_ouvrage_depuis(o, data):
     o.type = str(data.get('type') or 'source')
     if o.type not in dict(OuvrageHydraulique.TYPE_CHOICES):
         raise ValueError('Type d\'ouvrage invalide.')
+    sous_type = str(data.get('sous_type') or '')
+    if o.type == 'source':
+        if sous_type and sous_type not in dict(OuvrageHydraulique.SOURCES_CHOICES):
+            raise ValueError('Classification (sous-type) de source invalide.')
+        o.sous_type = sous_type
+        o.representation = 'point'
+    else:
+        o.sous_type = ''
+    representation = str(data.get('representation') or '')
+    if representation in dict(OuvrageHydraulique.REPRESENTATION_CHOICES):
+        o.representation = representation
+    else:
+        o.representation = 'point'
+    geometrie = data.get('geometrie')
+    if isinstance(geometrie, list):
+        o.geometrie = [g for g in geometrie if isinstance(g, list) and len(g) >= 2]
+    else:
+        o.geometrie = []
+    o.code = str(data.get('code') or '').strip()[:30]
     o.description = str(data.get('description') or '')
     try:
         alt = data.get('altitude_m')
@@ -126,11 +222,111 @@ def _creer_ouvrage_depuis(o, data):
         o.caracteristiques = {'details': caract.strip()}
     else:
         o.caracteristiques = {}
+    qual = data.get('qualites_eau')
+    if isinstance(qual, dict):
+        o.qualites_eau = {k: v for k, v in qual.items()}
+    else:
+        o.qualites_eau = {}
+    o.provenance = str(data.get('provenance') or '')
+    o.territoire = str(data.get('territoire') or '')
+    o.secteur_chefferie = str(data.get('secteur_chefferie') or '')
+    o.localite = str(data.get('localite') or '')
+    o.village = str(data.get('village') or '')
+    o.agent_enqueteur = str(data.get('agent_enqueteur') or '')
+    o.organisation = str(data.get('organisation') or '')
+    o.code_projet = str(data.get('code_projet') or '')
     o.observations = str(data.get('observations') or '')
     o.statut = str(data.get('statut') or 'projet')
     if o.statut not in dict(OuvrageHydraulique.STATUT_CHOICES):
         o.statut = 'projet'
     return o
+
+
+def _creer_releve_source(o, data):
+    """Crée ou met à jour le formulaire spécialisé Source d'eau."""
+    if o.type != 'source':
+        return None
+    rs_data = data.get('source')
+    if not isinstance(rs_data, dict):
+        rs_data = {}
+    try:
+        rs, _ = ReleveSource.objects.get_or_create(ouvrage=o)
+    except ReleveSource.MultipleObjectsReturned:
+        rs = ReleveSource.objects.filter(ouvrage=o).first()
+    for champ in ('debit_mesure', 'niveau_eau_m', 'profondeur_m', 'debit_saison_seche',
+                  'debit_saison_pluies', 'distance_village_m', 'distance_consommation_m',
+                  'ph', 'turbidite_ntu', 'conductivite_us', 'temperature_c', 'chlore_residuel'):
+        v = rs_data.get(champ)
+        if v in (None, ''):
+            setattr(rs, champ, None)
+        else:
+            try:
+                setattr(rs, champ, float(v))
+            except (TypeError, ValueError):
+                setattr(rs, champ, None)
+    rs.debit_unite = str(rs_data.get('debit_unite') or 'l_s')
+    if rs.debit_unite not in dict(OuvrageHydraulique.DEBITS_UNITE_CHOICES):
+        rs.debit_unite = 'l_s'
+    rs.methode_mesure = str(rs_data.get('methode_mesure') or '')
+    if rs.methode_mesure not in dict(OuvrageHydraulique.MESURE_METHODES_CHOICES):
+        rs.methode_mesure = ''
+    rs.accessibilite = str(rs_data.get('accessibilite') or '')
+    if rs.accessibilite not in dict(OuvrageHydraulique.ACCESSIBILITE_CHOICES):
+        rs.accessibilite = ''
+    rs.etat_source = str(rs_data.get('etat_source') or '')
+    if rs.etat_source not in dict(OuvrageHydraulique.ETAT_SOURCE_CHOICES):
+        rs.etat_source = ''
+    rs.permanence = str(rs_data.get('permanence') or '')
+    if rs.permanence not in dict(ReleveSource.PERMANENCE_CHOICES):
+        rs.permanence = ''
+    rs.protection = str(rs_data.get('protection') or '')
+    if rs.protection not in dict(ReleveSource.PROTECTION_CHOICES):
+        rs.protection = ''
+    rs.resultats_microbiologiques = str(rs_data.get('resultats_microbiologiques') or '')
+    rs.observation_qualite = str(rs_data.get('observation_qualite') or '')
+    date_prev = rs_data.get('date_prelevement')
+    if date_prev:
+        try:
+            from datetime import date as _date
+            rs.date_prelevement = _date.fromisoformat(str(date_prev)[:10])
+        except ValueError:
+            rs.date_prelevement = None
+    else:
+        rs.date_prelevement = None
+    rs.code_echantillon = str(rs_data.get('code_echantillon') or '')
+    rs.save()
+    return rs
+
+
+def _creer_releve_village(o, data):
+    """Crée ou met à jour le formulaire spécialisé Village / Localité."""
+    if o.type != 'village':
+        return None
+    rv_data = data.get('village')
+    if not isinstance(rv_data, dict):
+        rv_data = {}
+    rv = ReleveVillage.objects.filter(ouvrage=o).first()
+    if rv is None:
+        rv = ReleveVillage(ouvrage=o)
+    for champ in ('population', 'menages', 'population_cible', 'beneficiaires_estimes',
+                  'ecoles', 'centres_sante'):
+        v = rv_data.get(champ)
+        try:
+            setattr(rv, champ, int(v or 0))
+        except (TypeError, ValueError):
+            setattr(rv, champ, 0)
+    rv.autres_institutions = str(rv_data.get('autres_institutions') or '')
+    acces = str(rv_data.get('source_eau_actuelle') or '')
+    rv.source_eau_actuelle = acces if acces in dict(ReleveVillage.ACCES_CHOICES) else ''
+    try:
+        ds = rv_data.get('distance_source_m')
+        rv.distance_source_m = float(ds) if ds not in (None, '') else None
+    except (TypeError, ValueError):
+        rv.distance_source_m = None
+    sit = str(rv_data.get('situation_acces') or '')
+    rv.situation_acces = sit if sit in dict(ReleveVillage.SITUATION_CHOICES) else ''
+    rv.save()
+    return rv
 
 
 # ─── Projets ───────────────────────────────────────────────────────
@@ -207,6 +403,41 @@ def detail_projet_adduction(request, pk):
     p.save()
     _audit(request, 'Modification projet adduction', f"Projet #{p.pk} - {p.nom}")
     return JsonResponse({'ok': True, 'projet': _serialiser_projet(p)})
+
+
+# ─── Référentiel de classification ────────────────────────────────
+
+
+@login_required
+def referentiels_adduction(request):
+    """Classification des points à collecter + listes de valeurs.
+
+    Chaque type d'ouvrage dispose d'une classification (sous-types) et
+    d'un formulaire spécialisé. Pour « source » : la classification
+    SOURCE D'EAU (A) et son formulaire (généralités / techniques /
+    qualité de l'eau). La qualité de l'eau n'est pas une certification
+    de potabilité — résultats de terrain ou de laboratoire à interpréter.
+    """
+    sources = [{'id': k, 'label': v} for k, v in OuvrageHydraulique.SOURCES_CHOICES]
+    return JsonResponse({
+        'types_ouvrages': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.TYPE_CHOICES],
+        'statuts': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.STATUT_CHOICES],
+        'sources': sources,
+        'unites_debit': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.DEBITS_UNITE_CHOICES],
+        'methodes_mesure': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.MESURE_METHODES_CHOICES],
+        'accessibilites': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.ACCESSIBILITE_CHOICES],
+        'etats_source': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.ETAT_SOURCE_CHOICES],
+        'permanences': [{'id': k, 'label': v} for k, v in ReleveSource.PERMANENCE_CHOICES],
+        'protections': [{'id': k, 'label': v} for k, v in ReleveSource.PROTECTION_CHOICES],
+        'representations': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.REPRESENTATION_CHOICES],
+        'sources_eau_actuelles': [{'id': k, 'label': v} for k, v in ReleveVillage.ACCES_CHOICES],
+        'situations_acces': [{'id': k, 'label': v} for k, v in ReleveVillage.SITUATION_CHOICES],
+        'potabilite_avertissement': (
+            "Ces données de qualité de l'eau sont des résultats de terrain ou de "
+            "laboratoire à interpréter selon les normes applicables ; elles ne "
+            "constituent pas une certification de potabilité."
+        ),
+    })
 
 
 # ─── Statistiques / analyse d'un projet ─────────────────────────
@@ -419,6 +650,8 @@ def liste_ouvrages(request):
         try:
             o = _creer_ouvrage_depuis(OuvrageHydraulique(projet=p, releve_par=request.user), data)
             o.save()
+            _creer_releve_source(o, data)
+            _creer_releve_village(o, data)
         except ValueError as e:
             return JsonResponse({'erreur': str(e)}, status=400)
         _audit(request, 'Relevé d\'ouvrage hydraulique', f"Ouvrage #{o.pk} - {o.nom} ({o.type})")
@@ -453,6 +686,8 @@ def detail_ouvrage(request, pk):
     try:
         _creer_ouvrage_depuis(o, data)
         o.save()
+        _creer_releve_source(o, data)
+        _creer_releve_village(o, data)
     except ValueError as e:
         return JsonResponse({'erreur': str(e)}, status=400)
     _audit(request, 'Modification d\'ouvrage hydraulique', f"Ouvrage #{o.pk} - {o.nom}")

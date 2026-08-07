@@ -472,7 +472,15 @@ class ProjetAdduction(models.Model):
 class OuvrageHydraulique(models.Model):
     """Ouvrage relevé dans le cadre d'un projet d'adduction d'eau
     (source, bornes-fontaines, villages desservis, ouvrages, repères,
-    points intermédiaires) avec ses caractéristiques techniques."""
+    points intermédiaires) avec ses caractéristiques techniques.
+
+    CLASSIFICATION DES POINTS : le champ `sous_type` qualifie le
+    point dans sa catégorie. Pour « source » (type=source) on retrouve
+    la classification SOURCE D'EAU (A) : naturelle, aménagée, forage,
+    puits, rivière, lac, étang, captage, gravitaire, à résurgence,
+    autre. Le formulaire spécialisé associé (infos générales, techniques
+    et qualité de l'eau) est stocké dans le modèle `ReleveSource`.
+    """
     TYPE_CHOICES = [
         ('source', "Source d'eau"),
         ('captage', 'Captage'),
@@ -484,6 +492,37 @@ class OuvrageHydraulique(models.Model):
         ('intermediaire', 'Point intermédiaire'),
         ('village', 'Village desservi'),
     ]
+    # Classification SOURCE D'EAU (A) — sous_types du type 'source'.
+    SOURCES_CHOICES = [
+        ('naturelle', 'Source naturelle'),
+        ('amenagee', 'Source aménagée'),
+        ('forage', 'Forage'),
+        ('puits', 'Puits'),
+        ('riviere', 'Rivière'),
+        ('lac', 'Lac'),
+        ('etang', 'Étang'),
+        ('captage_source', 'Captage'),
+        ('gravitaire', 'Source gravitaire'),
+        ('resurgence', 'Source à résurgence'),
+        ('autre', 'Autre'),
+    ]
+    DEBITS_UNITE_CHOICES = [
+        ('l_s', 'L/s'), ('l_min', 'L/min'), ('m3_h', 'm³/h'), ('m3_j', 'm³/j'),
+    ]
+    MESURE_METHODES_CHOICES = [
+        ('volumetrique', 'Volumétrique (récipient chronométré)'),
+        ('deversoir', 'Déversoir / bac'),
+        ('estime', 'Estimation'),
+        ('pompe_jauge', 'Jaugeage de pompe'),
+        ('autre_methode', 'Autre'),
+    ]
+    ACCESSIBILITE_CHOICES = [
+        ('facile', 'Facile'), ('difficile', 'Difficile'),
+        ('tre_difficile', 'Très difficile'), ('impossible', 'Inaccessible'),
+    ]
+    ETAT_SOURCE_CHOICES = [
+        ('bon', 'Bon'), ('moyen', 'Moyen'), ('mauvais', 'Mauvais'), ('hors', 'Hors service'),
+    ]
     STATUT_CHOICES = [
         ('actif', 'En service'),
         ('moyen', 'État moyen'),
@@ -491,8 +530,22 @@ class OuvrageHydraulique(models.Model):
         ('hors_service', 'Hors service'),
         ('projet', 'À construire'),
     ]
+    REPRESENTATION_CHOICES = [
+        ('point', 'Point'),
+        ('polygone', 'Polygone'),
+        ('zone', 'Zone d\'intervention'),
+    ]
     projet = models.ForeignKey('ProjetAdduction', on_delete=models.CASCADE, related_name='ouvrages', verbose_name="Projet")
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='source', verbose_name="Type d'ouvrage")
+    sous_type = models.CharField(max_length=30, blank=True, choices=SOURCES_CHOICES, default='',
+                                 verbose_name="Classification / sous-type",
+                                 help_text="Qualifie le type d'ouvrage (ex : pour source → naturelle, forage, puits…)")
+    representation = models.CharField(max_length=15, choices=REPRESENTATION_CHOICES, default='point',
+                                      verbose_name="Représentation",
+                                      help_text="Village : point, polygone ou zone d'intervention")
+    geometrie = models.JSONField(default=list, blank=True, verbose_name="Géométrie (polygone / zone)",
+                                 help_text="[[lon, lat], …] contours fermés du village ou de la zone")
+    code = models.CharField(max_length=30, blank=True, default='', verbose_name="ID unique")
     nom = models.CharField(max_length=250, verbose_name="Nom / localisation")
     description = models.TextField(blank=True, verbose_name="Description")
     latitude = models.FloatField(verbose_name="Latitude")
@@ -501,6 +554,16 @@ class OuvrageHydraulique(models.Model):
     beneficiaires = models.PositiveIntegerField(default=0, verbose_name="Nombre de bénéficiaires")
     caracteristiques = models.JSONField(default=dict, blank=True, verbose_name="Caractéristiques techniques",
                                         help_text="Débit (l/s), profondeur, matériau, nombre de BF, etc.")
+    qualites_eau = models.JSONField(default=dict, blank=True, verbose_name="Qualité de l'eau (terrain / laboratoire)",
+                                    help_text="pH, turbidité, conductivité, chlore résiduel… — résultats non certifiants")
+    provenance = models.CharField(max_length=150, blank=True, verbose_name="Province")
+    territoire = models.CharField(max_length=150, blank=True, verbose_name="Territoire")
+    secteur_chefferie = models.CharField(max_length=150, blank=True, verbose_name="Secteur / Chefferie")
+    localite = models.CharField(max_length=150, blank=True, verbose_name="Localité")
+    village = models.CharField(max_length=150, blank=True, verbose_name="Village")
+    agent_enqueteur = models.CharField(max_length=150, blank=True, verbose_name="Agent enquêteur")
+    organisation = models.CharField(max_length=150, blank=True, verbose_name="Organisation")
+    code_projet = models.CharField(max_length=100, blank=True, verbose_name="Code du projet")
     observations = models.TextField(blank=True, verbose_name="Observations de terrain")
     photo = models.ImageField(upload_to='adduction/ouvrages/', blank=True, verbose_name="Photo")
     statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='projet', verbose_name="État")
@@ -514,6 +577,110 @@ class OuvrageHydraulique(models.Model):
 
     def __str__(self):
         return f"{self.nom} ({self.get_type_display()})"
+
+
+class ReleveSource(models.Model):
+    """Formulaire spécialisé SOURCE D'EAU — infos techniques + qualité de l'eau.
+
+    Les résultats de qualité de l'eau sont des mesures de terrain ou de
+    laboratoire à interpréter selon les normes applicables ; ils ne
+    constituent PAS une certification de potabilité.
+    """
+    SOURCE_TYPE_CHOICES = OuvrageHydraulique.SOURCES_CHOICES
+    PERMANENCE_CHOICES = [
+        ('permanente', 'Permanente'), ('saisonniere', 'Saisonnière'),
+    ]
+    PROTECTION_CHOICES = [
+        ('protegee', 'Protégée'), ('non_protegee', 'Non protégée'),
+    ]
+    ouvrage = models.OneToOneField(OuvrageHydraulique, on_delete=models.CASCADE,
+                                   related_name='releve_source', verbose_name="Ouvrage")
+
+    # ── Informations techniques ────────────────────────────────
+    debit_mesure = models.FloatField(null=True, blank=True, verbose_name="Débit mesuré")
+    debit_unite = models.CharField(max_length=10, choices=OuvrageHydraulique.DEBITS_UNITE_CHOICES,
+                                   default='l_s', verbose_name="Unité du débit")
+    methode_mesure = models.CharField(max_length=30, choices=OuvrageHydraulique.MESURE_METHODES_CHOICES,
+                                      default='', blank=True, verbose_name="Méthode de mesure")
+    niveau_eau_m = models.FloatField(null=True, blank=True, verbose_name="Niveau d'eau (m)")
+    profondeur_m = models.FloatField(null=True, blank=True, verbose_name="Profondeur (m)")
+    debit_saison_seche = models.FloatField(null=True, blank=True, verbose_name="Débit saison sèche")
+    debit_saison_pluies = models.FloatField(null=True, blank=True, verbose_name="Débit saison des pluies")
+    accessibilite = models.CharField(max_length=20, choices=OuvrageHydraulique.ACCESSIBILITE_CHOICES,
+                                     default='', blank=True, verbose_name="Accessibilité")
+    etat_source = models.CharField(max_length=10, choices=OuvrageHydraulique.ETAT_SOURCE_CHOICES, default='',
+                                   blank=True, verbose_name="État de la source")
+    permanence = models.CharField(max_length=12, choices=PERMANENCE_CHOICES, default='',
+                                  blank=True, verbose_name="Permanente / saisonnière")
+    protection = models.CharField(max_length=15, choices=PROTECTION_CHOICES, default='',
+                                  blank=True, verbose_name="Protégée / non protégée")
+    distance_village_m = models.FloatField(null=True, blank=True, verbose_name="Distance jusqu'au village (m)")
+    distance_consommation_m = models.FloatField(null=True, blank=True, verbose_name="Distance au 1er point de consommation (m)")
+
+    # ── Qualité de l'eau (facultatif, non certifiant) ──────────
+    ph = models.FloatField(null=True, blank=True, verbose_name="pH")
+    turbidite_ntu = models.FloatField(null=True, blank=True, verbose_name="Turbidité (NTU)")
+    conductivite_us = models.FloatField(null=True, blank=True, verbose_name="Conductivité (µS/cm)")
+    temperature_c = models.FloatField(null=True, blank=True, verbose_name="Température (°C)")
+    chlore_residuel = models.FloatField(null=True, blank=True, verbose_name="Chlore résiduel (mg/L)")
+    resultats_microbiologiques = models.TextField(blank=True, verbose_name="Résultats microbiologiques")
+    observation_qualite = models.TextField(blank=True, verbose_name="Observation sur la qualité")
+    date_prelevement = models.DateField(null=True, blank=True, verbose_name="Date du prélèvement")
+    code_echantillon = models.CharField(max_length=100, blank=True, verbose_name="Code de l'échantillon")
+
+    class Meta:
+        verbose_name = "Relevé spécialisé — Source d'eau"
+        verbose_name_plural = "Relevés spécialisés — Sources d'eau"
+
+    def __str__(self):
+        return f"Relevé source #{self.ouvrage_id}"
+
+
+class ReleveVillage(models.Model):
+    """Formulaire spécialisé VILLAGE / LOCALITÉ (zone à desservir).
+
+    Démographie, institutions, situation actuelle de l'accès à l'eau.
+    Le village peut être représenté par un point, un polygone ou une
+    zone d'intervention (voir `OuvrageHydraulique.representation`).
+    """
+    ACCES_CHOICES = [
+        ('borne_publique', 'Borne-fontaine publique'),
+        ('source_traditionnelle', 'Source / rivière traditionnelle'),
+        ('puits', 'Puits'),
+        ('forage', 'Forage'),
+        ('robinet_domicile', 'Robinets à domicile'),
+        ('livraison', 'Livraison par citerne'),
+        ('aucun', 'Aucun accès'),
+        ('autre_acces', 'Autre'),
+    ]
+    SITUATION_CHOICES = [
+        ('adequate', 'Adéquate'),
+        ('partielle', 'Partielle'),
+        ('insuffisante', 'Insuffisante'),
+        ('absente', 'Absente'),
+    ]
+    ouvrage = models.OneToOneField(OuvrageHydraulique, on_delete=models.CASCADE,
+                                   related_name='releve_village', verbose_name="Ouvrage")
+
+    population = models.PositiveIntegerField(default=0, verbose_name="Population")
+    menages = models.PositiveIntegerField(default=0, verbose_name="Nombre de ménages")
+    population_cible = models.PositiveIntegerField(default=0, verbose_name="Population cible")
+    beneficiaires_estimes = models.PositiveIntegerField(default=0, verbose_name="Bénéficiaires estimés")
+    ecoles = models.PositiveIntegerField(default=0, verbose_name="Nombre d'écoles")
+    centres_sante = models.PositiveIntegerField(default=0, verbose_name="Nombre de centres de santé")
+    autres_institutions = models.TextField(blank=True, verbose_name="Autres institutions")
+    source_eau_actuelle = models.CharField(max_length=30, choices=ACCES_CHOICES, default='',
+                                           blank=True, verbose_name="Source d'eau actuelle")
+    distance_source_m = models.FloatField(null=True, blank=True, verbose_name="Distance à la source (m)")
+    situation_acces = models.CharField(max_length=15, choices=SITUATION_CHOICES, default='',
+                                       blank=True, verbose_name="Situation de l'accès à l'eau")
+
+    class Meta:
+        verbose_name = "Relevé spécialisé — Village / Localité"
+        verbose_name_plural = "Relevés spécialisés — Villages / Localités"
+
+    def __str__(self):
+        return f"Relevé village #{self.ouvrage_id}"
 
 
 class TraceAdduction(models.Model):

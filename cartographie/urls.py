@@ -101,6 +101,7 @@ urlpatterns = [
     path('api/imagerie/<int:pk>/visibilite/', views.api_imagerie_visibilite, name='api_imagerie_visibilite'),
 
     # ── Adduction d'eau — Water Supply Survey ─────────────────
+    path('api/adduction/referentiels/', water_supply.referentiels_adduction, name='api_adduction_referentiels'),
     path('api/adduction/projets/', water_supply.api_projets_adduction, name='api_adduction_projets'),
     path('api/adduction/projets/<int:pk>/', water_supply.detail_projet_adduction, name='api_adduction_projet'),
     path('api/adduction/projets/<int:pk>/stats/', water_supply.stats_projet, name='api_adduction_stats'),

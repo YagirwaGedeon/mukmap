@@ -30,10 +30,39 @@
         hors_service: { label: 'Hors service', couleur: '#ef4444' },
         projet: { label: 'À construire', couleur: '#6366f1' }
     };
+    // Classification SOURCE D'EAU (A) — sous-types + champs techniques
+    // applicables selon le type choisi.
+    var SOURCES = {
+        naturelle: { labelKey: 'src_naturelle', debit: true, niveau: true, profondeur: false, permanence: true, protection: true },
+        amenagee: { labelKey: 'src_amenagee', debit: true, niveau: true, profondeur: false, permanence: true, protection: true },
+        forage: { labelKey: 'src_forage', debit: true, niveau: true, profondeur: true, permanence: false, protection: false },
+        puits: { labelKey: 'src_puits', debit: true, niveau: true, profondeur: true, permanence: true, protection: true },
+        riviere: { labelKey: 'src_riviere', debit: true, niveau: true, profondeur: false, permanence: true, protection: false },
+        lac: { labelKey: 'src_lac', debit: false, niveau: true, profondeur: true, permanence: true, protection: false },
+        etang: { labelKey: 'src_etang', debit: false, niveau: true, profondeur: true, permanence: true, protection: false },
+        captage_source: { labelKey: 'src_captage', debit: true, niveau: true, profondeur: false, permanence: true, protection: true },
+        gravitaire: { labelKey: 'src_gravitaire', debit: true, niveau: true, profondeur: false, permanence: true, protection: true },
+        resurgence: { labelKey: 'src_resurgence', debit: true, niveau: true, profondeur: false, permanence: true, protection: true },
+        autre: { labelKey: 'src_autre', debit: true, niveau: true, profondeur: false, permanence: true, protection: false }
+    };
 
     var CORE = {
         TYPES: TYPES,
         STATUTS: STATUTS,
+        SOURCES: SOURCES,
+
+        // Sous-types (classification) du type « source » → liste [{id, labelKey}].
+        sourcesListe: function () {
+            return Object.keys(SOURCES).map(function (k) {
+                return { id: k, labelKey: SOURCES[k].labelKey };
+            });
+        },
+
+        // Libellé d'un sous-type source (par défaut l'id).
+        sourceLabel: function (id) {
+            var s = SOURCES[id];
+            return s ? (s.labelKey || id) : id;
+        },
 
         _rad: function (d) { return d * Math.PI / 180; },
 
@@ -201,6 +230,20 @@
             };
         },
 
+        // Contour fermé → Feature Polygon (ajoute la fermeture si absente).
+        polygoneGeoJSON: function (contour, props) {
+            var anneau = (contour || []).map(function (c) { return [c[0], c[1]]; });
+            if (anneau.length >= 3) {
+                var premier = anneau[0];
+                var dernier = anneau[anneau.length - 1];
+                if (premier[0] !== dernier[0] || premier[1] !== dernier[1]) anneau.push(premier);
+            }
+            return {
+                type: 'Feature', properties: props || {},
+                geometry: { type: 'Polygon', coordinates: [anneau] }
+            };
+        },
+
         // Ouvrages → CSV (séparateur ;).
         ouvragesCSV: function (ouvrages) {
             var lignes = ['id;type;nom;latitude;longitude;altitude_m;beneficiaires;statut;description'];
@@ -262,6 +305,7 @@
         var apiProjets = opts.urlProjets || '/api/adduction/projets/';
         var apiOuvrages = opts.urlOuvrages || '/api/adduction/ouvrages/';
         var apiTraces = opts.urlTraces || '/api/adduction/traces/';
+        var apiReferentiels = opts.urlReferentiels || '/api/adduction/referentiels/';
         var csrf = opts.csrf || (function () {
             try { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; } catch (e) { return ''; }
         })();
@@ -279,6 +323,16 @@
         }
         function ex(s) { // échappement XML/HTML minimal
             return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        function remplirSelect(sel, liste) { // liste : [{id, label}, …]
+            if (!sel) return;
+            sel.innerHTML = '<option value="">…</option>';
+            (liste || []).forEach(function (it) {
+                var o = document.createElement('option');
+                o.value = it.id;
+                o.textContent = trad(it.label, it.label);
+                sel.appendChild(o);
+            });
         }
 
         var projetActif = null;
@@ -316,11 +370,67 @@
             '<p class="mw-indice">Type + clique sur la carte (ou 📡 GPS), puis Ajouter.</p>' +
             '<div class="mw-champs">' +
             '<select id="mw-type"></select>' +
+            '<select id="mw-sous-type" hidden></select>' +
+            '<div class="mw-deux"><input type="text" id="mw-province" placeholder="Province">' +
+            '<input type="text" id="mw-territoire" placeholder="Territoire"></div>' +
+            '<div class="mw-deux"><input type="text" id="mw-secteur" placeholder="Secteur / Chefferie">' +
+            '<input type="text" id="mw-localite" placeholder="Localité"></div>' +
+            '<div class="mw-deux"><input type="text" id="mw-village" placeholder="Village">' +
+            '<input type="text" id="mw-agent" placeholder="Agent enquêteur"></div>' +
+            '<div class="mw-deux"><input type="text" id="mw-organisation" placeholder="Organisation">' +
+            '<input type="text" id="mw-code-projet" placeholder="Code du projet"></div>' +
+            '<select id="mw-repr" hidden>' +
+            '<option value="point">📍 Point</option>' +
+            '<option value="polygone">🔷 Polygone</option>' +
+            '<option value="zone">🌐 Zone d\'intervention</option></select>' +
+            '<div class="mw-boutons" id="mw-poly-actions" hidden>' +
+            '<button type="button" id="mw-tracer-poly">✏️ Tracer le contour</button>' +
+            '<button type="button" id="mw-fin-poly" hidden>✅ Terminer</button>' +
+            '<button type="button" id="mw-ann-poly" hidden>🗑 Annuler</button></div>' +
+            '<div class="mw-ligne" id="mw-poly-info" hidden><span>Contour</span><b id="mw-poly-nb">—</b></div>' +
             '<input type="text" id="mw-nom" placeholder="Nom / localisation">' +
             '<div class="mw-deux"><input type="number" id="mw-alt" step="0.1" placeholder="Altitude (m)">' +
             '<input type="number" id="mw-benef" min="0" placeholder="Bénéficiaires"></div>' +
             '<div class="mw-deux"><input type="number" id="mw-lat" step="any" placeholder="Latitude">' +
             '<input type="number" id="mw-lon" step="any" placeholder="Longitude"></div>' +
+            '<div id="mw-form-village" hidden>' +
+            '<div class="mw-deux"><input type="number" id="mw-v-pop" min="0" placeholder="Population">' +
+            '<input type="number" id="mw-v-menages" min="0" placeholder="Ménages"></div>' +
+            '<div class="mw-deux"><input type="number" id="mw-v-cible" min="0" placeholder="Population cible">' +
+            '<input type="number" id="mw-v-benef" min="0" placeholder="Bénéficiaires estimés"></div>' +
+            '<div class="mw-deux"><input type="number" id="mw-v-ecoles" min="0" placeholder="Écoles">' +
+            '<input type="number" id="mw-v-sante" min="0" placeholder="Centres de santé"></div>' +
+            '<input type="text" id="mw-v-autres" placeholder="Autres institutions">' +
+            '<div class="mw-deux"><select id="mw-v-source"><option value="">Source d\'eau actuelle…</option></select>' +
+            '<input type="number" id="mw-v-dist" min="0" placeholder="Dist. source (m)"></div>' +
+            '<select id="mw-v-situation"><option value="">Situation accès à l\'eau…</option></select>' +
+            '</div>' +
+            '<div id="mw-form-source" hidden>' +
+            '<div class="mw-deux"><input type="number" id="mw-s-debit" min="0" step="0.01" placeholder="Débit mesuré">' +
+            '<select id="mw-s-debit-unite"><option value="">Unité…</option><option value="l_s">l/s</option><option value="m3_h">m³/h</option></select></div>' +
+            '<div class="mw-deux"><input type="number" id="mw-s-methode" step="0.01" min="0" placeholder="Niveau d\'eau (m)">' +
+            '<input type="number" id="mw-s-profond" step="0.01" min="0" placeholder="Profondeur (m)"></div>' +
+            '<div class="mw-deux"><input type="number" id="mw-s-saison-seche" step="0.01" min="0" placeholder="Débit saison sèche (l/s)">' +
+            '<input type="number" id="mw-s-saison-pluies" step="0.01" min="0" placeholder="Débit saison pluies (l/s)"></div>' +
+            '<div class="mw-deux"><select id="mw-s-access"><option value="">Accessibilité…</option>' +
+            '<option value="facile">Facile</option><option value="difficile">Difficile</option><option value="tres_difficile">Très difficile</option></select>' +
+            '<select id="mw-s-etat"><option value="">État…</option><option value="bon">Bon</option><option value="moyen">Moyen</option><option value="degrade">Dégradé</option></select></div>' +
+            '<div class="mw-deux"><select id="mw-s-permanence"><option value="">Permanence…</option>' +
+            '<option value="permanente">Permanente</option><option value="saisonniere">Saisonnière</option><option value="intermittente">Intermittente</option></select>' +
+            '<select id="mw-s-protection"><option value="">Protection…</option><option value="protegee">Protégée</option><option value="non_protegee">Non protégée</option></select></div>' +
+            '<div class="mw-deux"><input type="number" id="mw-s-dist-village" min="0" placeholder="Dist. village (m)">' +
+            '<input type="number" id="mw-s-dist-conso" min="0" placeholder="Dist. consommation (m)"></div>' +
+            '<div class="mw-ligne" id="mw-s-qualite-titre"><span>Qualité de l\'eau (indicative)</span></div>' +
+            '<div class="mw-deux"><input type="number" id="mw-s-ph" step="0.1" placeholder="pH">' +
+            '<input type="number" id="mw-s-turb" step="0.1" min="0" placeholder="Turbidité (NTU)"></div>' +
+            '<div class="mw-deux"><input type="number" id="mw-s-cond" step="0.1" min="0" placeholder="Conductivité (µS/cm)">' +
+            '<input type="number" id="mw-s-temp" step="0.1" placeholder="Température (°C)"></div>' +
+            '<div class="mw-deux"><input type="number" id="mw-s-chlore" step="0.01" min="0" placeholder="Chlore résiduel (mg/l)">' +
+            '<input type="text" id="mw-s-code-ech" placeholder="Code échantillon"></div>' +
+            '<input type="text" id="mw-s-microbio" placeholder="Résultats microbiologiques">' +
+            '<input type="text" id="mw-s-obs-qualite" placeholder="Observations qualité">' +
+            '<p class="mw-avertissement" id="mw-s-avertissement" hidden>⚠️ Mesures indicatives — analyse de laboratoire nécessaire pour certifier la potabilité.</p>' +
+            '</div>' +
             '<input type="text" id="mw-carac" placeholder="Caract. tech. (ex : débit 1,2 l/s)">' +
             '<textarea id="mw-obs" rows="2" placeholder="Observations de terrain"></textarea>' +
             '<div class="mw-boutons"><button type="button" id="mw-pick-gps">📡 GPS</button>' +
@@ -415,6 +525,20 @@
                 o.value = k; o.textContent = TYPES[k].emoji + ' ' + TYPES[k].label;
                 sel.appendChild(o);
             });
+            // Classification SOURCE D'EAU (sous-types)
+            var ss = parId('mw-sous-type');
+            CORE.sourcesListe().forEach(function (s) {
+                var o = document.createElement('option');
+                o.value = s.id;
+                o.textContent = trad(CORE.sourceLabel(s.id), s.id);
+                ss.appendChild(o);
+            });
+            // Référentiels village (source actuelle / situation)
+            getJ(apiReferentiels).then(function (r) {
+                remplirSelect(parId('mw-v-source'), r.sources_eau_actuelles || []);
+                remplirSelect(parId('mw-v-situation'), r.situations_acces || []);
+            }).catch(function () { /* listes vides acceptables */ });
+            actualiserChampsSource();
         })();
 
         // ── Requêtes ──
@@ -528,8 +652,10 @@
 
         // ── Collecte ──
         function releverFormulaire() {
-            return {
+            var obj = {
                 type: parId('mw-type').value,
+                sous_type: parId('mw-sous-type').value || '',
+                representation: parId('mw-repr').value || 'point',
                 nom: parId('mw-nom').value.trim(),
                 altitude_m: toF(parId('mw-alt').value),
                 beneficiaires: parseInt(parId('mw-benef').value || 0, 10) || 0,
@@ -538,6 +664,51 @@
                 caracteristiques: { details: parId('mw-carac').value.trim() },
                 observations: parId('mw-obs').value.trim()
             };
+            ['provenance', 'territoire', 'secteur_chefferie', 'localite', 'village',
+                'agent_enqueteur', 'organisation', 'code_projet'].forEach(function (k) {
+                obj[k] = parId('mw-' + k).value.trim();
+            });
+            if (obj.type === 'source') {
+                obj.sous_type = parId('mw-sous-type').value;
+                obj.source = {
+                    debit_mesure: toF(parId('mw-s-debit').value),
+                    debit_unite: parId('mw-s-debit-unite').value,
+                    niveau_eau_m: toF(parId('mw-s-methode').value),
+                    profondeur_m: toF(parId('mw-s-profond').value),
+                    debit_saison_seche: toF(parId('mw-s-saison-seche').value),
+                    debit_saison_pluies: toF(parId('mw-s-saison-pluies').value),
+                    accessibilite: parId('mw-s-access').value,
+                    etat_source: parId('mw-s-etat').value,
+                    permanence: parId('mw-s-permanence').value,
+                    protection: parId('mw-s-protection').value,
+                    distance_village_m: toF(parId('mw-s-dist-village').value),
+                    distance_consommation_m: toF(parId('mw-s-dist-conso').value),
+                    ph: toF(parId('mw-s-ph').value),
+                    turbidite_ntu: toF(parId('mw-s-turb').value),
+                    conductivite_us: toF(parId('mw-s-cond').value),
+                    temperature_c: toF(parId('mw-s-temp').value),
+                    chlore_residuel: toF(parId('mw-s-chlore').value),
+                    code_echantillon: parId('mw-s-code-ech').value.trim(),
+                    resultats_microbiologiques: parId('mw-s-microbio').value.trim(),
+                    observation_qualite: parId('mw-s-obs-qualite').value.trim()
+                };
+            }
+            if (obj.type === 'village') {
+                obj.geometrie = geometrieCourante.slice();
+                obj.village = {
+                    population: parseInt(parId('mw-v-pop').value || 0, 10) || 0,
+                    menages: parseInt(parId('mw-v-menages').value || 0, 10) || 0,
+                    population_cible: parseInt(parId('mw-v-cible').value || 0, 10) || 0,
+                    beneficiaires_estimes: parseInt(parId('mw-v-benef').value || 0, 10) || 0,
+                    ecoles: parseInt(parId('mw-v-ecoles').value || 0, 10) || 0,
+                    centres_sante: parseInt(parId('mw-v-sante').value || 0, 10) || 0,
+                    autres_institutions: parId('mw-v-autres').value.trim(),
+                    source_eau_actuelle: parId('mw-v-source').value,
+                    distance_source_m: toF(parId('mw-v-dist').value),
+                    situation_acces: parId('mw-v-situation').value
+                };
+            }
+            return obj;
         }
         function viderFormulaire() {
             parId('mw-nom').value = '';
@@ -547,6 +718,28 @@
             parId('mw-lon').value = '';
             parId('mw-carac').value = '';
             parId('mw-obs').value = '';
+            ['province', 'territoire', 'secteur_chefferie', 'localite', 'village',
+                'agent_enqueteur', 'organisation', 'code_projet'].forEach(function (k) {
+                parId('mw-' + k).value = '';
+            });
+            parId('mw-sous-type').value = '';
+            actualiserChampsSource();
+            ['v-pop', 'v-menages', 'v-cible', 'v-benef', 'v-ecoles', 'v-sante', 'v-dist'].forEach(function (k) {
+                parId('mw-' + k).value = '';
+            });
+            parId('mw-v-autres').value = '';
+            parId('mw-v-source').value = '';
+            parId('mw-v-situation').value = '';
+            ['s-debit', 's-debit-unite', 's-methode', 's-profond', 's-saison-seche', 's-saison-pluies',
+                's-access', 's-etat', 's-permanence', 's-protection', 's-dist-village', 's-dist-conso',
+                's-ph', 's-turb', 's-cond', 's-temp', 's-chlore', 's-code-ech'].forEach(function (k) {
+                parId('mw-' + k).value = '';
+            });
+            parId('mw-s-microbio').value = '';
+            parId('mw-s-obs-qualite').value = '';
+            geometrieCourante = [];
+            majPolyInfo();
+            dessinerGeometrieTmp();
             parId('mw-maj-ouvrage').hidden = true;
             parId('mw-supp-ouvrage').hidden = true;
             delete parId('mw-maj-ouvrage').dataset.id;
@@ -569,6 +762,14 @@
         }
         function editerOuvrage(o) {
             parId('mw-type').value = o.type;
+            actualiserFormParType();
+            parId('mw-sous-type').value = o.sous_type || '';
+            actualiserChampsSource();
+            parId('mw-repr').value = o.representation || 'point';
+            actualiserReprVillage();
+            geometrieCourante = (o.geometrie || []).slice();
+            majPolyInfo();
+            dessinerGeometrieTmp();
             parId('mw-nom').value = o.nom || '';
             parId('mw-alt').value = o.altitude_m != null ? o.altitude_m : '';
             parId('mw-benef').value = o.beneficiaires || '';
@@ -576,11 +777,121 @@
             parId('mw-lon').value = o.longitude;
             parId('mw-carac').value = (o.caracteristiques && o.caracteristiques.details) || '';
             parId('mw-obs').value = o.observations || '';
+            ['provenance', 'territoire', 'secteur_chefferie', 'localite', 'village',
+                'agent_enqueteur', 'organisation', 'code_projet'].forEach(function (k) {
+                parId('mw-' + k).value = o[k] || '';
+            });
+            var rv = o.releve_village || {};
+            parId('mw-v-pop').value = rv.population || '';
+            parId('mw-v-menages').value = rv.menages || '';
+            parId('mw-v-cible').value = rv.population_cible || '';
+            parId('mw-v-benef').value = rv.beneficiaires_estimes || '';
+            parId('mw-v-ecoles').value = rv.ecoles || '';
+            parId('mw-v-sante').value = rv.centres_sante || '';
+            parId('mw-v-autres').value = rv.autres_institutions || '';
+            parId('mw-v-source').value = rv.source_eau_actuelle || '';
+            parId('mw-v-dist').value = rv.distance_source_m || '';
+            parId('mw-v-situation').value = rv.situation_acces || '';
+            var rs = o.releve_source || {};
+            parId('mw-s-debit').value = rs.debit_mesure || '';
+            parId('mw-s-debit-unite').value = rs.debit_unite || '';
+            parId('mw-s-methode').value = rs.niveau_eau_m || '';
+            parId('mw-s-profond').value = rs.profondeur_m || '';
+            parId('mw-s-saison-seche').value = rs.debit_saison_seche || '';
+            parId('mw-s-saison-pluies').value = rs.debit_saison_pluies || '';
+            parId('mw-s-access').value = rs.accessibilite || '';
+            parId('mw-s-etat').value = rs.etat_source || '';
+            parId('mw-s-permanence').value = rs.permanence || '';
+            parId('mw-s-protection').value = rs.protection || '';
+            parId('mw-s-dist-village').value = rs.distance_village_m || '';
+            parId('mw-s-dist-conso').value = rs.distance_consommation_m || '';
+            parId('mw-s-ph').value = rs.ph || '';
+            parId('mw-s-turb').value = rs.turbidite_ntu || '';
+            parId('mw-s-cond').value = rs.conductivite_us || '';
+            parId('mw-s-temp').value = rs.temperature_c || '';
+            parId('mw-s-chlore').value = rs.chlore_residuel || '';
+            parId('mw-s-code-ech').value = rs.code_echantillon || '';
+            parId('mw-s-microbio').value = rs.resultats_microbiologiques || '';
+            parId('mw-s-obs-qualite').value = rs.observation_qualite || '';
             parId('mw-maj-ouvrage').hidden = false;
             parId('mw-supp-ouvrage').hidden = false;
             parId('mw-maj-ouvrage').dataset.id = String(o.id);
             message('Ouvrage sélectionné : ' + (o.nom || '#' + o.id), 'info');
         }
+
+        // ── Classification / représentation ──
+        var geometrieCourante = [];
+        var enDessinGeom = false;
+        function majPolyInfo() {
+            var el = parId('mw-poly-info');
+            if (!el) return;
+            el.hidden = !(parId('mw-repr').value !== 'point');
+            parId('mw-poly-nb').textContent = geometrieCourante.length + ' points';
+        }
+        function dessinerGeometrieTmp() {
+            removeCouche('mw-geom-tmp');
+            if (geometrieCourante.length >= 3) {
+                ajouterGeoJSON('mw-geom-tmp', [CORE.polygoneGeoJSON(geometrieCourante, {})], 'polygone', '#f59e0b');
+            }
+        }
+        function actualiserFormParType() {
+            var t = parId('mw-type').value;
+            parId('mw-sous-type').hidden = t !== 'source';
+            parId('mw-repr').hidden = t !== 'village';
+            parId('mw-poly-actions').hidden = t !== 'village';
+            parId('mw-poly-info').hidden = t !== 'village';
+            parId('mw-form-village').hidden = t !== 'village';
+            parId('mw-form-source').hidden = t !== 'source';
+            parId('mw-s-avertissement').hidden = t !== 'source';
+            if (t !== 'village') { enDessinGeom = false; actualiserBoutonsGeom(); }
+        }
+        function actualiserReprVillage() {
+            var repr = parId('mw-repr').value;
+            parId('mw-poly-actions').hidden = repr === 'point';
+            majPolyInfo();
+        }
+        function actualiserChampsSource() {
+            var f = CORE.SOURCES[parId('mw-sous-type').value] || {};
+            [
+                ['mw-s-debit', f.debit], ['mw-s-debit-unite', f.debit],
+                ['mw-s-saison-seche', f.debit], ['mw-s-saison-pluies', f.debit],
+                ['mw-s-methode', f.niveau], ['mw-s-profond', f.profondeur],
+                ['mw-s-permanence', f.permanence], ['mw-s-protection', f.protection]
+            ].forEach(function (p) {
+                parId(p[0]).hidden = !p[1];
+            });
+        }
+        function actualiserBoutonsGeom() {
+            parId('mw-tracer-poly').hidden = enDessinGeom;
+            parId('mw-fin-poly').hidden = !enDessinGeom;
+            parId('mw-ann-poly').hidden = !enDessinGeom;
+        }
+        parId('mw-type').addEventListener('change', function () {
+            actualiserFormParType();
+            actualiserReprVillage();
+        });
+        parId('mw-sous-type').addEventListener('change', actualiserChampsSource);
+        parId('mw-repr').addEventListener('change', actualiserReprVillage);
+        parId('mw-tracer-poly').addEventListener('click', function () {
+            geometrieCourante = [];
+            enDessinGeom = true;
+            actualiserBoutonsGeom();
+            majPolyInfo();
+            message('Cliquez la carte pour poser les sommets du contour.', 'info');
+        });
+        parId('mw-fin-poly').addEventListener('click', function () {
+            if (geometrieCourante.length < 3) { message('Au moins 3 points requis.', 'erreur'); return; }
+            enDessinGeom = false;
+            actualiserBoutonsGeom();
+            message('Contour prêt (' + geometrieCourante.length + ' points).', 'succes');
+        });
+        parId('mw-ann-poly').addEventListener('click', function () {
+            geometrieCourante = [];
+            enDessinGeom = false;
+            actualiserBoutonsGeom();
+            majPolyInfo();
+            removeCouche('mw-geom-tmp');
+        });
 
         parId('mw-ajouter').addEventListener('click', function () {
             if (!projetActif) { message('Sélectionnez d\'abord un projet.', 'erreur'); return; }
@@ -721,6 +1032,15 @@
             desenregistrer(id);
             if (!features || !features.length) return;
             carte.addSource(id, { type: 'geojson', data: { type: 'FeatureCollection', features: features } });
+            if (type === 'polygone') {
+                carte.addLayer({ id: id + '-fill', type: 'fill', source: id,
+                    paint: { 'fill-color': couleur || '#f59e0b', 'fill-opacity': 0.25 } });
+                carte.addLayer({ id: id, type: 'line', source: id,
+                    paint: { 'line-color': couleur || '#f59e0b', 'line-width': 2 } });
+                registre.push(id + '-fill');
+                registre.push(id);
+                return;
+            }
             if (type === 'line') {
                 carte.addLayer({ id: id, type: 'line', source: id,
                     paint: { 'line-color': couleur || '#22d3ee', 'line-width': 3 } });
@@ -745,6 +1065,16 @@
         // ── Carte : clics ──
         carte.on('click', function (e) {
             var lng = e.lngLat.lng, lat = e.lngLat.lat;
+            if (enDessinGeom) {
+                if (!geometrieCourante.length) {
+                    parId('mw-lat').value = lat.toFixed(6);
+                    parId('mw-lon').value = lng.toFixed(6);
+                }
+                geometrieCourante.push([lng, lat]);
+                majPolyInfo();
+                dessinerGeometrieTmp();
+                return;
+            }
             if (enTrace) {
                 var a = toF(parId('mw-alt').value);
                 traceCourant.push([lng, lat, a]);
@@ -794,9 +1124,20 @@
                 }
             });
         }
+function majVillagesCarte() {
+            var poly = ouvrages.filter(function (o) {
+                return o.type === 'village' && o.geometrie && o.geometrie.length >= 3;
+            });
+            poly.forEach(function (o) {
+                var k = 'mw-vg-' + o.id;
+                removeCouche(k); desenregistrer(k);
+                ajouterGeoJSON(k, [CORE.polygoneGeoJSON(o.geometrie, { nom: o.nom })], 'polygone', '#f59e0b');
+            });
+        }
         function majTout() {
             nettoyerCouchesToutes();
             majOuvragesCarte();
+            majVillagesCarte();
             majTracesCarte();
             listeOuvrages();
             listeTraces();
