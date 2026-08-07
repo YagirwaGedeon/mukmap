@@ -466,6 +466,65 @@ class TestAdductionConsommationRepere(BaseCartographieTest):
         self.assertEqual(o['releve_repere']['date_releve'], '2026-08-08')
 
 
+class TestAdductionReseau(BaseCartographieTest):
+    """Objets du réseau d'adduction : réservoirs, château d'eau,
+    stations de pompage, vannes, ventouses, vidanges, traversées…"""
+
+    def creer_ouvrage(self, type_ouvrage, sous_type):
+        pid = self.client.post('/api/adduction/projets/',
+                               data=json.dumps({'nom': 'Réseau', 'bbox': [30.2, 1.3, 30.4, 1.5]}),
+                               content_type='application/json').json()['projet']['id']
+        return self.client.post('/api/adduction/ouvrages/',
+                                data=json.dumps({'projet_id': pid, 'type': type_ouvrage,
+                                                 'sous_type': sous_type, 'nom': 'Obj',
+                                                 'latitude': 1.4, 'longitude': 30.3}),
+                                content_type='application/json')
+
+    def test_reseau_station_pompage(self):
+        r = self.creer_ouvrage('reseau', 'station_pompage')
+        self.assertEqual(r.status_code, 201, r.content)
+        o = r.json()['ouvrage']
+        self.assertEqual(o['type'], 'reseau')
+        self.assertEqual(o['sous_type'], 'station_pompage')
+        self.assertEqual(o['sous_type_label'], 'Station de pompage')
+        self.assertIn(o['id'], [x.id for x in OuvrageHydraulique.objects.filter(type='reseau')])
+
+    def test_reseau_tous_sous_types(self):
+        for ss, label in [('chambre_vanne', 'Chambre de vanne'), ('vanne', 'Vanne'),
+                          ('ventouse', 'Ventouse'), ('vidange', 'Vidange'),
+                          ('traversee_riviere', 'Traversée de rivière'),
+                          ('autre_reseau', 'Autre ouvrage du réseau')]:
+            r = self.creer_ouvrage('reseau', ss)
+            self.assertEqual(r.status_code, 201, r.content)
+            self.assertEqual(r.json()['ouvrage']['sous_type_label'], label)
+
+    def test_reseau_sous_type_invalide(self):
+        r = self.creer_ouvrage('reseau', 'vaisseau')
+        self.assertEqual(r.status_code, 400)
+
+    def test_reservoir_chateau_eau(self):
+        r = self.creer_ouvrage('reservoir', 'chateau_eau')
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()['ouvrage']['sous_type_label'], "Château d'eau")
+        r2 = self.creer_ouvrage('reservoir', 'reservoir')
+        self.assertEqual(r2.status_code, 201)
+        self.assertEqual(r2.json()['ouvrage']['sous_type_label'], 'Réservoir')
+        r3 = self.creer_ouvrage('reservoir', 'tour_eiffel')
+        self.assertEqual(r3.status_code, 400)
+
+    def test_referentiels_reseau(self):
+        r = self.client.get('/api/adduction/referentiels/')
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        ids_reseaux = [x['id'] for x in d['reseaux']]
+        for attendu in ['station_pompage', 'chambre_vanne', 'vanne', 'ventouse',
+                        'vidange', 'traversee_riviere', 'autre_reseau']:
+            self.assertIn(attendu, ids_reseaux)
+        ids_reservoirs = [x['id'] for x in d['reservoirs']]
+        for attendu in ['reservoir', 'chateau_eau']:
+            self.assertIn(attendu, ids_reservoirs)
+
+
 class TestAdductionProfilPdf(BaseCartographieTest):
     """Export du PROFIL EN LONG d'une trace au format PDF."""
 

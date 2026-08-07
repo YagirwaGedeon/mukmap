@@ -486,9 +486,12 @@ class OuvrageHydraulique(models.Model):
     rivière, ravin, colline, sommet, vallée, école, maison, marché,
     église, centre de santé, passage difficile, zone rocheuse, zone
     marécageuse, traversée de rivière, point haut, point bas, emplacement
-    potentiel de réservoir / chambre de vanne, autre. Les formulaires
-    spécialisés associés sont stockés dans les modèles `ReleveSource`,
-    `ReleveConsommation` et `ReleveRepere`.
+    potentiel de réservoir / chambre de vanne, autre. Pour « reservoir »
+    (type=reservoir) : réservoir ou château d'eau. Pour « reseau »
+    (type=reseau) les OUVRAGES DU RÉSEAU : station de pompage, chambre
+    de vanne, vanne, ventouse, vidange, traversée de rivière, autre.
+    Les formulaires spécialisés associés sont stockés dans les modèles
+    `ReleveSource`, `ReleveConsommation` et `ReleveRepere`.
     """
     TYPE_CHOICES = [
         ('source', "Source d'eau"),
@@ -496,6 +499,7 @@ class OuvrageHydraulique(models.Model):
         ('borne', 'Borne-fontaine'),
         ('consommation', 'Point de consommation'),
         ('reservoir', 'Réservoir'),
+        ('reseau', 'Ouvrage du réseau'),
         ('ouvrage', 'Ouvrage existant'),
         ('repere', 'Point de repère'),
         ('intermediaire', 'Point intermédiaire'),
@@ -551,6 +555,27 @@ class OuvrageHydraulique(models.Model):
         ('chambre_vanne_potentielle', 'Emplacement potentiel de chambre de vanne'),
         ('autre_repere', 'Autre'),
     ]
+    # Classification RÉSERVOIRS — sous_types du type 'reservoir'.
+    RESERVOIR_CHOICES = [
+        ('reservoir', 'Réservoir'),
+        ('chateau_eau', "Château d'eau"),
+    ]
+    # Classification OUVRAGES DU RÉSEAU (conduite et équipements) —
+    # sous_types du type 'reseau'.
+    RESEAU_CHOICES = [
+        ('station_pompage', 'Station de pompage'),
+        ('chambre_vanne', 'Chambre de vanne'),
+        ('vanne', 'Vanne'),
+        ('ventouse', 'Ventouse'),
+        ('vidange', 'Vidange'),
+        ('traversee_riviere', 'Traversée de rivière'),
+        ('autre_reseau', 'Autre ouvrage du réseau'),
+    ]
+    # Union de toutes les classifications (pour le champ `sous_type`).
+    SOUS_TYPE_CHOICES = (
+        SOURCES_CHOICES + CONSOMMATION_CHOICES + REPERES_CHOICES +
+        RESERVOIR_CHOICES + RESEAU_CHOICES
+    )
     # État d'un point de consommation / ouvrage (G).
     ETAT_POINT_CHOICES = [
         ('bon', 'Bon'), ('moyen', 'Moyen'), ('mauvais', 'Mauvais'), ('hors_service', 'Hors service'),
@@ -590,7 +615,7 @@ class OuvrageHydraulique(models.Model):
     ]
     projet = models.ForeignKey('ProjetAdduction', on_delete=models.CASCADE, related_name='ouvrages', verbose_name="Projet")
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='source', verbose_name="Type d'ouvrage")
-    sous_type = models.CharField(max_length=30, blank=True, choices=SOURCES_CHOICES, default='',
+    sous_type = models.CharField(max_length=30, blank=True, choices=SOUS_TYPE_CHOICES, default='',
                                  verbose_name="Classification / sous-type",
                                  help_text="Qualifie le type d'ouvrage (ex : pour source → naturelle, forage, puits…)")
     representation = models.CharField(max_length=15, choices=REPRESENTATION_CHOICES, default='point',

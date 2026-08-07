@@ -244,6 +244,16 @@ def _creer_ouvrage_depuis(o, data):
             raise ValueError('Classification (sous-type) de repère invalide.')
         o.sous_type = sous_type
         o.representation = 'point'
+    elif o.type == 'reservoir':
+        if sous_type and sous_type not in dict(OuvrageHydraulique.RESERVOIR_CHOICES):
+            raise ValueError('Classification (sous-type) de réservoir invalide.')
+        o.sous_type = sous_type
+        o.representation = 'point'
+    elif o.type == 'reseau':
+        if sous_type and sous_type not in dict(OuvrageHydraulique.RESEAU_CHOICES):
+            raise ValueError('Classification (sous-type) d\'ouvrage du réseau invalide.')
+        o.sous_type = sous_type
+        o.representation = 'point'
     else:
         o.sous_type = ''
     representation = str(data.get('representation') or '')
@@ -550,6 +560,8 @@ def referentiels_adduction(request):
         'situations_acces': [{'id': k, 'label': v} for k, v in ReleveVillage.SITUATION_CHOICES],
         'consommations': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.CONSOMMATION_CHOICES],
         'reperes': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.REPERES_CHOICES],
+        'reservoirs': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.RESERVOIR_CHOICES],
+        'reseaux': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.RESEAU_CHOICES],
         'etats_point': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.ETAT_POINT_CHOICES],
         'existant_proposes': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.EXISTANT_PROPOSE_CHOICES],
         'potabilite_avertissement': (

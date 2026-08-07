@@ -18,6 +18,7 @@
         borne: { label: 'Borne-fontaine', emoji: '🚰', couleur: '#22c55e' },
         consommation: { label: 'Point de consommation', emoji: '🧴', couleur: '#84cc16' },
         reservoir: { label: 'Réservoir', emoji: '🛢️', couleur: '#6366f1' },
+        reseau: { label: 'Ouvrage du réseau', emoji: '🔧', couleur: '#8b5cf6' },
         ouvrage: { label: 'Ouvrage existant', emoji: '🏗️', couleur: '#a16207' },
         repere: { label: 'Point de repère', emoji: '🧭', couleur: '#64748b' },
         intermediaire: { label: 'Point intermédiaire', emoji: '➿', couleur: '#94a3b8' },
@@ -83,6 +84,22 @@
         chambre_vanne_potentielle: { labelKey: 'repere_chambre_vanne' },
         autre_repere: { labelKey: 'repere_autre' }
     };
+    // Classification RÉSERVOIRS — sous-types du type 'reservoir'.
+    var RESERVOIRS = {
+        reservoir: { labelKey: 'reservoir_reservoir', emoji: '🛢️' },
+        chateau_eau: { labelKey: 'reservoir_chateau_eau', emoji: '🗼' }
+    };
+    // Classification OUVRAGES DU RÉSEAU — sous-types du type 'reseau'
+    // (équipements et accessoires de la conduite).
+    var RESEAUX = {
+        station_pompage: { labelKey: 'reseau_station_pompage', emoji: '⚙️' },
+        chambre_vanne: { labelKey: 'reseau_chambre_vanne', emoji: '🚪' },
+        vanne: { labelKey: 'reseau_vanne', emoji: '🔧' },
+        ventouse: { labelKey: 'reseau_ventouse', emoji: '💨' },
+        vidange: { labelKey: 'reseau_vidange', emoji: '🕳️' },
+        traversee_riviere: { labelKey: 'reseau_traversee_riviere', emoji: '🌉' },
+        autre_reseau: { labelKey: 'reseau_autre', emoji: '➕' }
+    };
 
     var CORE = {
         TYPES: TYPES,
@@ -90,6 +107,8 @@
         SOURCES: SOURCES,
         CONSOMMATIONS: CONSOMMATIONS,
         REPERES: REPERES,
+        RESERVOIRS: RESERVOIRS,
+        RESEAUX: RESEAUX,
 
         // Sous-types (classification) du type « source » → liste [{id, labelKey}].
         sourcesListe: function () {
@@ -128,6 +147,40 @@
         repereLabel: function (id) {
             var s = REPERES[id];
             return s ? (s.labelKey || id) : id;
+        },
+
+        // Classification du type « reservoir » → liste [{id, labelKey}].
+        reservoirsListe: function () {
+            return Object.keys(RESERVOIRS).map(function (k) {
+                return { id: k, labelKey: RESERVOIRS[k].labelKey };
+            });
+        },
+
+        // Libellé d'un sous-type réservoir.
+        reservoirLabel: function (id) {
+            var s = RESERVOIRS[id];
+            return s ? (s.labelKey || id) : id;
+        },
+
+        // Classification du type « reseau » → liste [{id, labelKey}].
+        reseauxListe: function () {
+            return Object.keys(RESEAUX).map(function (k) {
+                return { id: k, labelKey: RESEAUX[k].labelKey };
+            });
+        },
+
+        // Libellé d'un sous-type ouvrage du réseau.
+        reseauLabel: function (id) {
+            var s = RESEAUX[id];
+            return s ? (s.labelKey || id) : id;
+        },
+
+        // Émoji d'un ouvrage : celui du sous-type (réservoir / réseau)
+        // s'il existe, sinon celui du type.
+        emojiOuvrage: function (type, sousType) {
+            if (type === 'reservoir' && RESERVOIRS[sousType]) return RESERVOIRS[sousType].emoji;
+            if (type === 'reseau' && RESEAUX[sousType]) return RESEAUX[sousType].emoji;
+            return (TYPES[type] || {}).emoji || '📍';
         },
 
         _rad: function (d) { return d * Math.PI / 180; },
@@ -593,13 +646,12 @@
             return {
                 type: 'FeatureCollection',
                 features: (ouvrages || []).map(function (o) {
-                    var t = TYPES[o.type] || {};
                     return {
                         type: 'Feature',
                         properties: {
                             id: o.id, type: o.type, nom: o.nom, statut: o.statut,
                             altitude_m: o.altitude_m, beneficiaires: o.beneficiaires,
-                            emoji: t.emoji || '📍'
+                            emoji: CORE.emojiOuvrage(o.type, o.sous_type)
                         },
                         geometry: { type: 'Point', coordinates: [o.longitude, o.latitude] }
                     };
@@ -906,6 +958,11 @@
             '<button type="button" id="mw-sys-analyser">🔍 Analyser</button></div>' +
             '<div class="mw-liste" id="mw-sys-resultat"></div>' +
             '</div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>🚰 RÉSEAU D\'ADDUCTION</span></div>' +
+            '<div class="mw-liste" id="mw-reseau-chaine"></div>' +
+            '<div class="mw-liste" id="mw-reseau-equipements"></div>' +
+            '</div>' +
             '</div>' +
             '<div data-panel="rapport" hidden>' +
             '<div class="mw-boutons"><button type="button" id="mw-gen-rapport">📄 Générer le rapport</button></div>' +
@@ -991,7 +1048,8 @@
 
         // Classification des sous-types selon le type de point choisi :
         // source → SOURCE D'EAU (A) ; consommation → POINT DE CONSOMMATION (G) ;
-        // repere → REPÈRES / POINTS INTERMÉDIAIRES (H) ; sinon vide.
+        // repere → REPÈRES / POINTS INTERMÉDIAIRES (H) ; reservoir → RÉSERVOIRS ;
+        // reseau → OUVRAGES DU RÉSEAU ; sinon vide.
         function remplirSousTypes() {
             var ss = parId('mw-sous-type');
             var t = parId('mw-type').value;
@@ -999,6 +1057,8 @@
             if (t === 'source') liste = CORE.sourcesListe();
             else if (t === 'consommation') liste = CORE.consommationsListe();
             else if (t === 'repere') liste = CORE.reperesListe();
+            else if (t === 'reservoir') liste = CORE.reservoirsListe();
+            else if (t === 'reseau') liste = CORE.reseauxListe();
             ss.innerHTML = '';
             if (!liste.length) {
                 ss.hidden = true;
@@ -1838,10 +1898,9 @@
             if (!ouvrages.length) return;
             var feats = [];
             ouvrages.forEach(function (o) {
-                var t = TYPES[o.type] || {};
                 feats.push({
                     type: 'Feature',
-                    properties: { id: o.id, nom: o.nom, type: o.type, statut: o.statut, emoji: t.emoji || '📍' },
+                    properties: { id: o.id, nom: o.nom, type: o.type, statut: o.statut, emoji: CORE.emojiOuvrage(o.type, o.sous_type) },
                     geometry: { type: 'Point', coordinates: [o.longitude, o.latitude] }
                 });
             });
@@ -1901,6 +1960,7 @@ function majVillagesCarte() {
             parId('mw-benef-gp').textContent = benef;
             parId('mw-nb-ouv').textContent = (ouvrages || []).length;
             majSysSysteme();
+            majReseauUI();
         }
 
         // ── ANALYSE SYSTÈME SOURCE → VILLAGE ──
@@ -2001,6 +2061,44 @@ function majVillagesCarte() {
                 if (ouvrages[i].id === id) return ouvrages[i];
             }
             return null;
+        }
+
+        // ── RÉSEAU D'ADDUCTION : chaîne SOURCE → CAPTAGE → CONDUITE → RÉSERVOIR → BORNE-FONTAINE ──
+        function majReseauUI() {
+            var chaine = [
+                { cle: 'source', label: 'Source', emoji: '💧', ok: 0, total: 1 },
+                { cle: 'captage', label: 'Captage', emoji: '🚰', ok: 0, total: 1 },
+                { cle: 'conduite', label: 'Conduite', emoji: '📏', ok: 0, total: 1 },
+                { cle: 'reservoir', label: 'Réservoir', emoji: '🛢️', ok: 0, total: 1 },
+                { cle: 'borne', label: 'Borne-fontaine', emoji: '🚰', ok: 0, total: 1 }
+            ];
+            (ouvrages || []).forEach(function (o) {
+                chaine.forEach(function (c) {
+                    if (o.type === c.cle && c.cle !== 'borne') c.ok += 1;
+                    else if (c.cle === 'borne' && (o.type === 'borne' || o.type === 'consommation')) c.ok += 1;
+                });
+            });
+            (traces || []).forEach(function () { chaine[2].ok += 1; });
+            var html = '';
+            chaine.forEach(function (c, i) {
+                var present = c.ok > 0;
+                html += '<div class="mw-ligne"><span>' + (i ? '→ ' : '') + c.emoji + ' ' + c.label +
+                    (c.ok ? ' <b class="mw-nb">×' + c.ok + '</b>' : '') +
+                    '</span><b style="color:' + (present ? '#4ade80' : '#f87171') + '">' +
+                    (present ? '✓' : '✗') + '</b></div>';
+            });
+            parId('mw-reseau-chaine').innerHTML = html;
+            var eq = ouvrages.filter(function (o) { return o.type === 'reseau'; });
+            var eqHtml = eq.length
+                ? eq.map(function (o) {
+                    var st = CORE.reseauLabel(o.sous_type);
+                    return '<div class="i"><span>' + CORE.emojiOuvrage('reseau', o.sous_type) + ' ' +
+                        trad(st, o.sous_type) + ' — ' + (o.nom || '#' + o.id) + '</span>' +
+                        '<b>' + (o.altitude_m != null ? Math.round(o.altitude_m) + ' m' : '') + '</b></div>';
+                }).join('')
+                : '<p class="mw-indice">Aucun équipement de réseau (vanne, ventouse, pompage…).</p>';
+            parId('mw-reseau-equipements').innerHTML =
+                (eq.length ? '<p class="mw-indice">Équipements du réseau (' + eq.length + ') :</p>' : '') + eqHtml;
         }
 
         // ── Profil canvas ──

@@ -59,6 +59,32 @@ for (const attendu of ['carrefour', 'route', 'pont', 'riviere_repere', 'ravin', 
 assert.ok(C.repereLabel('pont').startsWith('repere_'), 'labelKey repère pour i18n');
 assert.strictEqual(C.repereLabel('inconnu'), 'inconnu', 'label repère inconnu → id');
 
+// ── Réservoirs ──
+const reservoirsListe = C.reservoirsListe();
+assert.strictEqual(reservoirsListe.length, 2, '2 types de réservoir (' + reservoirsListe.length + ')');
+const idsReservoirs = reservoirsListe.map((s) => s.id);
+for (const attendu of ['reservoir', 'chateau_eau']) {
+    assert.ok(idsReservoirs.includes(attendu), 'type de réservoir présent : ' + attendu);
+}
+assert.ok(C.reservoirLabel('chateau_eau').startsWith('reservoir_'), 'labelKey réservoir pour i18n');
+
+// ── Ouvrages du réseau ──
+const reseauxListe = C.reseauxListe();
+assert.strictEqual(reseauxListe.length, 7, '7 types d\'ouvrages du réseau (' + reseauxListe.length + ')');
+const idsReseaux = reseauxListe.map((s) => s.id);
+for (const attendu of ['station_pompage', 'chambre_vanne', 'vanne', 'ventouse', 'vidange',
+                       'traversee_riviere', 'autre_reseau']) {
+    assert.ok(idsReseaux.includes(attendu), 'ouvrage du réseau présent : ' + attendu);
+}
+assert.ok(C.reseauLabel('station_pompage').startsWith('reseau_'), 'labelKey réseau pour i18n');
+assert.strictEqual(C.reseauLabel('inconnu'), 'inconnu', 'label réseau inconnu → id');
+
+// émojis par sous-type (carte)
+assert.strictEqual(C.emojiOuvrage('reseau', 'vanne'), '🔧', 'émoji sous-type réseau');
+assert.strictEqual(C.emojiOuvrage('reservoir', 'chateau_eau'), '🗼', 'émoji château d\'eau');
+assert.strictEqual(C.emojiOuvrage('borne', null), '🚰', 'émoji par défaut du type');
+
+
 // ── Polygon (village : polygone / zone) ──────────────────────────
 const poly = C.polygoneGeoJSON([[0, 0], [0.001, 0], [0.001, 0.001]], {nom: 'V1'});
 assert.strictEqual(poly.geometry.type, 'Polygon');
