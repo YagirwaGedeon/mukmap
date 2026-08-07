@@ -92,6 +92,39 @@ assert.strictEqual(C.denivelePositif([[0, 0, null], [0.001, 0, 200]]), 0, 'sans 
 const pentePlat = C.penteMoyenne([[0, 0, 100], [0.001, 0, 105]]);
 assert.ok(pentePlat > 4 && pentePlat < 5, 'pente ≈ 4,5 % (' + pentePlat + ')');
 
+// ── Mode « ENREGISTRER LE TRACÉ » (reconnaissance GPS) ───────────
+const rec = [
+    [30.30, 1.40, 100, '2026-08-07T08:00:00Z'],
+    [30.30, 1.4009, 105, '2026-08-07T08:00:30Z'],
+    [30.30, 1.4018, 102, '2026-08-07T08:01:00Z'],
+    [30.30, 1.4027, 104, '2026-08-07T08:02:00Z']
+];
+const distSeg = C.distance(1.40, 30.30, 1.4009, 30.30);
+assert.ok(distSeg > 99 && distSeg < 102, 'segment ≈ 100 m (' + distSeg + ')');
+assert.ok(C.longueurTotale3d(rec) > C.longueurTrace(rec),
+          'longueur 3D > distance horizontale');
+assert.ok(Math.abs(C.longueurTotale3d(rec) - C.longueurTrace(rec)) < 1,
+          'montées/descentes courtes → 3D ≈ 2D');
+assert.ok(C.longueurTotale3d([[0, 0, 0], [0, 0.001, 111.19]]) > C.longueurTrace([[0, 0, 0], [0, 0.001, 111.19]]),
+          'dénivelé égal à la distance → 3D > 2D');
+assert.strictEqual(C.denivelePositif(rec), 7, '+5 +2 = +7 m');
+assert.strictEqual(C.deniveleNegatif(rec), 3, 'descente de 3 m');
+assert.deepStrictEqual(C.altitudesMinMax(rec), {min: 100, max: 105});
+assert.strictEqual(C.dureeTrace(rec), 120, '08:00:00 → 08:02:00 = 120 s');
+assert.strictEqual(C.dureeTrace([[30.30, 1.40]]), null, 'sans timestamps → null');
+assert.ok(C.penteMaximale(rec) > 4 && C.penteMaximale(rec) < 5,
+          'pente max ≈ 4,5 % (' + C.penteMaximale(rec) + ')');
+const synth = C.analyseTraceGps(rec);
+assert.strictEqual(synth.nb_points, 4);
+assert.strictEqual(synth.duree_s, 120);
+assert.strictEqual(synth.altitude_min, 100);
+assert.strictEqual(synth.altitude_max, 105);
+assert.strictEqual(synth.denivele_positif, 7);
+assert.strictEqual(synth.denivele_negatif, 3);
+assert.ok(synth.longueur_totale > synth.distance_horizontale, '3D > 2D dans la synthèse');
+assert.strictEqual(C.analyseTraceGps([]).nb_points, 0);
+assert.strictEqual(C.analyseTraceGps([]).longueur_totale, 0);
+
 // ── charges / pressions / débits ─────────────────────────────────
 assert.strictEqual(C.chargeDisponible(1200, 1150, 10), 40, 'charge = 1200-1150-10 = 40 m');
 assert.ok(C.pressionBar(50) > 4.8 && C.pressionBar(50) < 5.0, '50 m ≈ 4,9 bar');

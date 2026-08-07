@@ -166,6 +166,96 @@
             return s;
         },
 
+        // Dénivelé cumulé négatif le long du tracé (m).
+        deniveleNegatif: function (coords) {
+            var s = 0;
+            for (var i = 1; i < (coords || []).length; i++) {
+                var a = coords[i - 1][2], b = coords[i][2];
+                if (a != null && b != null && b < a) s += (a - b);
+            }
+            return s;
+        },
+
+        // Distance horizontale (m) = somme des distances planaires (2D).
+        distanceHorizontale: function (coords) {
+            return CORE.longueurTrace(coords);
+        },
+
+        // Longueur totale (m) le long du terrain : segments 3D lorsque
+        // l'altitude est connue (√(d2D² + dh²)), sinon distance planaire.
+        longueurTotale3d: function (coords) {
+            if (!coords || coords.length < 2) return 0;
+            var t = 0;
+            for (var i = 1; i < coords.length; i++) {
+                var a = coords[i - 1], b = coords[i];
+                var d2 = CORE.distanceCoord(a, b);
+                if (a[2] != null && b[2] != null) {
+                    var dh = b[2] - a[2];
+                    t += Math.sqrt(d2 * d2 + dh * dh);
+                } else {
+                    t += d2;
+                }
+            }
+            return t;
+        },
+
+        // Pente maximale (%) : segment le plus raide en valeur absolue.
+        penteMaximale: function (coords) {
+            var max = 0;
+            for (var i = 1; i < (coords || []).length; i++) {
+                var a = coords[i - 1], b = coords[i];
+                if (a[2] == null || b[2] == null) continue;
+                var d2 = CORE.distanceCoord(a, b);
+                if (d2 <= 0) continue;
+                var p = Math.abs((b[2] - a[2]) / d2) * 100;
+                if (p > max) max = p;
+            }
+            return max;
+        },
+
+        // Altitudes min/max d'une trace → {min, max} (null si inconnues).
+        altitudesMinMax: function (coords) {
+            var alts = [];
+            (coords || []).forEach(function (c) {
+                if (c[2] != null) alts.push(Number(c[2]));
+            });
+            if (!alts.length) return { min: null, max: null };
+            return { min: Math.min.apply(null, alts), max: Math.max.apply(null, alts) };
+        },
+
+        // Durée (s) d'une reconnaissance : timestamps ISO en 4e élément
+        // de chaque point [lon, lat, alt?, ts?]. Null si absent.
+        dureeTrace: function (points) {
+            var deb = null, fin = null;
+            (points || []).forEach(function (p) {
+                if (!p[3]) return;
+                var t = Date.parse(p[3]);
+                if (isNaN(t)) return;
+                if (deb === null || t < deb) deb = t;
+                if (fin === null || t > fin) fin = t;
+            });
+            if (deb === null || fin === null) return null;
+            return Math.round((fin - deb) / 1000);
+        },
+
+        // Synthèse complète d'une reconnaissance GPS (mode
+        // « ENREGISTRER LE TRACÉ ») : [lon, lat, alt?, tsISO?]…
+        analyseTraceGps: function (points) {
+            var longueur3d = CORE.longueurTotale3d(points);
+            return {
+                longueur_totale: longueur3d,
+                distance_horizontale: CORE.distanceHorizontale(points),
+                altitude_min: CORE.altitudesMinMax(points).min,
+                altitude_max: CORE.altitudesMinMax(points).max,
+                denivele_positif: CORE.denivelePositif(points),
+                denivele_negatif: CORE.deniveleNegatif(points),
+                pente_moyenne: CORE.penteMoyenne(points),
+                pente_maximale: CORE.penteMaximale(points),
+                nb_points: (points || []).length,
+                duree_s: CORE.dureeTrace(points)
+            };
+        },
+
         // Dénivelé net (altitude fin - altitude début).
         deniveleNet: function (coords) {
             if (!coords || !coords.length) return null;
@@ -532,6 +622,24 @@
             '<div class="mw-ligne"><span>Longueur</span><b id="mw-len">—</b></div>' +
             '<div class="mw-ligne"><span>Dénivelé cumulé +</span><b id="mw-den">—</b></div>' +
             '<div class="mw-ligne"><span>Pente moyenne</span><b id="mw-pente">—</b></div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-boutons">' +
+            '<button type="button" id="mw-gps-trace">🎥 Enregistrer le tracé (GPS)</button></div>' +
+            '<div class="mw-gps-actions" id="mw-gps-actions" hidden>' +
+            '<button type="button" id="mw-pause-trace">⏸ Pause</button>' +
+            '<button type="button" id="mw-rep-trace" hidden>▶️ Reprendre</button>' +
+            '<button type="button" id="mw-fin-gps">✅ Terminer</button>' +
+            '<button type="button" id="mw-ann-gps">🗑 Annuler</button></div>' +
+            '<div class="mw-gps-etat" id="mw-gps-etat" hidden><b id="mw-gps-etat-txt">● Enregistrement…</b></div>' +
+            '<div id="mw-gps-stats" hidden>' +
+            '<div class="mw-ligne"><span>Points GPS</span><b id="mw-gs-points">0</b></div>' +
+            '<div class="mw-ligne"><span>Durée</span><b id="mw-gs-duree">—</b></div>' +
+            '<div class="mw-ligne"><span>Longueur totale</span><b id="mw-gs-long">—</b></div>' +
+            '<div class="mw-ligne"><span>Distance horizontale</span><b id="mw-gs-horiz">—</b></div>' +
+            '<div class="mw-ligne"><span>Altitude min / max</span><b id="mw-gs-alt">—</b></div>' +
+            '<div class="mw-ligne"><span>Dénivelé + / −</span><b id="mw-gs-den">—</b></div>' +
+            '<div class="mw-ligne"><span>Pente moy. / max.</span><b id="mw-gs-pente">—</b></div>' +
+            '</div></div>' +
             '<div class="mw-ligne"><span>Nom</span><input type="text" id="mw-nom-trace" placeholder="Ex : conduite principale"></div>' +
             '<div class="mw-liste" id="mw-liste-traces"></div>' +
             '</div>' +
@@ -588,6 +696,10 @@
             '.mw-liste{margin-top:6px;max-height:160px;overflow:auto;font-size:.72rem;color:var(--text-2,#a0a3c2);}' +
             '.mw-liste .i{display:flex;justify-content:space-between;gap:6px;padding:3px 4px;border-radius:6px;cursor:pointer;}' +
             '.mw-liste .i:hover{background:rgba(6,182,212,.1);}' +
+            '.mw-gps-blok{border-top:1px dashed var(--border,#3d4060);margin-top:6px;padding-top:4px;}' +
+            '.mw-gps-etat{font-size:.74rem;font-weight:800;padding:3px 0;}' +
+            '.mw-gps-actions button{background:rgba(34,197,94,.1);border-color:#22c55e;color:#4ade80;}' +
+            '.mw-gps-actions #mw-fin-gps{background:rgba(6,182,212,.16);border-color:#22d3ee;color:#22d3ee;}' +
             '.mw-msg{padding:4px 12px 10px;font-size:.78rem;color:var(--text-2,#a0a3c2);min-height:16px;}';
         (document.head || document.documentElement).appendChild(style);
 
@@ -1220,6 +1332,174 @@
             ajouterGeoJSON(k, [CORE.traceGeoJSON(t.coordonnees, { nom: t.nom })], 'line', '#22d3ee');
             try { carte.fitBounds(bounds, { padding: 60, maxZoom: 15 }); } catch (e) { /* ignore */ }
         }
+
+        // ── Mode « ENREGISTRER LE TRACÉ » (GPS automatique) ────────
+        var gpsTracePoints = [];
+        var gpsWatchId = null;
+        var gpsEnCours = false;
+        var gpsEnPause = false;
+        var gpsTimer = null;
+
+        function formaterDuree(s) {
+            if (s == null) return '—';
+            var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+            if (h > 0) return h + 'h ' + m + 'min';
+            if (m > 0) return m + 'min ' + sec + 's';
+            return sec + ' s';
+        }
+
+        function demarrerGpsTrace() {
+            if (!projetActif) { message('Sélectionnez d\'abord un projet.', 'erreur'); return; }
+            if (!navigator.geolocation) { message('Géolocalisation non supportée.', 'erreur'); return; }
+            if (enTrace) { annulerTrace(); }
+            gpsTracePoints = [];
+            gpsEnCours = true;
+            gpsEnPause = false;
+            parId('mw-gps-trace').hidden = true;
+            parId('mw-gps-actions').hidden = false;
+            parId('mw-gps-etat').hidden = false;
+            parId('mw-gps-stats').hidden = false;
+            majEtatGps('● Enregistrement…', '#22c55e');
+            parId('mw-pause-trace').hidden = false;
+            parId('mw-rep-trace').hidden = true;
+            parId('mw-gps-trace').textContent = '🎥 Enregistrer le tracé (GPS)';
+            message('Marchez le long du futur tracé — les points GPS sont enregistrés.', 'info');
+            gpsWatchId = navigator.geolocation.watchPosition(function (pos) {
+                var lon = pos.coords.longitude, lat = pos.coords.latitude;
+                var alt = (pos.coords.altitude !== null && pos.coords.altitude !== undefined)
+                    ? pos.coords.altitude : null;
+                var dernier = gpsTracePoints[gpsTracePoints.length - 1];
+                var dMin = 3, tMax = 5;
+                if (dernier) {
+                    var dist = CORE.distanceCoord([dernier[0], dernier[1]], [lon, lat]);
+                    var ecart = (Date.now() - Date.parse(dernier[3])) / 1000;
+                    if (dist < dMin && ecart < tMax) return;
+                }
+                gpsTracePoints.push([lon, lat, alt, new Date().toISOString()]);
+                afficherGpsStats();
+            }, function (err) {
+                message('Erreur GPS : ' + (err && err.message ? err.message : 'indisponible'), 'erreur');
+            }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
+            if (gpsTimer) clearInterval(gpsTimer);
+            gpsTimer = setInterval(afficherGpsStats, 1000);
+        }
+
+        function arreterWatchGps() {
+            if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+            if (gpsTimer) { clearInterval(gpsTimer); gpsTimer = null; }
+        }
+
+        function majEtatGps(texte, couleur) {
+            parId('mw-gps-etat').hidden = false;
+            parId('mw-gps-etat-txt').textContent = texte;
+            parId('mw-gps-etat-txt').style.color = couleur || '#f59e0b';
+        }
+
+        function afficherGpsStats() {
+            var a = CORE.analyseTraceGps(gpsTracePoints);
+            parId('mw-gs-points').textContent = a.nb_points;
+            var duree = gpsEnCours ? CORE.dureeTrace(gpsTracePoints) : a.duree_s;
+            parId('mw-gs-duree').textContent = formaterDuree(duree);
+            parId('mw-gs-long').textContent = formatDist(a.longueur_totale);
+            parId('mw-gs-horiz').textContent = formatDist(a.distance_horizontale);
+            parId('mw-gs-alt').textContent = (a.altitude_min != null && a.altitude_max != null)
+                ? Math.round(a.altitude_min) + ' / ' + Math.round(a.altitude_max) + ' m' : '—';
+            parId('mw-gs-den').textContent = '+' + Math.round(a.denivele_positif) + ' / −' +
+                Math.round(a.denivele_negatif) + ' m';
+            parId('mw-gs-pente').textContent = a.pente_moyenne.toFixed(1) + ' / ' +
+                a.pente_maximale.toFixed(1) + ' %';
+            removeCouche('mw-gps-trace-tmp');
+            if (gpsTracePoints.length >= 2) {
+                ajouterGeoJSON('mw-gps-trace-tmp',
+                    [CORE.traceGeoJSON(gpsTracePoints.map(function (p) { return [p[0], p[1], p[2]]; }), {})],
+                    'line', '#22c55e');
+            }
+        }
+
+        function pauseGpsTrace() {
+            if (!gpsEnCours || gpsEnPause) return;
+            gpsEnPause = true;
+            arreterWatchGps();
+            majEtatGps('⏸ En pause — reprenez pour continuer.', '#eab308');
+            parId('mw-pause-trace').hidden = true;
+            parId('mw-rep-trace').hidden = false;
+        }
+
+        function reprendreGpsTrace() {
+            if (!gpsEnCours || !gpsEnPause) return;
+            gpsEnPause = false;
+            majEtatGps('● Enregistrement…', '#22c55e');
+            parId('mw-pause-trace').hidden = false;
+            parId('mw-rep-trace').hidden = true;
+            gpsWatchId = navigator.geolocation.watchPosition(function (pos) {
+                var lon = pos.coords.longitude, lat = pos.coords.latitude;
+                var alt = (pos.coords.altitude !== null && pos.coords.altitude !== undefined)
+                    ? pos.coords.altitude : null;
+                var dernier = gpsTracePoints[gpsTracePoints.length - 1];
+                if (dernier) {
+                    var dist = CORE.distanceCoord([dernier[0], dernier[1]], [lon, lat]);
+                    if (dist < 3) return;
+                }
+                gpsTracePoints.push([lon, lat, alt, new Date().toISOString()]);
+                afficherGpsStats();
+            }, function (err) {
+                message('Erreur GPS : ' + (err && err.message ? err.message : 'indisponible'), 'erreur');
+            }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 });
+            if (gpsTimer) clearInterval(gpsTimer);
+            gpsTimer = setInterval(afficherGpsStats, 1000);
+        }
+
+        function annulerGpsTrace() {
+            gpsEnCours = false;
+            gpsEnPause = false;
+            arreterWatchGps();
+            gpsTracePoints = [];
+            parId('mw-gps-trace').hidden = false;
+            parId('mw-gps-actions').hidden = true;
+            parId('mw-gps-etat').hidden = true;
+            parId('mw-gps-stats').hidden = true;
+            removeCouche('mw-gps-trace-tmp');
+            majEtatGps('', '#f59e0b');
+        }
+
+        function terminerGpsTrace() {
+            if (!gpsEnCours) return;
+            if (gpsTracePoints.length < 2) { message('Au moins 2 points GPS requis.', 'erreur'); return; }
+            var a = CORE.analyseTraceGps(gpsTracePoints);
+            var nom = parId('mw-nom-trace').value.trim() || ('Reconnaissance ' + new Date().toLocaleDateString());
+            var coordonnees = gpsTracePoints.map(function (p) { return [p[0], p[1], p[2]]; });
+            var duree = a.duree_s;
+            post(apiTraces, {
+                projet_id: projetActif.id,
+                nom: nom,
+                coordonnees: coordonnees,
+                observations: 'Durée de reconnaissance : ' + formaterDuree(duree) +
+                    ' ; points : ' + a.nb_points + ' ; dénivelé +' + Math.round(a.denivele_positif) +
+                    '/−' + Math.round(a.denivele_negatif) + ' m ; pente moy. ' +
+                    a.pente_moyenne.toFixed(1) + ' %.'
+            }).then(function (d) {
+                gpsEnCours = false;
+                gpsEnPause = false;
+                arreterWatchGps();
+                parId('mw-gps-trace').hidden = false;
+                parId('mw-gps-actions').hidden = true;
+                parId('mw-gps-etat').hidden = true;
+                removeCouche('mw-gps-trace-tmp');
+                if (!d.ok) { message(d.erreur || 'Erreur.', 'erreur'); return; }
+                traces.push(d.trace);
+                gpsTracePoints = [];
+                majTout();
+                message('Tracé GPS enregistré : ' + formatDist(a.longueur_totale) +
+                    ' en ' + formaterDuree(duree) + ' (dénivelé +' +
+                    Math.round(a.denivele_positif) + ' m).', 'succes');
+            });
+        }
+
+        parJouet(parId('mw-gps-trace'), 'click', demarrerGpsTrace);
+        parJouet(parId('mw-pause-trace'), 'click', pauseGpsTrace);
+        parJouet(parId('mw-rep-trace'), 'click', reprendreGpsTrace);
+        parJouet(parId('mw-fin-gps'), 'click', terminerGpsTrace);
+        parJouet(parId('mw-ann-gps'), 'click', annulerGpsTrace);
 
         // ── Couches temporaires ──
         var registre = [];
