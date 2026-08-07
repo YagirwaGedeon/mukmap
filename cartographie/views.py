@@ -2938,6 +2938,12 @@ def points_liste(request):
     })
 
 
+@login_required
+def table_attributaire(request):
+    """Table attributaire professionnelle synchronisée avec la carte."""
+    return render(request, 'cartographie/table_attributaire.html', {})
+
+
 # ─── EXPORTS (GeoJSON / KML / GPX) ─────────────────────────────
 
 

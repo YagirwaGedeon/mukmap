@@ -76,6 +76,9 @@ class TestsJSPanneauIdentifier(BaseCartographieTest):
     def test_couches_wms_core(self):
         self._lancer(DOSSIER_JS / 'test_couches_wms.js')
 
+    def test_table_attributaire_core(self):
+        self._lancer(DOSSIER_JS / 'test_table_attributaire.js')
+
     def test_panneau_identifier(self):
         fichier = DOSSIER_JS / '_donnees_points_rendues.json'
         fichier.write_text(json.dumps(self._donnees_points(), ensure_ascii=False), encoding='utf-8')

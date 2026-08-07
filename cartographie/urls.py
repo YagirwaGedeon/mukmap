@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import api_points
 
 urlpatterns = [
     path('', views.index_cartographie, name='index_cartographie'),
@@ -16,6 +17,14 @@ urlpatterns = [
     path('import/excel-intelligent/', views.importer_excel_v2, name='importer_excel_v2'),
     path('import/', views.import_page, name='import_page'),
     path('points/', views.points_liste, name='points_liste'),
+    path('table-attributaire/', views.table_attributaire, name='table_attributaire'),
+
+    # ── Table attributaire professionnelle ─────────────────────
+    path('api/table-points/', api_points.api_points_lister, name='api_table_points'),
+    path('api/table-points/creer/', api_points.api_points_creer, name='api_table_points_creer'),
+    path('api/table-points/<int:pk>/modifier/', api_points.api_point_modifier, name='api_table_point_modifier'),
+    path('api/table-points/supprimer/', api_points.api_points_supprimer, name='api_table_points_supprimer'),
+    path('api/table-points/export/<str:format>/', api_points.api_points_export, name='api_table_points_export'),
     path('export/carte-pdf/', views.export_carte_pdf, name='export_carte_pdf'),
     path('export/<str:format>/', views.export_points, name='export_points'),
 

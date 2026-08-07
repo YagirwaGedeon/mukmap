@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table attributaire — MUKMAP v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+
+        #topbar { display: flex; align-items: center; gap: 16px; padding: 12px 22px; background: color-mix(in srgb, var(--bg-2) 88%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+        .pastille { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+        .titre { font-weight: 800; font-size: 1rem; }
+        .sous-titre { font-size: .7rem; color: var(--text-3); }
+        nav { display: flex; gap: 6px; margin-left: 24px; flex-wrap: wrap; }
+        nav a { text-decoration: none; color: var(--text-2); font-size: .8rem; font-weight: 600; padding: 8px 14px; border-radius: 10px; transition: all .18s; display: flex; align-items: center; gap: 7px; }
+        nav a:hover { background: var(--bg-3); color: var(--text); }
+        nav a.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+        .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+        button { font-family: 'Inter', Arial, sans-serif; cursor: pointer; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: .85rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+
+        /* ── Zone principale ── */
+        .ta-app { display: flex; flex-direction: column; height: calc(100vh - 65px); }
+        .ta-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg-2) 70%, transparent); backdrop-filter: blur(10px); flex-wrap: wrap; position: relative; z-index: 40; }
+        .ta-recherche { flex: 1; min-width: 200px; max-width: 380px; padding: 9px 14px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .82rem; }
+        .ta-recherche:focus { border-color: var(--accent); }
+        .ta-outil { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 10px; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); font-size: .78rem; font-weight: 600; transition: all .18s; }
+        .ta-outil:hover { border-color: var(--accent); color: var(--text); }
+        .ta-outil.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
+        .ta-outil-primaire { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
+        .ta-outil-primaire:hover { color: #fff; box-shadow: 0 4px 16px rgba(79,70,229,.4); }
+        .ta-stats-badge { display: flex; align-items: center; }
+        .ta-stat-pill { padding: 7px 13px; border-radius: 999px; font-size: .76rem; font-weight: 600; background: var(--bg-3); border: 1px solid var(--border); white-space: nowrap; }
+        .ta-sep { width: 1px; height: 26px; background: var(--border); margin: 0 4px; }
+
+        /* ── Barre de sélection ── */
+        .ta-barre { padding: 8px 18px; border-bottom: 1px solid var(--border); background: rgba(109,93,246,.08); display: none; }
+        .ta-barre:not(:empty) { display: block; }
+        .ta-sel-pill { display: inline-flex; align-items: center; gap: 10px; font-size: .8rem; font-weight: 600; color: var(--accent); }
+        .ta-lien { background: none; border: none; color: var(--accent); font-weight: 700; font-size: .78rem; text-decoration: underline; cursor: pointer; padding: 0; }
+
+        /* ── Panneaux déroulants ── */
+        .ta-panneau { position: absolute; top: 100%; left: 18px; width: 380px; max-width: calc(100vw - 36px); background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; display: none; z-index: 60; max-height: 60vh; overflow: auto; }
+        .ta-panneau.ouvert { display: block; }
+        .ta-panneau h3 { font-size: .82rem; margin-bottom: 12px; color: var(--text-2); text-transform: uppercase; letter-spacing: .5px; }
+        .ta-filtres-liste { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        .ta-filtre-vide { color: var(--text-3); font-size: .78rem; padding: 8px 0; }
+        .ta-filtre-ligne { display: flex; align-items: center; gap: 8px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; font-size: .76rem; }
+        .ta-filtre-champ { font-weight: 700; color: var(--accent); }
+        .ta-filtre-op { color: var(--text-3); }
+        .ta-filtre-val { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ta-f-ligne { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .ta-f-ligne select, .ta-f-ligne input { padding: 8px 10px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .78rem; }
+        .ta-f-champ { flex: 1; min-width: 0; }
+        .ta-f-op { width: 150px; }
+        .ta-f-valeurs { display: flex; gap: 8px; margin-bottom: 8px; }
+        .ta-f-valeurs .ta-in { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .78rem; }
+        .ta-f-logique { width: 100%; padding: 8px 10px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .78rem; margin-bottom: 8px; }
+        .ta-f-ajouter { width: 100%; }
+        .ta-colonnes-liste { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; max-height: 40vh; overflow: auto; }
+        .ta-col-ligne { display: flex; align-items: center; gap: 7px; font-size: .78rem; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+        .ta-col-ligne:hover { background: var(--bg-3); }
+        .ta-col-ligne input { accent-color: var(--accent); }
+        .ta-stats-corps { display: flex; flex-direction: column; gap: 12px; }
+        .ta-stats-bloc { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+        .ta-stats-titre { font-size: .74rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+        .ta-stats-ligne { font-size: .76rem; color: var(--text-2); margin: 2px 0; }
+        .ta-stats-barre { display: flex; align-items: center; gap: 8px; }
+        .ta-stats-nom { width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+        .ta-stats-piste { flex: 1; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+        .ta-stats-rempli { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 3px; }
+        .ta-stats-n { color: var(--text-3); font-size: .7rem; white-space: nowrap; }
+
+        /* ── Disposition table + carte ── */
+        .ta-corps-layout { display: grid; grid-template-columns: 1fr 420px; gap: 0; flex: 1; min-height: 0; position: relative; }
+        .ta-table-zone { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+        .ta-table-scroll { flex: 1; overflow: auto; min-height: 0; }
+        .ta-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .8rem; }
+        .ta-tete th { position: sticky; top: 0; z-index: 5; background: var(--bg-3); text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border-2); color: var(--text-2); font-size: .67rem; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; user-select: none; }
+        .ta-tete th.ta-col { cursor: pointer; }
+        .ta-tete th.ta-col:hover { color: var(--text); }
+        .ta-th-texte { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+        .ta-col-check { width: 36px; text-align: center; }
+        .ta-col-check input { accent-color: var(--accent); cursor: pointer; }
+        .ta-col-resize { display: inline-block; width: 5px; height: 16px; margin-left: 5px; border-left: 2px solid var(--border-2); cursor: col-resize; vertical-align: middle; }
+        .ta-col-resize:hover { border-color: var(--accent); }
+        .ta-col-actions { width: 130px; }
+        .ta-corps td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+        .ta-corps tr.ta-ligne { cursor: pointer; }
+        .ta-corps tr.ta-ligne:hover td { background: var(--bg-3); }
+        .ta-corps tr.ta-ligne.sel td { background: rgba(109,93,246,.14); box-shadow: inset 3px 0 0 var(--accent); }
+        .ta-corps tr.ta-ligne.sel:hover td { background: rgba(109,93,246,.2); }
+        .ta-nom { font-weight: 600; }
+        .ta-mono { font-family: Consolas, monospace; font-size: .74rem; color: var(--text-2); }
+        .ta-mute { color: var(--text-3); }
+        .ta-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: .7rem; font-weight: 600; background: var(--bg-3); border: 1px solid var(--border); }
+        .ta-badge-projet { color: var(--accent); border-color: rgba(109,93,246,.45); background: rgba(109,93,246,.1); }
+        .ta-actions { display: flex; gap: 4px; }
+        .ta-bouton { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 7px 13px; border-radius: 9px; font-weight: 600; font-size: .78rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .18s; }
+        .ta-bouton:hover { border-color: var(--accent); color: var(--accent); }
+        .ta-bouton-primaire { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .ta-bouton-primaire:hover { color: #fff; box-shadow: 0 4px 16px rgba(79,70,229,.4); }
+        .ta-bouton-icon { padding: 5px 8px; font-size: .82rem; background: transparent; }
+        .ta-bouton-icon.danger:hover { border-color: var(--red); color: var(--red); }
+        .ta-vide { text-align: center; padding: 60px 20px; color: var(--text-3); }
+        .ta-vide-icone { font-size: 2.4rem; margin-bottom: 10px; }
+
+        /* ── Pagination ── */
+        .ta-pagination { display: flex; align-items: center; gap: 14px; padding: 10px 18px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg-2) 80%, transparent); }
+        .ta-pg-info { font-size: .78rem; color: var(--text-2); margin-right: auto; }
+        .ta-pg-boutons { display: flex; align-items: center; gap: 4px; }
+        .ta-pg-bouton { width: 30px; height: 30px; border-radius: 8px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); font-size: .8rem; }
+        .ta-pg-bouton:hover { border-color: var(--accent); color: var(--accent); }
+        .ta-pg-bouton.disabled { opacity: .35; pointer-events: none; }
+        .ta-pg-courante { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-weight: 700; font-size: .8rem; }
+        .ta-pg-taille { padding: 7px 10px; border-radius: 9px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .76rem; }
+
+        /* ── Carte ── */
+        .ta-carte { border-left: 1px solid var(--border); min-height: 0; position: relative; }
+        #ta-carte { position: absolute; inset: 0; }
+        .ta-carte-vide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: .8rem; background: var(--bg-2); }
+        .maplibregl-ctrl-group { border-radius: 10px !important; border: 1px solid var(--border) !important; overflow: hidden; box-shadow: var(--shadow) !important; }
+
+        /* ── Modale ── */
+        .ta-modale { position: fixed; inset: 0; background: rgba(10,12,26,.6); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+        .ta-modale.ouvert { display: flex; }
+        .ta-modale-boite { background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 16px; box-shadow: var(--shadow); width: 560px; max-width: 100%; max-height: 90vh; overflow: auto; padding: 22px; }
+        .ta-modale-titre { font-size: 1.05rem; font-weight: 800; margin-bottom: 18px; }
+        .ta-form { display: flex; flex-direction: column; gap: 10px; }
+        .ta-champ { display: flex; flex-direction: column; gap: 5px; font-size: .78rem; font-weight: 600; color: var(--text-2); }
+        .ta-champ input, .ta-champ select, .ta-champ textarea { padding: 9px 12px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .82rem; resize: vertical; }
+        .ta-champ input:focus, .ta-champ select:focus, .ta-champ textarea:focus { border-color: var(--accent); }
+        .ta-champ input.invalide { border-color: var(--red); }
+        .ta-form-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .ta-champ-json { border-left: 3px solid var(--accent); padding-left: 10px; }
+        .ta-form-json-vide { font-size: .74rem; color: var(--text-3); background: var(--bg-3); border: 1px dashed var(--border-2); border-radius: 10px; padding: 10px; }
+        .ta-modale-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+        /* ── Toasts ── */
+        .ta-toasts { position: fixed; bottom: 20px; right: 20px; z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+        .ta-toast { padding: 11px 16px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--border-2); color: var(--text); font-size: .8rem; font-weight: 600; box-shadow: var(--shadow); animation: ta-toast-in .22s ease; transition: opacity .4s, transform .4s; max-width: 340px; }
+        .ta-toast.sortie { opacity: 0; transform: translateX(20px); }
+        .ta-toast.succes { border-color: rgba(34,197,94,.5); color: var(--green); }
+        .ta-toast.erreur { border-color: rgba(239,68,68,.5); color: var(--red); }
+        .ta-toast.info { border-color: rgba(109,93,246,.5); color: var(--accent); }
+        @keyframes ta-toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+        /* ── Chargement ── */
+        .ta-chargement { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 55%, transparent); display: none; align-items: center; justify-content: center; z-index: 90; }
+        .ta-chargement-spin { width: 40px; height: 40px; border: 3px solid var(--border-2); border-top-color: var(--accent); border-radius: 50%; animation: ta-spin .8s linear infinite; }
+        @keyframes ta-spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 1100px) {
+            .ta-corps-layout { grid-template-columns: 1fr; }
+            .ta-carte { border-left: none; border-top: 1px solid var(--border); height: 300px; }
+            .ta-carte-vide { display: none; }
+        }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<header id="topbar">
+    <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+    <div>
+        <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
+        <div class="sous-titre">Table attributaire</div>
+    </div>
+    <nav>
+        <a href="{% url 'dashboard' %}"><i>📊</i> <span>Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i>🗺️</i> <span>Cartographie</span></a>
+        <a href="{% url 'points_liste' %}"><i>📍</i> <span>Tous les points</span></a>
+        <a href="{% url 'table_attributaire' %}" class="actif"><i>📋</i> <span>Table attributaire</span></a>
+        <a href="{% url 'import_page' %}"><i>📥</i> <span>Import de données</span></a>
+        <a href="{% url 'rapport_generer' %}"><i>📄</i> <span>Rapports</span></a>
+    </nav>
+    <div class="droite">
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <a class="btn" href="{% url 'deconnexion' %}"><span>Déconnexion</span></a>
+    </div>
+</header>
+
+<div class="ta-app">
+    <div class="ta-toolbar">
+        <input type="text" class="ta-recherche" placeholder="Rechercher (nom, description, province…)" aria-label="Recherche">
+        <div class="ta-stats-badge"></div>
+        <div class="ta-sep"></div>
+        <button class="ta-outil ta-outil-primaire" data-outil="ajout">＋ Ajouter</button>
+        <button class="ta-outil" data-outil="tout-selectionner">☑ Tout sélectionner</button>
+        <button class="ta-outil" data-outil="selection-filtre">🔁 Appliquer les filtres sauvegardés</button>
+        <button class="ta-outil" data-outil="reinitialiser">↺ Réinitialiser</button>
+        <div class="ta-sep"></div>
+        <button class="ta-outil" data-outil="filtre-spatial" title="Limiter aux points visibles sur la carte">🔍 Dans la carte</button>
+        <button class="ta-outil" data-outil="filtres">⚙ Filtres</button>
+        <button class="ta-outil" data-outil="colonnes">☰ Colonnes</button>
+        <button class="ta-outil" data-outil="stats">📊 Stats</button>
+        <div class="ta-sep"></div>
+        <button class="ta-outil" data-outil="export-csv">⬇ CSV</button>
+        <button class="ta-outil" data-outil="export-geojson">⬇ GeoJSON</button>
+        <button class="ta-outil" data-outil="export-json">⬇ JSON</button>
+
+        <div class="ta-panneau ta-panneau-filtres">
+            <h3>Filtres combinés (ET / OU)</h3>
+            <div class="ta-filtres-liste"></div>
+            <div class="ta-f-ligne">
+                <select class="ta-f-champ"></select>
+                <select class="ta-f-op"></select>
+            </div>
+            <div class="ta-f-valeurs-zone"></div>
+            <select class="ta-f-logique">
+                <option value="et">ET — tous les critères</option>
+                <option value="ou">OU — au moins un critère</option>
+            </select>
+            <button class="ta-bouton ta-bouton-primaire ta-f-ajouter">＋ Ajouter ce filtre</button>
+        </div>
+
+        <div class="ta-panneau ta-panneau-colonnes">
+            <h3>Colonnes affichées</h3>
+            <div class="ta-colonnes-liste"></div>
+        </div>
+
+        <div class="ta-panneau ta-panneau-stats">
+            <h3>Statistiques des résultats</h3>
+            <div class="ta-stats-corps"></div>
+        </div>
+    </div>
+
+    <div class="ta-barre"></div>
+
+    <div class="ta-corps-layout">
+        <div class="ta-table-zone">
+            <div class="ta-table-scroll">
+                <table class="ta-table">
+                    <thead class="ta-tete"><tr></tr></thead>
+                    <tbody class="ta-corps"></tbody>
+                </table>
+            </div>
+            <div class="ta-pagination"></div>
+        </div>
+        <div class="ta-carte">
+            <div id="ta-carte"></div>
+        </div>
+    </div>
+</div>
+
+<div class="ta-modale">
+    <div class="ta-modale-boite"></div>
+</div>
+
+<div class="ta-toasts"></div>
+<div class="ta-chargement"><div class="ta-chargement-spin"></div></div>
+<form style="display:none">{% csrf_token %}</form>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="{% static 'js/table-attributaire.js' %}"></script>
+<script>
+(function () {
+    var token = '';
+    var inp = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (inp) token = inp.value;
+    TableAttributaire.demarrer({
+        racine: document.body,
+        urlApi: '{% url "api_table_points" %}',
+        csrf: token,
+        conteneurCarte: document.getElementById('ta-carte'),
+        pageSize: 50
+    });
+})();
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

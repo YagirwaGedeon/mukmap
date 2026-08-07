@@ -1,0 +1,672 @@
+# -*- coding: utf-8 -*-
+"""API JSON de la table attributaire professionnelle (points).
+
+Filtres : AND/OR, plages de dates, valeurs numériques, recherche textuelle,
+filtre spatial (bbox), colonnes dynamiques issues du champ JSON « donnees ».
+"""
+
+import json
+import math
+import csv
+import io
+
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+
+from .models import PointGeographique
+from .views import _projet_actif, _audit
+
+# ─── Registre des colonnes du modèle ─────────────────────────────
+# type : text | nb | date | choix | fkey
+CHAMPS_MODELE = {
+    'nom': 'text',
+    'description': 'text',
+    'latitude': 'nb',
+    'longitude': 'nb',
+    'categorie': 'choix',
+    'statut': 'choix',
+    'province': 'text',
+    'commune': 'text',
+    'quartier': 'text',
+    'date_creation': 'date',
+    'source_fichier': 'text',
+    'source_format': 'text',
+    'projet': 'fkey',
+    'activite': 'fkey',
+    'auteur': 'fkey',
+}
+
+CHOIX_CATEGORIE = dict(PointGeographique.CATEGORIE_CHOICES)
+CHOIX_STATUT = dict(PointGeographique.STATUT_CHOICES)
+
+MAX_PAGE = 200
+MAX_EXPORT = 5000
+MAX_SCAN_COLONNES = 3000
+
+
+# ─── Helpers ─────────────────────────────────────────────────────
+
+
+def _type_champ(champ):
+    if champ.startswith('d:'):
+        return 'json'
+    return CHAMPS_MODELE.get(champ, 'json')
+
+
+def _valeur_ligne(p, champ):
+    """Valeur d'un champ (modèle ou clé JSON « d:cle ») pour un point."""
+    if champ.startswith('d:'):
+        cle = champ[2:]
+        return str((p.donnees or {}).get(cle, '') or '')
+    if champ == 'projet':
+        return p.projet.nom if p.projet else ''
+    if champ == 'activite':
+        return p.activite.nom_activite if p.activite else ''
+    if champ == 'auteur':
+        if p.auteur:
+            return p.auteur.get_full_name() or p.auteur.username
+        return ''
+    if champ == 'date_creation':
+        return p.date_creation.strftime('%d/%m/%Y %H:%M')
+    val = getattr(p, champ, '')
+    return val if val is not None else ''
+
+
+def _normaliser_date(v):
+    """'YYYY-MM-DD' -> date, sinon None."""
+    if not v:
+        return None
+    v = str(v).strip()
+    if len(v) == 10 and v[4] == '-' and v[7] == '-':
+        try:
+            from datetime import date
+            return date.fromisoformat(v)
+        except ValueError:
+            return None
+    return None
+
+
+def _comparer_op(valeur, op, attendu):
+    """Applique un opérateur sur une valeur déjà extraite (comparaison naive)."""
+    if op == 'vide':
+        return valeur == '' or valeur is None
+    if op == 'non_vide':
+        return valeur != '' and valeur is not None
+    if op == 'eq':
+        return str(valeur) == str(attendu)
+    if op == 'ne':
+        return str(valeur) != str(attendu)
+    if op == 'contient':
+        return str(attendu).lower() in str(valeur).lower()
+    if op == 'commence':
+        return str(valeur).lower().startswith(str(attendu).lower())
+    if op == 'finit':
+        return str(valeur).lower().endswith(str(attendu).lower())
+    if op == 'dans':
+        return str(valeur) in {str(x) for x in (attendu or [])}
+    if op in ('entre', 'sup', 'inf'):
+        try:
+            n = float(valeur)
+            numerique = True
+        except (TypeError, ValueError):
+            numerique = False
+        if op == 'entre' and isinstance(attendu, (list, tuple)) and len(attendu) == 2:
+            try:
+                a, b = float(attendu[0]), float(attendu[1])
+                return numerique and a <= n <= b
+            except (TypeError, ValueError):
+                return False
+        if op == 'sup':
+            try:
+                return numerique and n >= float(attendu)
+            except (TypeError, ValueError):
+                return False
+        if op == 'inf':
+            try:
+                return numerique and n <= float(attendu)
+            except (TypeError, ValueError):
+                return False
+    return False
+
+
+def _filtres_dans(qs, filtres):
+    """Construit un Q (SQL) pour les filtres sur champs du modèle. Retourne (qs, restants)."""
+    from django.db.models import Q
+    logique = filtres.get('logique', 'et')
+    liste = filtres.get('filtres') or []
+    q_total = None
+    restants = []
+    for f in liste:
+        champ = f.get('champ', '')
+        op = f.get('op', 'eq')
+        attendu = f.get('valeur', '')
+        if champ.startswith('d:') or champ not in CHAMPS_MODELE:
+            restants.append(f)
+            continue
+        q = None
+        if champ == 'projet':
+            if op == 'eq':
+                q = Q(projet__nom__iexact=str(attendu))
+            elif op == 'contient':
+                q = Q(projet__nom__icontains=str(attendu))
+            elif op == 'vide':
+                q = Q(projet__isnull=True)
+            elif op == 'non_vide':
+                q = Q(projet__isnull=False)
+            elif op == 'dans':
+                q = Q(projet__nom__in=[str(x) for x in (attendu or [])])
+        elif champ == 'activite':
+            if op == 'eq':
+                q = Q(activite__nom_activite__iexact=str(attendu))
+            elif op == 'contient':
+                q = Q(activite__nom_activite__icontains=str(attendu))
+            elif op == 'vide':
+                q = Q(activite__isnull=True)
+            elif op == 'non_vide':
+                q = Q(activite__isnull=False)
+        elif champ == 'auteur':
+            if op == 'eq':
+                q = (Q(auteur__username__iexact=str(attendu))
+                     | Q(auteur__first_name__icontains=str(attendu))
+                     | Q(auteur__last_name__icontains=str(attendu)))
+            elif op == 'vide':
+                q = Q(auteur__isnull=True)
+            elif op == 'non_vide':
+                q = Q(auteur__isnull=False)
+        elif champ == 'date_creation':
+            if op == 'entre' and isinstance(attendu, (list, tuple)) and len(attendu) == 2:
+                d1, d2 = _normaliser_date(attendu[0]), _normaliser_date(attendu[1])
+                if d1:
+                    q = Q(date_creation__date__gte=d1)
+                if d2:
+                    q2 = Q(date_creation__date__lte=d2)
+                    q = q & q2 if q else q2
+            elif op == 'sup':
+                d = _normaliser_date(attendu)
+                if d:
+                    q = Q(date_creation__date__gte=d)
+            elif op == 'inf':
+                d = _normaliser_date(attendu)
+                if d:
+                    q = Q(date_creation__date__lte=d)
+        elif champ in ('latitude', 'longitude'):
+            try:
+                if op == 'entre' and isinstance(attendu, (list, tuple)) and len(attendu) == 2:
+                    q = Q(**{f'{champ}__gte': float(attendu[0]), f'{champ}__lte': float(attendu[1])})
+                elif op == 'sup':
+                    q = Q(**{f'{champ}__gte': float(attendu)})
+                elif op == 'inf':
+                    q = Q(**{f'{champ}__lte': float(attendu)})
+                elif op == 'eq':
+                    q = Q(**{champ: float(attendu)})
+            except (TypeError, ValueError):
+                q = None
+        elif champ in ('categorie', 'statut'):
+            if op == 'eq':
+                q = Q(**{champ: str(attendu)})
+            elif op == 'dans':
+                q = Q(**{champ + '__in': [str(x) for x in (attendu or [])]})
+            elif op == 'ne':
+                q = ~Q(**{champ: str(attendu)})
+            elif op == 'vide':
+                q = Q(**{champ: ''})
+            elif op == 'non_vide':
+                q = ~Q(**{champ: ''})
+        else:  # champs texte
+            if op == 'eq':
+                q = Q(**{champ + '__iexact': str(attendu)})
+            elif op == 'contient':
+                q = Q(**{champ + '__icontains': str(attendu)})
+            elif op == 'commence':
+                q = Q(**{champ + '__istartswith': str(attendu)})
+            elif op == 'finit':
+                q = Q(**{champ + '__iendswith': str(attendu)})
+            elif op == 'dans':
+                q = Q(**{champ + '__in': [str(x) for x in (attendu or [])]})
+            elif op == 'vide':
+                q = Q(**{champ + '__in': ['', None]})
+            elif op == 'non_vide':
+                q = ~Q(**{champ: ''})
+        if q is not None:
+            q_total = q_total & q if q_total and logique == 'et' else (q_total | q if q_total and logique == 'ou' else q)
+    return (qs.filter(q_total) if q_total is not None else qs), restants
+
+
+def _evaluer_filtre(p, f):
+    """Évaluation uniforme d'un filtre (modèle ou JSON « d: ») sur un point."""
+    champ = f.get('champ', '')
+    op = f.get('op', 'eq')
+    attendu = f.get('valeur', '')
+    if champ.startswith('d:'):
+        brut = (p.donnees or {}).get(champ[2:], '')
+        return _comparer_op(brut if brut is not None else '', op, attendu)
+    if champ in ('latitude', 'longitude'):
+        return _comparer_op(getattr(p, champ), op, attendu)
+    if champ == 'date_creation':
+        valeur = p.date_creation.strftime('%Y-%m-%d')
+        if op in ('entre', 'sup', 'inf') and isinstance(attendu, (list, tuple)):
+            attendu = [str(x)[:10] for x in attendu] if isinstance(attendu[0], (list, tuple)) else [str(x)[:10] for x in attendu]
+        elif isinstance(attendu, (list, tuple)):
+            attendu = [str(x)[:10] for x in attendu]
+        else:
+            attendu = str(attendu)[:10]
+        return _comparer_op(valeur, op, attendu)
+    return _comparer_op(_valeur_ligne(p, champ), op, attendu)
+
+
+def _lignes_filtrees(request):
+    """Retourne la liste de points conforme à : q, bbox, filtres (AND/OR).
+
+    Les champs du modèle passent par SQL (rapide) ; en mode OU avec filtres
+    JSON mélangés, tout est évalué en Python pour garantir l'union exacte.
+    """
+    q = request.GET.get('q', '').strip()
+    bbox = None
+    try:
+        bbox = [float(x) for x in (request.GET.get('bbox') or '').split(',')]
+    except ValueError:
+        bbox = None
+    filtres = {'logique': 'et', 'filtres': []}
+    try:
+        data = json.loads(request.GET.get('filtres', 'null') or 'null') or {}
+        if isinstance(data, dict):
+            filtres['logique'] = data.get('logique', 'et')
+            if isinstance(data.get('filtres'), list):
+                filtres['filtres'] = data['filtres']
+    except (ValueError, TypeError):
+        pass
+
+    liste_filtres = filtres['filtres']
+    logique = filtres['logique']
+    json_dans_ou = logique == 'ou' and any(
+        not f.get('champ', '').startswith('d:') and f.get('champ') in CHAMPS_MODELE
+        for f in liste_filtres)
+
+    qs = PointGeographique.objects.select_related('projet', 'activite', 'auteur').all()
+    ids = request.GET.get('ids', '').strip()
+    if ids:
+        try:
+            qs = qs.filter(pk__in=[int(x) for x in ids.split(',') if x.strip()])
+        except (TypeError, ValueError):
+            pass
+    if json_dans_ou:
+        # Union exacte : SQL ne suffit pas → évaluation Python de tous les filtres
+        qs = _appliquer_bbox(qs, bbox)
+        qs = _recherche_q(qs, q)
+        lignes = list(qs)
+        if liste_filtres:
+            lignes = [p for p in lignes
+                      if any(_evaluer_filtre(p, f) for f in liste_filtres)]
+        return lignes
+
+    qs, restants = _filtres_dans(qs, filtres)
+    qs = _appliquer_bbox(qs, bbox)
+    qs = _recherche_q(qs, q)
+    lignes = list(qs)
+    for f in restants:
+        if f.get('champ', '').startswith('d:'):
+            lignes = [p for p in lignes if _evaluer_filtre(p, f)]
+    return lignes
+
+
+def _appliquer_bbox(qs, bbox):
+    if not bbox or len(bbox) != 4:
+        return qs
+    try:
+        lon_min, lat_min, lon_max, lat_max = (float(x) for x in bbox)
+    except (TypeError, ValueError):
+        return qs
+    return qs.filter(longitude__gte=lon_min, longitude__lte=lon_max,
+                     latitude__gte=lat_min, latitude__lte=lat_max)
+
+
+def _recherche_q(qs, q):
+    q = (q or '').strip()
+    if not q:
+        return qs
+    from django.db.models import Q
+    termes = [t for t in q.split() if t]
+    if not termes:
+        return qs
+    q_total = None
+    for t in termes:
+        qq = (Q(nom__icontains=t) | Q(description__icontains=t)
+              | Q(province__icontains=t) | Q(commune__icontains=t)
+              | Q(quartier__icontains=t) | Q(source_fichier__icontains=t)
+              | Q(projet__nom__icontains=t) | Q(auteur__first_name__icontains=t)
+              | Q(auteur__last_name__icontains=t) | Q(auteur__username__icontains=t))
+        q_total = qq if q_total is None else q_total & qq
+    return qs.filter(q_total) if q_total is not None else qs
+
+
+def _serialiser_point(p):
+    return {
+        'id': p.pk,
+        'nom': p.nom,
+        'description': p.description,
+        'latitude': p.latitude,
+        'longitude': p.longitude,
+        'categorie': p.categorie,
+        'categorie_label': CHOIX_CATEGORIE.get(p.categorie, p.categorie),
+        'statut': p.statut,
+        'statut_label': CHOIX_STATUT.get(p.statut, p.statut),
+        'province': p.province,
+        'commune': p.commune,
+        'quartier': p.quartier,
+        'projet': p.projet.nom if p.projet else '',
+        'projet_id': p.projet_id,
+        'activite': p.activite.nom_activite if p.activite else '',
+        'auteur': (p.auteur.get_full_name() or p.auteur.username) if p.auteur else '',
+        'date_creation': p.date_creation.strftime('%d/%m/%Y %H:%M'),
+        'donnees': p.donnees or {},
+        'source_fichier': p.source_fichier,
+        'source_format': p.source_format,
+    }
+
+
+def _colonnes_disponibles(lignes):
+    """Colonnes du modèle + clés JSON (donnees) triées par fréquence décroissante."""
+    frequences = {}
+    for p in lignes[:MAX_SCAN_COLONNES]:
+        for cle in (p.donnees or {}):
+            frequences[cle] = frequences.get(cle, 0) + 1
+    cles = [{'champ': 'd:' + c, 'type': 'json', 'frequence': f}
+            for c, f in sorted(frequences.items(), key=lambda x: -x[1])]
+    modele = [{'champ': c, 'type': t, 'frequence': 1000000 - i}
+              for i, (c, t) in enumerate(CHAMPS_MODELE.items())]
+    return modele + cles
+
+
+def _detecter_type_valeurs(valeurs):
+    """Type heuristique (nb/date/text) à partir d'échantillons de valeurs."""
+    if not valeurs:
+        return 'text'
+    numeriques = 0
+    dates = 0
+    total = 0
+    for v in valeurs[:200]:
+        s = str(v or '').strip()
+        if not s:
+            continue
+        total += 1
+        try:
+            float(s)
+            numeriques += 1
+        except ValueError:
+            pass
+        if _normaliser_date(s):
+            dates += 1
+    if total and numeriques / total >= 0.8:
+        return 'nb'
+    if total and dates / total >= 0.8:
+        return 'date'
+    return 'text'
+
+
+def _stats_lignes(lignes, colonnes):
+    stats = {
+        'total': len(lignes),
+        'par_categorie': {},
+        'par_statut': {},
+        'par_province': {},
+        'numeriques': {},
+        'date_min': None,
+        'date_max': None,
+    }
+    valeurs_num = {}
+    cles_num = [c['champ'] for c in colonnes if c['type'] == 'nb']
+    for c in cles_num:
+        valeurs_num[c] = []
+    for p in lignes:
+        cat = CHOIX_CATEGORIE.get(p.categorie, p.categorie or '—')
+        stats['par_categorie'][cat] = stats['par_categorie'].get(cat, 0) + 1
+        st = CHOIX_STATUT.get(p.statut, p.statut or '—')
+        stats['par_statut'][st] = stats['par_statut'].get(st, 0) + 1
+        prov = p.province or 'Non renseignée'
+        stats['par_province'][prov] = stats['par_province'].get(prov, 0) + 1
+        if stats['date_min'] is None or p.date_creation < stats['date_min']:
+            stats['date_min'] = p.date_creation
+        if stats['date_max'] is None or p.date_creation > stats['date_max']:
+            stats['date_max'] = p.date_creation
+        for c in cles_num:
+            if c.startswith('d:'):
+                v = (p.donnees or {}).get(c[2:], '')
+            else:
+                v = getattr(p, c, '')
+            try:
+                valeurs_num[c].append(float(v))
+            except (TypeError, ValueError):
+                pass
+    for c, vals in valeurs_num.items():
+        if vals:
+            stats['numeriques'][c] = {
+                'min': min(vals), 'max': max(vals),
+                'moyenne': round(sum(vals) / len(vals), 4),
+                'somme': round(sum(vals), 4),
+                'count': len(vals),
+            }
+    if stats['date_min']:
+        stats['date_min'] = stats['date_min'].strftime('%Y-%m-%d')
+        stats['date_max'] = stats['date_max'].strftime('%Y-%m-%d')
+    return stats
+
+
+def _facettes(lignes, colonnes):
+    """Valeurs distinctes (avec comptage) pour les champs de filtrage rapide."""
+    priorites = ['categorie', 'statut', 'province', 'commune', 'quartier',
+                 'projet', 'auteur', 'source_fichier', 'source_format']
+    facettes = {}
+    for champ in priorites:
+        comptes = {}
+        for p in lignes:
+            v = _valeur_ligne(p, champ)
+            if v == '':
+                v = '—'
+            comptes[v] = comptes.get(v, 0) + 1
+        if comptes:
+            facettes[champ] = [
+                {'valeur': v, 'total': t}
+                for v, t in sorted(comptes.items(), key=lambda x: -x[1])
+            ]
+    for c in colonnes:
+        if c['type'] == 'json':
+            comptes = {}
+            for p in lignes[:MAX_SCAN_COLONNES]:
+                v = str((p.donnees or {}).get(c['champ'][2:], '') or '')
+                if v == '':
+                    continue
+                comptes[v] = comptes.get(v, 0) + 1
+            if comptes:
+                facettes[c['champ']] = [
+                    {'valeur': v, 'total': t}
+                    for v, t in sorted(comptes.items(), key=lambda x: -x[1])[:40]
+                ]
+    return facettes
+
+
+# ─── Vues ────────────────────────────────────────────────────────
+
+
+@login_required
+def api_points_lister(request):
+    """GET : recherche, tri, pagination, filtres (AND/OR), bbox, facettes, stats, colonnes."""
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = max(1, min(MAX_PAGE, int(request.GET.get('page_size', 50))))
+    except (TypeError, ValueError):
+        page_size = 50
+    tri_champ = request.GET.get('tri', 'date_creation')
+    tri_dir = 'desc' if request.GET.get('direction', 'desc') == 'desc' else 'asc'
+    q = request.GET.get('q', '').strip()
+
+    lignes = _lignes_filtrees(request)
+
+    # Tri (Python — identique pour champs modèle et JSON)
+    if tri_champ.startswith('d:'):
+        def _cle_tri(p):
+            return str((p.donnees or {}).get(tri_champ[2:], '') or '')
+        lignes.sort(key=_cle_tri, reverse=(tri_dir == 'desc'))
+    elif tri_champ in ('latitude', 'longitude'):
+        lignes.sort(key=lambda p: (getattr(p, tri_champ) or 0), reverse=(tri_dir == 'desc'))
+    elif tri_champ == 'date_creation':
+        lignes.sort(key=lambda p: p.date_creation, reverse=(tri_dir == 'desc'))
+    else:
+        lignes.sort(key=lambda p: str(_valeur_ligne(p, tri_champ)).lower(),
+                    reverse=(tri_dir == 'desc'))
+
+    total = len(lignes)
+    pages = max(1, math.ceil(total / page_size)) if total else 1
+    debut = (page - 1) * page_size
+    lignes_page = lignes[debut:debut + page_size]
+
+    reponse = {
+        'count': total,
+        'page': page,
+        'pages': pages,
+        'page_size': page_size,
+        'results': [_serialiser_point(p) for p in lignes_page],
+    }
+
+    if request.GET.get('apercu') in ('1', 'true'):
+        colonnes = _colonnes_disponibles(lignes)
+        reponse['colonnes'] = colonnes
+        reponse['stats'] = _stats_lignes(lignes, colonnes)
+        reponse['facettes'] = _facettes(lignes, colonnes)
+    return JsonResponse(reponse)
+
+
+@login_required
+def api_points_creer(request):
+    """POST : création d'un point (JSON)."""
+    if request.method != 'POST':
+        return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        data = {}
+    nom = str(data.get('nom') or '').strip()
+    try:
+        lat = float(data.get('latitude'))
+        lng = float(data.get('longitude'))
+    except (TypeError, ValueError):
+        return JsonResponse({'erreur': 'Latitude et longitude numériques requises.'}, status=400)
+    if not nom:
+        return JsonResponse({'erreur': 'Le nom est obligatoire.'}, status=400)
+
+    projet = _projet_actif(request)
+    p = PointGeographique.objects.create(
+        nom=nom[:200],
+        description=str(data.get('description') or ''),
+        latitude=lat,
+        longitude=lng,
+        categorie=str(data.get('categorie') or 'autre'),
+        statut=str(data.get('statut') or 'actif'),
+        province=str(data.get('province') or ''),
+        commune=str(data.get('commune') or ''),
+        quartier=str(data.get('quartier') or ''),
+        projet=projet,
+        donnees={k: v for k, v in (data.get('donnees') or {}).items()},
+        auteur=request.user,
+    )
+    _audit(request, "Création de point (table)", f"Point #{p.pk} - {p.nom}")
+    return JsonResponse({'ok': True, 'id': p.pk, 'result': _serialiser_point(p)}, status=201)
+
+
+@login_required
+def api_point_modifier(request, pk):
+    """POST : modification d'un point (JSON). Contrôle auteur/admin."""
+    if request.method != 'POST':
+        return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+    p = PointGeographique.objects.filter(pk=pk).select_related('projet', 'auteur').first()
+    if p is None:
+        return JsonResponse({'erreur': 'Point introuvable.'}, status=404)
+    if p.auteur != request.user and not request.user.is_superuser:
+        return JsonResponse({'erreur': "Vous ne pouvez modifier que vos propres points."}, status=403)
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        data = {}
+    for champ in ('nom', 'description', 'categorie', 'statut', 'province', 'commune', 'quartier',
+                  'source_fichier', 'source_format'):
+        if champ in data:
+            setattr(p, champ, str(data[champ])[:200] if champ in ('nom', 'source_fichier', 'source_format') else str(data[champ]))
+    for champ in ('latitude', 'longitude'):
+        if champ in data:
+            try:
+                setattr(p, champ, float(data[champ]))
+            except (TypeError, ValueError):
+                return JsonResponse({'erreur': f'Valeur invalide pour {champ}.'}, status=400)
+    if isinstance(data.get('donnees'), dict):
+        p.donnees = {str(k): v for k, v in data['donnees'].items()}
+    p.save()
+    _audit(request, "Modification de point (table)", f"Point #{pk}")
+    return JsonResponse({'ok': True, 'result': _serialiser_point(p)})
+
+
+@login_required
+def api_points_supprimer(request):
+    """POST : suppression (JSON {ids:[...]}) — contrôle auteur/admin."""
+    if request.method != 'POST':
+        return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        data = {}
+    ids = data.get('ids') or []
+    try:
+        ids = [int(x) for x in ids]
+    except (TypeError, ValueError):
+        return JsonResponse({'erreur': 'Liste d\'identifiants invalide.'}, status=400)
+    if not ids:
+        return JsonResponse({'erreur': 'Aucun point sélectionné.'}, status=400)
+    points = PointGeographique.objects.filter(pk__in=ids)
+    if not request.user.is_superuser:
+        points = points.filter(auteur=request.user)
+    supprimes = list(points.values_list('pk', flat=True))
+    points.delete()
+    _audit(request, "Suppression de points (table)", f"{len(supprimes)} point(s) : {supprimes}")
+    return JsonResponse({'ok': True, 'supprimes': supprimes})
+
+
+@login_required
+def api_points_export(request, format):
+    """GET : export CSV / GeoJSON / JSON des points filtrés (limite MAX_EXPORT)."""
+    lignes = _lignes_filtrees(request)[:MAX_EXPORT]
+    if format == 'geojson':
+        features = [{
+            'type': 'Feature',
+            'id': p.pk,
+            'properties': _serialiser_point(p),
+            'geometry': {'type': 'Point', 'coordinates': [p.longitude, p.latitude]},
+        } for p in lignes]
+        return JsonResponse({'type': 'FeatureCollection', 'features': features})
+    if format == 'json':
+        return JsonResponse([_serialiser_point(p) for p in lignes], safe=False)
+    if format == 'csv':
+        donnees = [_serialiser_point(p) for p in lignes]
+        colonnes_json = []
+        for d in donnees:
+            for cle in d.get('donnees', {}):
+                if cle not in colonnes_json:
+                    colonnes_json.append(cle)
+        entetes = ['id', 'nom', 'description', 'latitude', 'longitude', 'categorie',
+                   'statut', 'province', 'commune', 'quartier', 'projet', 'activite',
+                   'auteur', 'date_creation', 'source_fichier', 'source_format'] + colonnes_json
+        buf = io.StringIO()
+        ecrivain = csv.writer(buf)
+        ecrivain.writerow(entetes)
+        for d in donnees:
+            ligne = [d.get(h, '') for h in entetes[:16]]
+            for cle in colonnes_json:
+                ligne.append(d.get('donnees', {}).get(cle, ''))
+            ecrivain.writerow(ligne)
+        contenu = buf.getvalue()
+        from django.http import HttpResponse
+        reponse = HttpResponse(('\ufeff' + contenu).encode('utf-8'),
+                               content_type='text/csv; charset=utf-8')
+        reponse['Content-Disposition'] = 'attachment; filename="points_export.csv"'
+        return reponse
+    return JsonResponse({'erreur': 'Format inconnu.'}, status=400)
