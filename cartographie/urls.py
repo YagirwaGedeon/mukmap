@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from . import api_points
 from . import offline
+from . import water_supply
 
 urlpatterns = [
     path('', views.index_cartographie, name='index_cartographie'),
@@ -98,4 +99,15 @@ urlpatterns = [
     path('api/imagerie/', views.api_imagerie, name='api_imagerie'),
     path('api/imagerie/<int:pk>/', views.api_imagerie_detail, name='api_imagerie_detail'),
     path('api/imagerie/<int:pk>/visibilite/', views.api_imagerie_visibilite, name='api_imagerie_visibilite'),
+
+    # ── Adduction d'eau — Water Supply Survey ─────────────────
+    path('api/adduction/projets/', water_supply.api_projets_adduction, name='api_adduction_projets'),
+    path('api/adduction/projets/<int:pk>/', water_supply.detail_projet_adduction, name='api_adduction_projet'),
+    path('api/adduction/projets/<int:pk>/stats/', water_supply.stats_projet, name='api_adduction_stats'),
+    path('api/adduction/projets/<int:pk>/rapport/', water_supply.rapport_projet, name='api_adduction_rapport'),
+    path('api/adduction/projets/<int:pk>/export/<str:format>/', water_supply.exporter_ouvrages, name='api_adduction_export'),
+    path('api/adduction/ouvrages/', water_supply.liste_ouvrages, name='api_adduction_ouvrages'),
+    path('api/adduction/ouvrages/<int:pk>/', water_supply.detail_ouvrage, name='api_adduction_ouvrage'),
+    path('api/adduction/traces/', water_supply.liste_traces, name='api_adduction_traces'),
+    path('api/adduction/traces/<int:pk>/', water_supply.detail_trace, name='api_adduction_trace'),
 ]

@@ -914,4 +914,19 @@ TRADUCTIONS = {
     'fichier_requis': {'fr': 'Sélectionnez d’abord un fichier à analyser.', 'en': 'Select a file to analyze first.', 'sw': 'Chagua faili la kuchambua kwanza.', 'ln': 'Pona liboso fichier ya kotala.', 'pt': 'Selecione primeiro um ficheiro para analisar.', 'zh': '请先选择要分析的文件。'},
     'nom_couche_requis': {'fr': 'Donnez un nom à la couche.', 'en': 'Give the layer a name.', 'sw': 'Pe safu jina.', 'ln': 'Pesa nkómbó na couche.', 'pt': 'Dê um nome à camada.', 'zh': '为图层命名。'},
     'import_termine': {'fr': 'Import terminé', 'en': 'Import completed', 'sw': 'Uingizaji umekamilika', 'ln': 'Kotisi esili', 'pt': 'Importação concluída', 'zh': '导入完成'},
+
+    # ── Adduction d'eau — Water Supply Survey ───────────────────
+    'water_titre': {'fr': 'Adduction d\'eau · Water Supply', 'en': 'Water supply · Survey', 'sw': 'Ugavi wa maji · Mradi', 'ln': 'Kopésa mai · Survey', 'pt': 'Abastecimento de água', 'zh': '供水调查'},
+    'water_projet': {'fr': 'Projet', 'en': 'Project', 'sw': 'Mradi', 'ln': 'Proze', 'pt': 'Projeto', 'zh': '项目'},
+    'water_collecte': {'fr': 'Collecte', 'en': 'Survey', 'sw': 'Ukusanyaji', 'ln': 'Libandi', 'pt': 'Recolha', 'zh': '收集'},
+    'water_conduites': {'fr': 'Conduites', 'en': 'Pipelines', 'sw': 'Mabomba', 'ln': 'Maboka', 'pt': 'Condutas', 'zh': '管道'},
+    'water_analyse': {'fr': 'Analyse', 'en': 'Analysis', 'sw': 'Uchambuzi', 'ln': 'Botala', 'pt': 'Análise', 'zh': '分析'},
+    'water_rapport': {'fr': 'Rapport', 'en': 'Report', 'sw': 'Ripoti', 'ln': 'Rapó', 'pt': 'Relatório', 'zh': '报告'},
+    'water_source': {'fr': "Source d'eau", 'en': 'Water source', 'sw': 'Chanzo cha maji', 'ln': 'Etima ya mai', 'pt': 'Fonte de água', 'zh': '水源'},
+    'water_borne': {'fr': 'Borne-fontaine', 'en': 'Standpipe', 'sw': 'Bomba la maji', 'ln': 'Borne-fantani', 'pt': 'Bica', 'zh': '水龙头'},
+    'water_village': {'fr': 'Village desservi', 'en': 'Served village', 'sw': 'Kijiji kinachohudumiwa', 'ln': 'Mboka', 'pt': 'Aldeia servida', 'zh': '受益村庄'},
+    'water_reservoir': {'fr': 'Réservoir', 'en': 'Reservoir', 'sw': 'Hifadhi ya maji', 'ln': 'Réservoir', 'pt': 'Reservatório', 'zh': '蓄水池'},
+    'water_ouvrage': {'fr': 'Ouvrage existant', 'en': 'Existing structure', 'sw': 'Miundo iliyopo', 'ln': 'Ouvrage ezali', 'pt': 'Estrutura existente', 'zh': '现有工程'},
+    'water_repere': {'fr': 'Point de repère', 'en': 'Landmark', 'sw': 'Alama', 'ln': 'Repère', 'pt': 'Ponto de referência', 'zh': '地标'},
+    'water_intermediaire': {'fr': 'Point intermédiaire', 'en': 'Intermediate point', 'sw': 'Sehemu ya kati', 'ln': 'Point intermédiaire', 'pt': 'Ponto intermédio', 'zh': '中间点'},
 }

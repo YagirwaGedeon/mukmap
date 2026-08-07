@@ -3,7 +3,8 @@ from .models import (
     PointGeographique, Projet, Activite, PhotoActivite,
     ProfilAgent, ZoneSecurite, Itineraire,
     CoucheGeometrie, Geometrie, JournalAudit, MediaPoint,
-    CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, ImageAerienne, CoucheWMS
+    CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, ImageAerienne, CoucheWMS,
+    ProjetAdduction, OuvrageHydraulique, TraceAdduction,
 )
 
 admin.site.register(PointGeographique)
@@ -22,3 +23,6 @@ admin.site.register(PreferenceUtilisateur)
 admin.site.register(FondCartePersonnalise)
 admin.site.register(ImageAerienne)
 admin.site.register(CoucheWMS)
+admin.site.register(ProjetAdduction)
+admin.site.register(OuvrageHydraulique)
+admin.site.register(TraceAdduction)

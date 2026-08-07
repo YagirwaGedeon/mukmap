@@ -436,6 +436,106 @@ class CoucheWMS(models.Model):
         return self.nom
 
 
+class ProjetAdduction(models.Model):
+    """PROJET D'ADDUCTION D'EAU — enveloppe du cycle complet
+    (préparation, collecte terrain, géoréférencement, cartographie,
+    analyse, pré-planification, rapport, export).
+    """
+    STATUT_CHOICES = [
+        ('planifie', 'Préparation'),
+        ('terrain', 'Collecte terrain'),
+        ('analyse', 'Analyse & planification'),
+        ('termine', 'Terminé'),
+        ('archive', 'Archivé'),
+    ]
+    nom = models.CharField(max_length=250, verbose_name="Nom du projet")
+    description = models.TextField(blank=True, verbose_name="Description")
+    commanditaire = models.CharField(max_length=250, blank=True, verbose_name="Commanditaire / organisme")
+    zone_nom = models.CharField(max_length=250, blank=True, verbose_name="Zone d'intervention", help_text="Ex : secteur Irumu, territoire d'Irumu (province de l'Ituri)")
+    bbox = models.JSONField(default=list, blank=True, verbose_name="Étendue (bbox)",
+                            help_text="[lon_min, lat_min, lon_max, lat_max]") 
+    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='planifie', verbose_name="Statut")
+    observations = models.TextField(blank=True, verbose_name="Observations générales")
+    cree_par = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name='adductions', verbose_name="Créé par")
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+    date_maj = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
+
+    class Meta:
+        ordering = ['-date_creation']
+        verbose_name = "Projet d'adduction d'eau"
+        verbose_name_plural = "Projets d'adduction d'eau"
+
+    def __str__(self):
+        return self.nom
+
+
+class OuvrageHydraulique(models.Model):
+    """Ouvrage relevé dans le cadre d'un projet d'adduction d'eau
+    (source, bornes-fontaines, villages desservis, ouvrages, repères,
+    points intermédiaires) avec ses caractéristiques techniques."""
+    TYPE_CHOICES = [
+        ('source', "Source d'eau"),
+        ('captage', 'Captage'),
+        ('borne', 'Borne-fontaine'),
+        ('consommation', 'Point de consommation'),
+        ('reservoir', 'Réservoir'),
+        ('ouvrage', 'Ouvrage existant'),
+        ('repere', 'Point de repère'),
+        ('intermediaire', 'Point intermédiaire'),
+        ('village', 'Village desservi'),
+    ]
+    STATUT_CHOICES = [
+        ('actif', 'En service'),
+        ('moyen', 'État moyen'),
+        ('defectueux', 'Défectueux'),
+        ('hors_service', 'Hors service'),
+        ('projet', 'À construire'),
+    ]
+    projet = models.ForeignKey('ProjetAdduction', on_delete=models.CASCADE, related_name='ouvrages', verbose_name="Projet")
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='source', verbose_name="Type d'ouvrage")
+    nom = models.CharField(max_length=250, verbose_name="Nom / localisation")
+    description = models.TextField(blank=True, verbose_name="Description")
+    latitude = models.FloatField(verbose_name="Latitude")
+    longitude = models.FloatField(verbose_name="Longitude")
+    altitude_m = models.FloatField(null=True, blank=True, verbose_name="Altitude (m)")
+    beneficiaires = models.PositiveIntegerField(default=0, verbose_name="Nombre de bénéficiaires")
+    caracteristiques = models.JSONField(default=dict, blank=True, verbose_name="Caractéristiques techniques",
+                                        help_text="Débit (l/s), profondeur, matériau, nombre de BF, etc.")
+    observations = models.TextField(blank=True, verbose_name="Observations de terrain")
+    photo = models.ImageField(upload_to='adduction/ouvrages/', blank=True, verbose_name="Photo")
+    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='projet', verbose_name="État")
+    releve_par = models.ForeignKey(get_user_model(), on_delete=models.SET_NULL, null=True, blank=True, related_name='ouvrages_odduites', verbose_name="Relevé par")
+    date_releve = models.DateTimeField(auto_now_add=True, verbose_name="Date du relevé")
+
+    class Meta:
+        ordering = ['date_releve']
+        verbose_name = "Ouvrage hydraulique"
+        verbose_name_plural = "Ouvrages hydrauliques"
+
+    def __str__(self):
+        return f"{self.nom} ({self.get_type_display()})"
+
+
+class TraceAdduction(models.Model):
+    """Tracé d'un itinéraire potentiel de conduite d'eau (polygone plan)"""
+    projet = models.ForeignKey('ProjetAdduction', on_delete=models.CASCADE, related_name='tracs', verbose_name="Projet")
+    nom = models.CharField(max_length=250, blank=True, verbose_name="Nom du tracé")
+    description = models.TextField(blank=True, verbose_name="Description")
+    coordonnees = models.JSONField(verbose_name="Coordonnées du tracé",
+                                   help_text="[[lon, lat, altitude], ...] évolution")
+    longueur_m = models.FloatField(default=0, verbose_name="Longueur (m)")
+    denivelee_m = models.FloatField(default=0, verbose_name="Dénivelé cumulé positif (m)")
+    observations = models.TextField(blank=True, verbose_name="Observations")
+    date_creation = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date_creation']
+        verbose_name = "Tracé de conduite"
+        verbose_name_plural = "Tracés de conduites"
+
+    def __str__(self):
+        return self.nom or f"Tracé #{self.pk}"
+
 class ImageAerienne(models.Model):
     """Orthophoto / image drone géoréférencée superposée à la carte (Mode Avancé).
 
