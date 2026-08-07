@@ -910,6 +910,9 @@
 <script src="{% static 'js/basemap-selector.js' %}?v=27"></script>
 <script src="{% static 'js/imagerie.js' %}?v=27"></script>
 <script src="{% static 'js/couches-wms.js' %}?v=27"></script>
+<script src="{% static 'js/offline.js' %}?v=28"></script>
+<script src="{% static 'js/gps.js' %}?v=28"></script>
+<script src="{% static 'js/analyse-spatiale.js' %}?v=28"></script>
 <script>
 const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_token }}';
 
@@ -1169,6 +1172,15 @@ map.on('load', () => {
     if (window.BasemapSelector) BasemapSelector.installer({map, actif: basemapActif, appliquerExterne: appliquerBasemap});
     if (window.Imagerie) Imagerie.installer({map});
     if (window.CouchesWMS) CouchesWMS.installer({map});
+    if (window.MukmapOffline && window.MukmapOffline.demarrer) {
+        try { MukmapOffline.demarrer({carte: map, urlApi: '/api/table-points/', urlSync: '/api/offline/sync/', csrf: CSRF, creerAncre: true}); } catch (e) { console.error('Offline :', e); }
+    }
+    if (window.MukmapGps && window.MukmapGps.demarrer) {
+        try { MukmapGps.demarrer({carte: map}); } catch (e) { console.error('GPS :', e); }
+    }
+    if (window.MukmapAnalyse && window.MukmapAnalyse.demarrer) {
+        try { MukmapAnalyse.demarrer({carte: map, donnees: donneesPoints}); } catch (e) { console.error('Analyse :', e); }
+    }
     const chargementPerso = window.BasemapSelector
         ? BasemapSelector.chargerExternes({map, appliquerExterne: appliquerBasemap})
         : Promise.resolve();

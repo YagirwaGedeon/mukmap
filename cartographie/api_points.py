@@ -283,6 +283,20 @@ def _lignes_filtrees(request):
         for f in liste_filtres)
 
     qs = PointGeographique.objects.select_related('projet', 'activite', 'auteur').all()
+
+    # Hors connexion / synchronisation : masquer les points supprimés,
+    # sauf demande explicite (pulls de synchronisation).
+    if request.GET.get('supprimes') not in ('1', 'true'):
+        qs = qs.filter(supprime=False)
+
+    # Synchronisation incrémentale : uniquement les modifications depuis un instant.
+    modifie_depuis = (request.GET.get('modifie_depuis') or '').strip()
+    if modifie_depuis:
+        from django.utils.dateparse import parse_datetime
+        t = parse_datetime(modifie_depuis)
+        if t is not None:
+            qs = qs.filter(updated_at__gt=t)
+
     ids = request.GET.get('ids', '').strip()
     if ids:
         try:
@@ -358,6 +372,9 @@ def _serialiser_point(p):
         'activite': p.activite.nom_activite if p.activite else '',
         'auteur': (p.auteur.get_full_name() or p.auteur.username) if p.auteur else '',
         'date_creation': p.date_creation.strftime('%d/%m/%Y %H:%M'),
+        'updated_at': p.updated_at.isoformat() if p.updated_at else None,
+        'supprime': bool(p.supprime),
+        'synchro_id': p.synchro_id,
         'donnees': p.donnees or {},
         'source_fichier': p.source_fichier,
         'source_format': p.source_format,
@@ -557,6 +574,12 @@ def api_points_creer(request):
         return JsonResponse({'erreur': 'Le nom est obligatoire.'}, status=400)
 
     projet = _projet_actif(request)
+    synchro_id = str(data.get('synchro_id') or '').strip()
+    if synchro_id:
+        existant = PointGeographique.objects.filter(synchro_id=synchro_id).first()
+        if existant is not None:
+            return JsonResponse({'ok': True, 'deja_existant': True, 'id': existant.pk,
+                                 'result': _serialiser_point(existant)})
     p = PointGeographique.objects.create(
         nom=nom[:200],
         description=str(data.get('description') or ''),
@@ -569,6 +592,7 @@ def api_points_creer(request):
         quartier=str(data.get('quartier') or ''),
         projet=projet,
         donnees={k: v for k, v in (data.get('donnees') or {}).items()},
+        synchro_id=synchro_id,
         auteur=request.user,
     )
     _audit(request, "Création de point (table)", f"Point #{p.pk} - {p.nom}")

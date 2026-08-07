@@ -32,6 +32,10 @@ class PointGeographique(models.Model):
     activite = models.ForeignKey('Activite', on_delete=models.SET_NULL, null=True, blank=True, related_name='points', verbose_name="Activité")
     auteur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Auteur")
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date d'encodage")
+    updated_at = models.DateTimeField(auto_now=True, null=True, verbose_name="Dernière modification")
+    supprime = models.BooleanField(default=False, verbose_name="Supprimé (corbeille)")
+    synchro_id = models.CharField(max_length=64, blank=True, default='', db_index=True,
+                                  verbose_name="Identifiant de synchronisation (client)")
     donnees = models.JSONField(default=dict, blank=True, verbose_name="Données complètes (import)")
     source_fichier = models.CharField(max_length=255, blank=True, verbose_name="Fichier source")
     source_format = models.CharField(max_length=20, blank=True, verbose_name="Format source")
