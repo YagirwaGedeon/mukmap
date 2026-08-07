@@ -17,7 +17,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404
 
-from .models import ProjetAdduction, OuvrageHydraulique, TraceAdduction, ReleveSource, ReleveVillage
+from .models import ProjetAdduction, OuvrageHydraulique, TraceAdduction, ReleveSource, ReleveVillage, ReleveConsommation, ReleveRepere
 from .views import _audit
 
 # RAYON_TERRE = 6371000.0
@@ -58,6 +58,18 @@ def _serialiser_ouvrage(o):
             rv = o.releve_village
         except ReleveVillage.DoesNotExist:
             rv = None
+    rc = None
+    if o.type == 'consommation':
+        try:
+            rc = o.releve_consommation
+        except ReleveConsommation.DoesNotExist:
+            rc = None
+    rr = None
+    if o.type == 'repere':
+        try:
+            rr = o.releve_repere
+        except ReleveRepere.DoesNotExist:
+            rr = None
     return {
         'id': o.pk,
         'projet_id': o.projet_id,
@@ -93,6 +105,8 @@ def _serialiser_ouvrage(o):
         'date_releve': o.date_releve.isoformat(),
         'releve_source': _serialiser_releve_source(rs),
         'releve_village': _serialiser_releve_village(rv),
+        'releve_consommation': _serialiser_releve_consommation(rc),
+        'releve_repere': _serialiser_releve_repere(rr),
     }
 
 
@@ -144,6 +158,33 @@ def _serialiser_releve_village(rv):
     }
 
 
+def _serialiser_releve_consommation(rc):
+    """Sérialise le formulaire spécialisé Point de consommation (None si absent)."""
+    if rc is None:
+        return None
+    return {
+        'population_desservie': rc.population_desservie,
+        'menages_desservis': rc.menages_desservis,
+        'nombre_robinets': rc.nombre_robinets,
+        'etat': rc.etat,
+        'existant_propose': rc.existant_propose,
+        'debit_estime': rc.debit_estime,
+        'besoin_estime': rc.besoin_estime,
+        'photos': rc.photos or [],
+    }
+
+
+def _serialiser_releve_repere(rr):
+    """Sérialise le formulaire spécialisé Repère / point intermédiaire (None si absent)."""
+    if rr is None:
+        return None
+    return {
+        'description': rr.description,
+        'photo': rr.photo,
+        'date_releve': rr.date_releve.isoformat() if rr.date_releve else None,
+    }
+
+
 def _serialiser_trace(t):
     return {
         'id': t.pk,
@@ -190,6 +231,16 @@ def _creer_ouvrage_depuis(o, data):
     if o.type == 'source':
         if sous_type and sous_type not in dict(OuvrageHydraulique.SOURCES_CHOICES):
             raise ValueError('Classification (sous-type) de source invalide.')
+        o.sous_type = sous_type
+        o.representation = 'point'
+    elif o.type == 'consommation':
+        if sous_type and sous_type not in dict(OuvrageHydraulique.CONSOMMATION_CHOICES):
+            raise ValueError('Classification (sous-type) de point de consommation invalide.')
+        o.sous_type = sous_type
+        o.representation = 'point'
+    elif o.type == 'repere':
+        if sous_type and sous_type not in dict(OuvrageHydraulique.REPERES_CHOICES):
+            raise ValueError('Classification (sous-type) de repère invalide.')
         o.sous_type = sous_type
         o.representation = 'point'
     else:
@@ -329,6 +380,70 @@ def _creer_releve_village(o, data):
     return rv
 
 
+def _creer_releve_consommation(o, data):
+    """Crée ou met à jour le formulaire spécialisé Point de consommation."""
+    if o.type != 'consommation':
+        return None
+    rc_data = data.get('consommation')
+    if not isinstance(rc_data, dict):
+        rc_data = {}
+    try:
+        rc, _ = ReleveConsommation.objects.get_or_create(ouvrage=o)
+    except ReleveConsommation.MultipleObjectsReturned:
+        rc = ReleveConsommation.objects.filter(ouvrage=o).first()
+    for champ in ('population_desservie', 'menages_desservis', 'nombre_robinets'):
+        v = rc_data.get(champ)
+        try:
+            setattr(rc, champ, int(v or 0))
+        except (TypeError, ValueError):
+            setattr(rc, champ, 0)
+    etat = str(rc_data.get('etat') or '')
+    rc.etat = etat if etat in dict(ReleveConsommation.ETAT_POINT_CHOICES) else ''
+    ep = str(rc_data.get('existant_propose') or '')
+    rc.existant_propose = ep if ep in dict(ReleveConsommation.EXISTANT_PROPOSE_CHOICES) else ''
+    for champ in ('debit_estime', 'besoin_estime'):
+        v = rc_data.get(champ)
+        if v in (None, ''):
+            setattr(rc, champ, None)
+        else:
+            try:
+                setattr(rc, champ, float(v))
+            except (TypeError, ValueError):
+                setattr(rc, champ, None)
+    photos = rc_data.get('photos')
+    if isinstance(photos, list):
+        rc.photos = [str(p) for p in photos if isinstance(p, str) and p.strip()][:20]
+    rc.save()
+    return rc
+
+
+def _creer_releve_repere(o, data):
+    """Crée ou met à jour le formulaire spécialisé Repère / point intermédiaire."""
+    if o.type != 'repere':
+        return None
+    rr_data = data.get('repere')
+    if not isinstance(rr_data, dict):
+        rr_data = {}
+    try:
+        rr, _ = ReleveRepere.objects.get_or_create(ouvrage=o)
+    except ReleveRepere.MultipleObjectsReturned:
+        rr = ReleveRepere.objects.filter(ouvrage=o).first()
+    rr.description = str(rr_data.get('description') or '')
+    photo = str(rr_data.get('photo') or '')
+    rr.photo = photo[:2_000_000]
+    date_r = rr_data.get('date_releve')
+    if date_r:
+        try:
+            from datetime import date as _date
+            rr.date_releve = _date.fromisoformat(str(date_r)[:10])
+        except ValueError:
+            rr.date_releve = None
+    else:
+        rr.date_releve = None
+    rr.save()
+    return rr
+
+
 # ─── Projets ───────────────────────────────────────────────────────
 
 
@@ -432,6 +547,10 @@ def referentiels_adduction(request):
         'representations': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.REPRESENTATION_CHOICES],
         'sources_eau_actuelles': [{'id': k, 'label': v} for k, v in ReleveVillage.ACCES_CHOICES],
         'situations_acces': [{'id': k, 'label': v} for k, v in ReleveVillage.SITUATION_CHOICES],
+        'consommations': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.CONSOMMATION_CHOICES],
+        'reperes': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.REPERES_CHOICES],
+        'etats_point': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.ETAT_POINT_CHOICES],
+        'existant_proposes': [{'id': k, 'label': v} for k, v in OuvrageHydraulique.EXISTANT_PROPOSE_CHOICES],
         'potabilite_avertissement': (
             "Ces données de qualité de l'eau sont des résultats de terrain ou de "
             "laboratoire à interpréter selon les normes applicables ; elles ne "
@@ -652,6 +771,8 @@ def liste_ouvrages(request):
             o.save()
             _creer_releve_source(o, data)
             _creer_releve_village(o, data)
+            _creer_releve_consommation(o, data)
+            _creer_releve_repere(o, data)
         except ValueError as e:
             return JsonResponse({'erreur': str(e)}, status=400)
         _audit(request, 'Relevé d\'ouvrage hydraulique', f"Ouvrage #{o.pk} - {o.nom} ({o.type})")
@@ -688,6 +809,8 @@ def detail_ouvrage(request, pk):
         o.save()
         _creer_releve_source(o, data)
         _creer_releve_village(o, data)
+        _creer_releve_consommation(o, data)
+        _creer_releve_repere(o, data)
     except ValueError as e:
         return JsonResponse({'erreur': str(e)}, status=400)
     _audit(request, 'Modification d\'ouvrage hydraulique', f"Ouvrage #{o.pk} - {o.nom}")

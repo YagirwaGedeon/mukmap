@@ -321,3 +321,146 @@ class TestAdductionClassification(BaseCartographieTest):
         o = r.json()['ouvrage']
         self.assertEqual(o['representation'], 'zone')
         self.assertEqual(o['releve_village']['population'], 0)
+
+
+class TestAdductionConsommationRepere(BaseCartographieTest):
+    """Types 7 et 8 : POINT DE CONSOMMATION et REPÈRES / POINTS
+    INTERMÉDIAIRES — classifications, formulaires spécialisés et
+    référentiels."""
+
+    def creer_projet(self):
+        r = self.client.post('/api/adduction/projets/',
+                             data=json.dumps({'nom': 'Adduction Conso/Repères'}),
+                             content_type='application/json')
+        return r.json()['projet']['id']
+
+    def test_referentiels_consommation_reperes(self):
+        r = self.client.get('/api/adduction/referentiels/')
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual(len(d['consommations']), 8)
+        self.assertEqual(len(d['reperes']), 22)
+        self.assertEqual(len(d['etats_point']), 4)
+        self.assertEqual(len(d['existant_proposes']), 2)
+
+    def test_consommation_complet(self):
+        pid = self.creer_projet()
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'consommation',
+                                              'sous_type': 'borne_fontaine',
+                                              'nom': 'BF Marché central', 'latitude': 1.4,
+                                              'longitude': 30.3, 'altitude_m': 1200,
+                                              'village': 'Bogoro I',
+                                              'consommation': {'population_desservie': 850,
+                                                               'menages_desservis': 140,
+                                                               'nombre_robinets': 4,
+                                                               'etat': 'bon',
+                                                               'existant_propose': 'existant',
+                                                               'debit_estime': 0.8,
+                                                               'besoin_estime': 42.5,
+                                                               'photos': ['data:image/jpeg;base64,AAAA']}}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        o = r.json()['ouvrage']
+        self.assertEqual(o['sous_type'], 'borne_fontaine')
+        self.assertEqual(o['village'], 'Bogoro I')
+        rc = o['releve_consommation']
+        self.assertEqual(rc['population_desservie'], 850)
+        self.assertEqual(rc['menages_desservis'], 140)
+        self.assertEqual(rc['nombre_robinets'], 4)
+        self.assertEqual(rc['etat'], 'bon')
+        self.assertEqual(rc['existant_propose'], 'existant')
+        self.assertEqual(rc['debit_estime'], 0.8)
+        self.assertEqual(rc['besoin_estime'], 42.5)
+        self.assertEqual(len(rc['photos']), 1)
+
+        # sous-type invalide rejeté
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'consommation',
+                                              'sous_type': 'volcan', 'nom': 'X',
+                                              'latitude': 1, 'longitude': 2}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+
+        # sous-type ignoré pour un non-consommation
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'borne',
+                                              'sous_type': 'borne_fontaine', 'nom': 'BF2',
+                                              'latitude': 1, 'longitude': 2}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.json()['ouvrage']['sous_type'], '')
+
+    def test_consommation_mise_a_jour(self):
+        pid = self.creer_projet()
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'consommation',
+                                              'sous_type': 'kiosque_eau', 'nom': 'Kiosque A',
+                                              'latitude': 1.4, 'longitude': 30.3}),
+                             content_type='application/json')
+        oid = r.json()['ouvrage']['id']
+        r = self.client.put(f'/api/adduction/ouvrages/{oid}/',
+                            data=json.dumps({'type': 'consommation', 'sous_type': 'robinet_public',
+                                             'nom': 'Kiosque A (robinet)', 'latitude': 1.4,
+                                             'longitude': 30.3,
+                                             'consommation': {'population_desservie': 500,
+                                                              'etat': 'moyen',
+                                                              'existant_propose': 'propose'}}),
+                            content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        rc = r.json()['ouvrage']['releve_consommation']
+        self.assertEqual(rc['population_desservie'], 500)
+        self.assertEqual(rc['etat'], 'moyen')
+        self.assertEqual(rc['existant_propose'], 'propose')
+        self.assertEqual(r.json()['ouvrage']['sous_type'], 'robinet_public')
+
+    def test_repere_complet(self):
+        pid = self.creer_projet()
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'repere',
+                                              'sous_type': 'pont', 'nom': 'Pont Nzibira',
+                                              'latitude': 1.38, 'longitude': 30.26,
+                                              'altitude_m': 1150, 'agent_enqueteur': 'K. Uwimana',
+                                              'description': 'Pont en bois sur la rivière',
+                                              'repere': {'description': 'Pont en bois sur la rivière',
+                                                         'photo': 'data:image/jpeg;base64,BBBB',
+                                                         'date_releve': '2026-08-07'}}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        o = r.json()['ouvrage']
+        self.assertEqual(o['sous_type'], 'pont')
+        self.assertEqual(o['agent_enqueteur'], 'K. Uwimana')
+        self.assertEqual(o['description'], 'Pont en bois sur la rivière')
+        rr = o['releve_repere']
+        self.assertEqual(rr['description'], 'Pont en bois sur la rivière')
+        self.assertEqual(rr['photo'], 'data:image/jpeg;base64,BBBB')
+        self.assertEqual(rr['date_releve'], '2026-08-07')
+
+        # sous-type invalide rejeté
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'repere',
+                                              'sous_type': 'vaisseau', 'nom': 'X',
+                                              'latitude': 1, 'longitude': 2}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_repere_mise_a_jour(self):
+        pid = self.creer_projet()
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'repere',
+                                              'sous_type': 'colline', 'nom': 'Colline Mavono',
+                                              'latitude': 1.4, 'longitude': 30.3}),
+                             content_type='application/json')
+        oid = r.json()['ouvrage']['id']
+        r = self.client.put(f'/api/adduction/ouvrages/{oid}/',
+                            data=json.dumps({'type': 'repere', 'sous_type': 'sommet',
+                                             'nom': 'Sommet Mavono', 'latitude': 1.4,
+                                             'longitude': 30.3,
+                                             'repere': {'description': 'Vue sur toute la vallée',
+                                                        'date_releve': '2026-08-08'}}),
+                            content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        o = r.json()['ouvrage']
+        self.assertEqual(o['sous_type'], 'sommet')
+        self.assertEqual(o['releve_repere']['description'], 'Vue sur toute la vallée')
+        self.assertEqual(o['releve_repere']['date_releve'], '2026-08-08')

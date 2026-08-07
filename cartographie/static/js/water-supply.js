@@ -45,11 +45,51 @@
         resurgence: { labelKey: 'src_resurgence', debit: true, niveau: true, profondeur: false, permanence: true, protection: true },
         autre: { labelKey: 'src_autre', debit: true, niveau: true, profondeur: false, permanence: true, protection: false }
     };
+    // Classification POINT DE CONSOMMATION (G) — sous-types du type
+    // « consommation ».
+    var CONSOMMATIONS = {
+        borne_fontaine: { labelKey: 'conso_borne_fontaine' },
+        robinet_public: { labelKey: 'conso_robinet_public' },
+        kiosque_eau: { labelKey: 'conso_kiosque_eau' },
+        point_communautaire: { labelKey: 'conso_point_communautaire' },
+        ecole_conso: { labelKey: 'conso_ecole' },
+        centre_sante_conso: { labelKey: 'conso_centre_sante' },
+        institution: { labelKey: 'conso_institution' },
+        autre_desservi: { labelKey: 'conso_autre_desservi' }
+    };
+    // Classification REPÈRES / POINTS INTERMÉDIAIRES (H) — sous-types
+    // du type « repere ».
+    var REPERES = {
+        carrefour: { labelKey: 'repere_carrefour' },
+        route: { labelKey: 'repere_route' },
+        pont: { labelKey: 'repere_pont' },
+        riviere_repere: { labelKey: 'repere_riviere' },
+        ravin: { labelKey: 'repere_ravin' },
+        colline: { labelKey: 'repere_colline' },
+        sommet: { labelKey: 'repere_sommet' },
+        vallee: { labelKey: 'repere_vallee' },
+        ecole_repere: { labelKey: 'repere_ecole' },
+        maison: { labelKey: 'repere_maison' },
+        marche: { labelKey: 'repere_marche' },
+        eglise: { labelKey: 'repere_eglise' },
+        centre_sante_repere: { labelKey: 'repere_centre_sante' },
+        passage_difficile: { labelKey: 'repere_passage_difficile' },
+        zone_rocheuse: { labelKey: 'repere_zone_rocheuse' },
+        zone_marecageuse: { labelKey: 'repere_zone_marecageuse' },
+        traversee_riviere: { labelKey: 'repere_traversee_riviere' },
+        point_haut: { labelKey: 'repere_point_haut' },
+        point_bas: { labelKey: 'repere_point_bas' },
+        reservoir_potentiel: { labelKey: 'repere_reservoir_potentiel' },
+        chambre_vanne_potentielle: { labelKey: 'repere_chambre_vanne' },
+        autre_repere: { labelKey: 'repere_autre' }
+    };
 
     var CORE = {
         TYPES: TYPES,
         STATUTS: STATUTS,
         SOURCES: SOURCES,
+        CONSOMMATIONS: CONSOMMATIONS,
+        REPERES: REPERES,
 
         // Sous-types (classification) du type « source » → liste [{id, labelKey}].
         sourcesListe: function () {
@@ -61,6 +101,32 @@
         // Libellé d'un sous-type source (par défaut l'id).
         sourceLabel: function (id) {
             var s = SOURCES[id];
+            return s ? (s.labelKey || id) : id;
+        },
+
+        // Classification du type « consommation » → liste [{id, labelKey}].
+        consommationsListe: function () {
+            return Object.keys(CONSOMMATIONS).map(function (k) {
+                return { id: k, labelKey: CONSOMMATIONS[k].labelKey };
+            });
+        },
+
+        // Libellé d'un sous-type consommation.
+        consommationLabel: function (id) {
+            var s = CONSOMMATIONS[id];
+            return s ? (s.labelKey || id) : id;
+        },
+
+        // Classification du type « repere » → liste [{id, labelKey}].
+        reperesListe: function () {
+            return Object.keys(REPERES).map(function (k) {
+                return { id: k, labelKey: REPERES[k].labelKey };
+            });
+        },
+
+        // Libellé d'un sous-type repère.
+        repereLabel: function (id) {
+            var s = REPERES[id];
             return s ? (s.labelKey || id) : id;
         },
 
@@ -431,6 +497,24 @@
             '<input type="text" id="mw-s-obs-qualite" placeholder="Observations qualité">' +
             '<p class="mw-avertissement" id="mw-s-avertissement" hidden>⚠️ Mesures indicatives — analyse de laboratoire nécessaire pour certifier la potabilité.</p>' +
             '</div>' +
+            '<div id="mw-form-consommation" hidden>' +
+            '<div class="mw-deux"><input type="number" id="mw-c-pop" min="0" placeholder="Population desservie">' +
+            '<input type="number" id="mw-c-menages" min="0" placeholder="Ménages desservis"></div>' +
+            '<div class="mw-deux"><input type="number" id="mw-c-robinets" min="0" placeholder="Nombre de robinets">' +
+            '<select id="mw-c-etat"><option value="">État…</option><option value="bon">Bon</option><option value="moyen">Moyen</option><option value="mauvais">Mauvais</option><option value="hors_service">Hors service</option></select></div>' +
+            '<div class="mw-deux"><select id="mw-c-existant"><option value="">Existant / proposé…</option>' +
+            '<option value="existant">Existant</option><option value="propose">Proposé</option></select>' +
+            '<input type="number" id="mw-c-debit" step="0.01" min="0" placeholder="Débit estimé (l/s)"></div>' +
+            '<input type="number" id="mw-c-besoin" step="0.1" min="0" placeholder="Besoin estimé (m³/j)">' +
+            '<input type="file" id="mw-c-photos" accept="image/*" multiple>' +
+            '<div class="mw-ligne" id="mw-c-photos-apercu" hidden><b id="mw-c-photos-nb">0 photo</b></div>' +
+            '</div>' +
+            '<div id="mw-form-repere" hidden>' +
+            '<input type="text" id="mw-r-description" placeholder="Description du repère">' +
+            '<div class="mw-deux"><input type="date" id="mw-r-date">' +
+            '<input type="file" id="mw-r-photo" accept="image/*"></div>' +
+            '<div class="mw-ligne" id="mw-r-photo-apercu" hidden><b id="mw-r-photo-nb">Photo prise</b></div>' +
+            '</div>' +
             '<input type="text" id="mw-carac" placeholder="Caract. tech. (ex : débit 1,2 l/s)">' +
             '<textarea id="mw-obs" rows="2" placeholder="Observations de terrain"></textarea>' +
             '<div class="mw-boutons"><button type="button" id="mw-pick-gps">📡 GPS</button>' +
@@ -525,14 +609,8 @@
                 o.value = k; o.textContent = TYPES[k].emoji + ' ' + TYPES[k].label;
                 sel.appendChild(o);
             });
-            // Classification SOURCE D'EAU (sous-types)
-            var ss = parId('mw-sous-type');
-            CORE.sourcesListe().forEach(function (s) {
-                var o = document.createElement('option');
-                o.value = s.id;
-                o.textContent = trad(CORE.sourceLabel(s.id), s.id);
-                ss.appendChild(o);
-            });
+            // Classification des points (sous-types selon le type choisi)
+            remplirSousTypes();
             // Référentiels village (source actuelle / situation)
             getJ(apiReferentiels).then(function (r) {
                 remplirSelect(parId('mw-v-source'), r.sources_eau_actuelles || []);
@@ -540,6 +618,30 @@
             }).catch(function () { /* listes vides acceptables */ });
             actualiserChampsSource();
         })();
+
+        // Classification des sous-types selon le type de point choisi :
+        // source → SOURCE D'EAU (A) ; consommation → POINT DE CONSOMMATION (G) ;
+        // repere → REPÈRES / POINTS INTERMÉDIAIRES (H) ; sinon vide.
+        function remplirSousTypes() {
+            var ss = parId('mw-sous-type');
+            var t = parId('mw-type').value;
+            var liste = [];
+            if (t === 'source') liste = CORE.sourcesListe();
+            else if (t === 'consommation') liste = CORE.consommationsListe();
+            else if (t === 'repere') liste = CORE.reperesListe();
+            ss.innerHTML = '';
+            if (!liste.length) {
+                ss.hidden = true;
+                return;
+            }
+            liste.forEach(function (s) {
+                var o = document.createElement('option');
+                o.value = s.id;
+                o.textContent = trad(s.labelKey, s.id);
+                ss.appendChild(o);
+            });
+            ss.hidden = false;
+        }
 
         // ── Requêtes ──
         function getJ(url) {
@@ -708,6 +810,28 @@
                     situation_acces: parId('mw-v-situation').value
                 };
             }
+            if (obj.type === 'consommation') {
+                obj.sous_type = parId('mw-sous-type').value;
+                obj.consommation = {
+                    population_desservie: parseInt(parId('mw-c-pop').value || 0, 10) || 0,
+                    menages_desservis: parseInt(parId('mw-c-menages').value || 0, 10) || 0,
+                    nombre_robinets: parseInt(parId('mw-c-robinets').value || 0, 10) || 0,
+                    etat: parId('mw-c-etat').value,
+                    existant_propose: parId('mw-c-existant').value,
+                    debit_estime: toF(parId('mw-c-debit').value),
+                    besoin_estime: toF(parId('mw-c-besoin').value),
+                    photos: photosConsommation.slice()
+                };
+            }
+            if (obj.type === 'repere') {
+                obj.sous_type = parId('mw-sous-type').value;
+                obj.description = parId('mw-r-description').value.trim();
+                obj.repere = {
+                    description: parId('mw-r-description').value.trim(),
+                    photo: photoRepere,
+                    date_releve: parId('mw-r-date').value
+                };
+            }
             return obj;
         }
         function viderFormulaire() {
@@ -737,6 +861,18 @@
             });
             parId('mw-s-microbio').value = '';
             parId('mw-s-obs-qualite').value = '';
+            ['c-pop', 'c-menages', 'c-robinets', 'c-besoin', 'c-debit'].forEach(function (k) {
+                parId('mw-' + k).value = '';
+            });
+            parId('mw-c-etat').value = '';
+            parId('mw-c-existant').value = '';
+            parId('mw-r-description').value = '';
+            parId('mw-r-date').value = '';
+            parId('mw-r-photo').value = '';
+            parId('mw-c-photos').value = '';
+            photosConsommation = [];
+            photoRepere = '';
+            majApercuPhotos();
             geometrieCourante = [];
             majPolyInfo();
             dessinerGeometrieTmp();
@@ -813,6 +949,20 @@
             parId('mw-s-code-ech').value = rs.code_echantillon || '';
             parId('mw-s-microbio').value = rs.resultats_microbiologiques || '';
             parId('mw-s-obs-qualite').value = rs.observation_qualite || '';
+            var rc = o.releve_consommation || {};
+            parId('mw-c-pop').value = rc.population_desservie || '';
+            parId('mw-c-menages').value = rc.menages_desservis || '';
+            parId('mw-c-robinets').value = rc.nombre_robinets || '';
+            parId('mw-c-etat').value = rc.etat || '';
+            parId('mw-c-existant').value = rc.existant_propose || '';
+            parId('mw-c-debit').value = rc.debit_estime || '';
+            parId('mw-c-besoin').value = rc.besoin_estime || '';
+            photosConsommation = (rc.photos || []).slice();
+            var rr = o.releve_repere || {};
+            parId('mw-r-description').value = (rr.description || o.description || '');
+            parId('mw-r-date').value = rr.date_releve || '';
+            photoRepere = rr.photo || '';
+            majApercuPhotos();
             parId('mw-maj-ouvrage').hidden = false;
             parId('mw-supp-ouvrage').hidden = false;
             parId('mw-maj-ouvrage').dataset.id = String(o.id);
@@ -822,6 +972,57 @@
         // ── Classification / représentation ──
         var geometrieCourante = [];
         var enDessinGeom = false;
+        var photosConsommation = [];
+        var photoRepere = '';
+
+        // Aperçu des photos du point de consommation / repère.
+        function majApercuPhotos() {
+            parId('mw-c-photos-apercu').hidden = !photosConsommation.length;
+            parId('mw-c-photos-nb').textContent = photosConsommation.length + ' photo' +
+                (photosConsommation.length > 1 ? 's' : '');
+            parId('mw-r-photo-apercu').hidden = !photoRepere;
+        }
+
+        // Lit les fichiers images et les compresse en data URL (max 900 px, JPEG).
+        function fichiersEnDataUrls(files, cb) {
+            var resultats = [];
+            var restants = files.length;
+            if (!restants) { cb(resultats); return; }
+            Array.prototype.forEach.call(files, function (file) {
+                if (!/^image\//.test(file.type)) { restants--; if (!restants) cb(resultats); return; }
+                var lecteur = new FileReader();
+                lecteur.onload = function () {
+                    var img = new Image();
+                    img.onload = function () {
+                        var max = 900;
+                        var ratio = Math.min(1, max / Math.max(img.width, img.height));
+                        var canvas = document.createElement('canvas');
+                        canvas.width = Math.max(1, Math.round(img.width * ratio));
+                        canvas.height = Math.max(1, Math.round(img.height * ratio));
+                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resultats.push(canvas.toDataURL('image/jpeg', 0.72));
+                        restants--;
+                        if (!restants) cb(resultats);
+                    };
+                    img.onerror = function () { restants--; if (!restants) cb(resultats); };
+                    img.src = lecteur.result;
+                };
+                lecteur.onerror = function () { restants--; if (!restants) cb(resultats); };
+                lecteur.readAsDataURL(file);
+            });
+        }
+        parId('mw-c-photos').addEventListener('change', function () {
+            fichiersEnDataUrls(this.files, function (urls) {
+                photosConsommation = photosConsommation.concat(urls).slice(0, 20);
+                majApercuPhotos();
+            });
+        });
+        parId('mw-r-photo').addEventListener('change', function () {
+            fichiersEnDataUrls(this.files, function (urls) {
+                if (urls.length) photoRepere = urls[0];
+                majApercuPhotos();
+            });
+        });
         function majPolyInfo() {
             var el = parId('mw-poly-info');
             if (!el) return;
@@ -836,13 +1037,16 @@
         }
         function actualiserFormParType() {
             var t = parId('mw-type').value;
-            parId('mw-sous-type').hidden = t !== 'source';
+            remplirSousTypes();
+            parId('mw-sous-type').hidden = !['source', 'consommation', 'repere'].includes(t);
             parId('mw-repr').hidden = t !== 'village';
             parId('mw-poly-actions').hidden = t !== 'village';
             parId('mw-poly-info').hidden = t !== 'village';
             parId('mw-form-village').hidden = t !== 'village';
             parId('mw-form-source').hidden = t !== 'source';
             parId('mw-s-avertissement').hidden = t !== 'source';
+            parId('mw-form-consommation').hidden = t !== 'consommation';
+            parId('mw-form-repere').hidden = t !== 'repere';
             if (t !== 'village') { enDessinGeom = false; actualiserBoutonsGeom(); }
         }
         function actualiserReprVillage() {

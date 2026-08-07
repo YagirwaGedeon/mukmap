@@ -5,7 +5,7 @@ from .models import (
     CoucheGeometrie, Geometrie, JournalAudit, MediaPoint,
     CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, ImageAerienne, CoucheWMS,
     ProjetAdduction, OuvrageHydraulique, TraceAdduction,
-    ReleveSource, ReleveVillage,
+    ReleveSource, ReleveVillage, ReleveConsommation, ReleveRepere,
 )
 
 admin.site.register(PointGeographique)
@@ -29,3 +29,5 @@ admin.site.register(OuvrageHydraulique)
 admin.site.register(TraceAdduction)
 admin.site.register(ReleveSource)
 admin.site.register(ReleveVillage)
+admin.site.register(ReleveConsommation)
+admin.site.register(ReleveRepere)

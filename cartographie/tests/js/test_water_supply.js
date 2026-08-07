@@ -34,6 +34,31 @@ assert.strictEqual(C.SOURCES.lac.debit, false, 'lac : pas de débit mesuré');
 assert.ok(C.sourceLabel('naturelle').startsWith('src_'), 'labelKey pour i18n');
 assert.strictEqual(C.sourceLabel('inconnu'), 'inconnu', 'label inconnu → id');
 
+// ── Classification POINT DE CONSOMMATION (G) ─────────────────────
+const consoListe = C.consommationsListe();
+assert.strictEqual(consoListe.length, 8, '8 types de point de consommation (' + consoListe.length + ')');
+const idsConso = consoListe.map((s) => s.id);
+for (const attendu of ['borne_fontaine', 'robinet_public', 'kiosque_eau', 'point_communautaire',
+                       'ecole_conso', 'centre_sante_conso', 'institution', 'autre_desservi']) {
+    assert.ok(idsConso.includes(attendu), 'type de consommation présent : ' + attendu);
+}
+assert.ok(C.consommationLabel('borne_fontaine').startsWith('conso_'), 'labelKey conso pour i18n');
+assert.strictEqual(C.consommationLabel('inconnu'), 'inconnu', 'label conso inconnu → id');
+
+// ── Classification REPÈRES / POINTS INTERMÉDIAIRES (H) ───────────
+const reperesListe = C.reperesListe();
+assert.strictEqual(reperesListe.length, 22, '22 types de repères (' + reperesListe.length + ')');
+const idsReperes = reperesListe.map((s) => s.id);
+for (const attendu of ['carrefour', 'route', 'pont', 'riviere_repere', 'ravin', 'colline', 'sommet',
+                       'vallee', 'ecole_repere', 'maison', 'marche', 'eglise', 'centre_sante_repere',
+                       'passage_difficile', 'zone_rocheuse', 'zone_marecageuse', 'traversee_riviere',
+                       'point_haut', 'point_bas', 'reservoir_potentiel', 'chambre_vanne_potentielle',
+                       'autre_repere']) {
+    assert.ok(idsReperes.includes(attendu), 'type de repère présent : ' + attendu);
+}
+assert.ok(C.repereLabel('pont').startsWith('repere_'), 'labelKey repère pour i18n');
+assert.strictEqual(C.repereLabel('inconnu'), 'inconnu', 'label repère inconnu → id');
+
 // ── Polygon (village : polygone / zone) ──────────────────────────
 const poly = C.polygoneGeoJSON([[0, 0], [0.001, 0], [0.001, 0.001]], {nom: 'V1'});
 assert.strictEqual(poly.geometry.type, 'Polygon');

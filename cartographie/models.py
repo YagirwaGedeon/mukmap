@@ -478,8 +478,17 @@ class OuvrageHydraulique(models.Model):
     point dans sa catégorie. Pour « source » (type=source) on retrouve
     la classification SOURCE D'EAU (A) : naturelle, aménagée, forage,
     puits, rivière, lac, étang, captage, gravitaire, à résurgence,
-    autre. Le formulaire spécialisé associé (infos générales, techniques
-    et qualité de l'eau) est stocké dans le modèle `ReleveSource`.
+    autre. Pour « consommation » (type=consommation) la classification
+    POINT DE CONSOMMATION (G) : borne-fontaine, robinet public, kiosque
+    à eau, point communautaire, école, centre de santé, institution,
+    autre point desservi. Pour « repere » (type=repere) la classification
+    REPÈRES / POINTS INTERMÉDIAIRES (H) : carrefour, route, pont,
+    rivière, ravin, colline, sommet, vallée, école, maison, marché,
+    église, centre de santé, passage difficile, zone rocheuse, zone
+    marécageuse, traversée de rivière, point haut, point bas, emplacement
+    potentiel de réservoir / chambre de vanne, autre. Les formulaires
+    spécialisés associés sont stockés dans les modèles `ReleveSource`,
+    `ReleveConsommation` et `ReleveRepere`.
     """
     TYPE_CHOICES = [
         ('source', "Source d'eau"),
@@ -505,6 +514,50 @@ class OuvrageHydraulique(models.Model):
         ('gravitaire', 'Source gravitaire'),
         ('resurgence', 'Source à résurgence'),
         ('autre', 'Autre'),
+    ]
+    # Classification POINT DE CONSOMMATION (G) — sous_types du type 'consommation'.
+    CONSOMMATION_CHOICES = [
+        ('borne_fontaine', 'Borne-fontaine'),
+        ('robinet_public', 'Robinet public'),
+        ('kiosque_eau', 'Kiosque à eau'),
+        ('point_communautaire', 'Point d\'eau communautaire'),
+        ('ecole_conso', 'École'),
+        ('centre_sante_conso', 'Centre de santé'),
+        ('institution', 'Institution'),
+        ('autre_desservi', 'Autre point desservi'),
+    ]
+    # Classification REPÈRES / POINTS INTERMÉDIAIRES (H) — sous_types du type 'repere'.
+    REPERES_CHOICES = [
+        ('carrefour', 'Carrefour'),
+        ('route', 'Route'),
+        ('pont', 'Pont'),
+        ('riviere_repere', 'Rivière'),
+        ('ravin', 'Ravin'),
+        ('colline', 'Colline'),
+        ('sommet', 'Sommet'),
+        ('vallee', 'Vallée'),
+        ('ecole_repere', 'École'),
+        ('maison', 'Maison'),
+        ('marche', 'Marché'),
+        ('eglise', 'Église'),
+        ('centre_sante_repere', 'Centre de santé'),
+        ('passage_difficile', 'Passage difficile'),
+        ('zone_rocheuse', 'Zone rocheuse'),
+        ('zone_marecageuse', 'Zone marécageuse'),
+        ('traversee_riviere', 'Traversée de rivière'),
+        ('point_haut', 'Point haut'),
+        ('point_bas', 'Point bas'),
+        ('reservoir_potentiel', 'Emplacement potentiel de réservoir'),
+        ('chambre_vanne_potentielle', 'Emplacement potentiel de chambre de vanne'),
+        ('autre_repere', 'Autre'),
+    ]
+    # État d'un point de consommation / ouvrage (G).
+    ETAT_POINT_CHOICES = [
+        ('bon', 'Bon'), ('moyen', 'Moyen'), ('mauvais', 'Mauvais'), ('hors_service', 'Hors service'),
+    ]
+    # Existant / proposé (G).
+    EXISTANT_PROPOSE_CHOICES = [
+        ('existant', 'Existant'), ('propose', 'Proposé'),
     ]
     DEBITS_UNITE_CHOICES = [
         ('l_s', 'L/s'), ('l_min', 'L/min'), ('m3_h', 'm³/h'), ('m3_j', 'm³/j'),
@@ -681,6 +734,66 @@ class ReleveVillage(models.Model):
 
     def __str__(self):
         return f"Relevé village #{self.ouvrage_id}"
+
+
+class ReleveConsommation(models.Model):
+    """Formulaire spécialisé POINT DE CONSOMMATION (borne-fontaine,
+    robinet public, kiosque à eau, point communautaire, école, centre
+    de santé, institution, autre point desservi).
+
+    Population et ménages desservis, nombre de robinets, état, ouvrage
+    existant ou proposé, débit et besoin estimés, photos de terrain.
+    """
+    TYPE_POINT_CHOICES = OuvrageHydraulique.CONSOMMATION_CHOICES
+    ETAT_POINT_CHOICES = OuvrageHydraulique.ETAT_POINT_CHOICES
+    EXISTANT_PROPOSE_CHOICES = OuvrageHydraulique.EXISTANT_PROPOSE_CHOICES
+    ouvrage = models.OneToOneField(OuvrageHydraulique, on_delete=models.CASCADE,
+                                   related_name='releve_consommation', verbose_name="Ouvrage")
+
+    population_desservie = models.PositiveIntegerField(default=0, verbose_name="Population desservie")
+    menages_desservis = models.PositiveIntegerField(default=0, verbose_name="Nombre de ménages desservis")
+    nombre_robinets = models.PositiveIntegerField(default=0, verbose_name="Nombre de robinets")
+    etat = models.CharField(max_length=20, choices=ETAT_POINT_CHOICES, default='',
+                            blank=True, verbose_name="État")
+    existant_propose = models.CharField(max_length=10, choices=EXISTANT_PROPOSE_CHOICES, default='',
+                                        blank=True, verbose_name="Existant / proposé")
+    debit_estime = models.FloatField(null=True, blank=True, verbose_name="Débit estimé (l/s)")
+    besoin_estime = models.FloatField(null=True, blank=True, verbose_name="Besoin estimé (m³/j)")
+    photos = models.JSONField(default=list, blank=True, verbose_name="Photos de terrain",
+                              help_text="Liste d'images (URL ou données base64) prises sur site")
+
+    class Meta:
+        verbose_name = "Relevé spécialisé — Point de consommation"
+        verbose_name_plural = "Relevés spécialisés — Points de consommation"
+
+    def __str__(self):
+        return f"Relevé consommation #{self.ouvrage_id}"
+
+
+class ReleveRepere(models.Model):
+    """Formulaire spécialisé REPÈRE / POINT INTERMÉDIAIRE.
+
+    Points remarquables situés entre la source et le village : carrefour,
+    route, pont, rivière, ravin, colline, sommet, vallée, école, maison,
+    marché, église, centre de santé, passage difficile, zone rocheuse ou
+    marécageuse, traversée de rivière, point haut / bas, emplacements
+    potentiels (réservoir, chambre de vanne), autre.
+    """
+    TYPE_REPERE_CHOICES = OuvrageHydraulique.REPERES_CHOICES
+    ouvrage = models.OneToOneField(OuvrageHydraulique, on_delete=models.CASCADE,
+                                   related_name='releve_repere', verbose_name="Ouvrage")
+
+    description = models.TextField(blank=True, verbose_name="Description")
+    photo = models.TextField(blank=True, verbose_name="Photo",
+                             help_text="Image (URL ou données base64) prise sur site")
+    date_releve = models.DateField(null=True, blank=True, verbose_name="Date du repère")
+
+    class Meta:
+        verbose_name = "Relevé spécialisé — Repère / point intermédiaire"
+        verbose_name_plural = "Relevés spécialisés — Repères / points intermédiaires"
+
+    def __str__(self):
+        return f"Relevé repère #{self.ouvrage_id}"
 
 
 class TraceAdduction(models.Model):
