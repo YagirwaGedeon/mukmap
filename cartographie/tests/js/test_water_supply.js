@@ -84,6 +84,19 @@ assert.strictEqual(C.emojiOuvrage('reseau', 'vanne'), '🔧', 'émoji sous-type 
 assert.strictEqual(C.emojiOuvrage('reservoir', 'chateau_eau'), '🗼', 'émoji château d\'eau');
 assert.strictEqual(C.emojiOuvrage('borne', null), '🚰', 'émoji par défaut du type');
 
+// ── constructeur de réseau : accrochage des ouvrages ───────────────
+const accroches = [
+    {id: 61, type: 'source', nom: 'S', latitude: 0, longitude: 0, altitude_m: 1000},
+    {id: 62, type: 'captage', nom: 'C', latitude: 0.001, longitude: 0, altitude_m: 990},
+    {id: 63, type: 'borne', nom: 'BF', latitude: 2, longitude: 2, altitude_m: 900}
+];
+const acc = C.ouvragePlusProche(accroches, 0, 0.001, 60);
+assert.strictEqual(acc.id, 62, 'captage le plus proche du point (111 m)');
+assert.strictEqual(C.ouvragePlusProche(accroches, 2, 2.01, 60), null, 'hors rayon → null');
+assert.strictEqual(C.ouvragePlusProche([], 0, 0, 60), null, 'liste vide → null');
+const acc2 = C.ouvragePlusProche(accroches, 0, 0.0002, 60);
+assert.strictEqual(acc2.id, 61, 'source seule dans le rayon (22 m), captage hors rayon (89 m)');
+
 
 // ── Polygon (village : polygone / zone) ──────────────────────────
 const poly = C.polygoneGeoJSON([[0, 0], [0.001, 0], [0.001, 0.001]], {nom: 'V1'});

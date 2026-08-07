@@ -183,6 +183,19 @@
             return (TYPES[type] || {}).emoji || '📍';
         },
 
+        // Ouvrage situé à moins de `rayonM` mètres du point [lng, lat]
+        // (accrochage du constructeur de réseau) ; null sinon.
+        ouvragePlusProche: function (ouvrages, lng, lat, rayonM) {
+            var meilleur = null;
+            (ouvrages || []).forEach(function (o) {
+                var d = CORE.distance(lat, lng, o.latitude, o.longitude);
+                if (d <= (rayonM || 60) && (!meilleur || d < meilleur.d)) {
+                    meilleur = { o: o, d: d };
+                }
+            });
+            return meilleur ? meilleur.o : null;
+        },
+
         _rad: function (d) { return d * Math.PI / 180; },
 
         // Distance haversine (m) entre [lat1, lon1] et [lat2, lon2].
@@ -785,8 +798,9 @@
             '<div class="mw-onglets">' +
             '<button type="button" data-tab="projet" class="actif">Projet</button>' +
             '<button type="button" data-tab="collecte">Collecte</button>' +
-            '<button type="button" data-tab="trace">Conduites</button>' +
-            '<button type="button" data-tab="analyse">Analyse</button>' +
+        '<button type="button" data-tab="trace">Conduites</button>' +
+        '<button type="button" data-tab="reseau">Réseau</button>' +
+        '<button type="button" data-tab="analyse">Analyse</button>' +
             '<button type="button" data-tab="rapport">Rapport</button>' +
             '</div>' +
             '<div class="mw-contenu">' +
@@ -924,6 +938,31 @@
             '<div class="mw-ligne"><span>Nom</span><input type="text" id="mw-nom-trace" placeholder="Ex : conduite principale"></div>' +
             '<div class="mw-liste" id="mw-liste-traces"></div>' +
             '</div>' +
+            '<div data-panel="reseau" hidden>' +
+            '<p class="mw-indice">Construisez le réseau : SOURCE → CAPTAGE → CONDUITE → RÉSERVOIR → CONDUITE → BORNE-FONTAINE.</p>' +
+            '<div class="mw-liste" id="mw-reseau-chaine"></div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>🔗 CONSTRUIRE UNE CONDUITE</span></div>' +
+            '<p class="mw-indice">Cliquez sur les ouvrages (ou la carte) dans l\'ordre : les points sont reliés automatiquement.</p>' +
+            '<div class="mw-boutons">' +
+            '<button type="button" id="mw-rs-relier">🔗 Relier les ouvrages</button>' +
+            '<button type="button" id="mw-rs-fin" hidden>✅ Enregistrer la conduite</button>' +
+            '<button type="button" id="mw-rs-ann" hidden>🗑 Annuler</button></div>' +
+            '<div class="mw-ligne"><span>Longueur</span><b id="mw-rs-len">—</b></div>' +
+            '<div class="mw-ligne"><span>Ouvrages reliés</span><b id="mw-rs-nb">0</b></div>' +
+            '<div class="mw-liste" id="mw-rs-liste"></div>' +
+            '<div class="mw-ligne"><span>Nom</span><input type="text" id="mw-rs-nom" placeholder="Conduite du réseau"></div>' +
+            '</div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>🏗 OUVRAGES DU RÉSEAU</span></div>' +
+            '<div class="mw-ligne"><span>Filtre</span><select id="mw-rs-filtre"></select></div>' +
+            '<div class="mw-liste" id="mw-rs-ouvrages"></div>' +
+            '</div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>🚰 RÉSEAU D\'ADDUCTION</span></div>' +
+            '<div class="mw-liste" id="mw-reseau-equipements"></div>' +
+            '</div>' +
+            '</div>' +
             '<div data-panel="analyse" hidden>' +
             '<div class="mw-ligne"><span>Altitude min</span><b id="mw-alt-min">—</b></div>' +
             '<div class="mw-ligne"><span>Altitude max</span><b id="mw-alt-max">—</b></div>' +
@@ -957,11 +996,6 @@
             '<div class="mw-boutons">' +
             '<button type="button" id="mw-sys-analyser">🔍 Analyser</button></div>' +
             '<div class="mw-liste" id="mw-sys-resultat"></div>' +
-            '</div>' +
-            '<div class="mw-gps-blok">' +
-            '<div class="mw-ligne"><span>🚰 RÉSEAU D\'ADDUCTION</span></div>' +
-            '<div class="mw-liste" id="mw-reseau-chaine"></div>' +
-            '<div class="mw-liste" id="mw-reseau-equipements"></div>' +
             '</div>' +
             '</div>' +
             '<div data-panel="rapport" hidden>' +
@@ -1884,6 +1918,10 @@
                 dessinerTempTrace();
                 return;
             }
+            if (reseauRelierActif) {
+                ajouterPointReseau(lng, lat, toF(parId('mw-alt').value));
+                return;
+            }
             if (ongletCourant === 'collecte') {
                 parId('mw-lat').value = lat.toFixed(6);
                 parId('mw-lon').value = lng.toFixed(6);
@@ -1944,6 +1982,7 @@ function majVillagesCarte() {
             listeTraces();
             majProfilTraces();
             majAnalyse();
+            majReseau();
         }
 
         // ── Analyse ──
@@ -2099,6 +2138,121 @@ function majVillagesCarte() {
                 : '<p class="mw-indice">Aucun équipement de réseau (vanne, ventouse, pompage…).</p>';
             parId('mw-reseau-equipements').innerHTML =
                 (eq.length ? '<p class="mw-indice">Équipements du réseau (' + eq.length + ') :</p>' : '') + eqHtml;
+        }
+
+        // ── CONSTRUCTEUR VISUEL DE RÉSEAU ──
+        var reseauRelierActif = false;
+        var reseauPoints = [];
+        var reseauRelies = [];
+
+        function demarrerRelier() {
+            if (!projetActif) { message('Sélectionnez d\'abord un projet.', 'erreur'); return; }
+            reseauPoints = [];
+            reseauRelies = [];
+            reseauRelierActif = true;
+            parId('mw-rs-relier').hidden = true;
+            parId('mw-rs-fin').hidden = false;
+            parId('mw-rs-ann').hidden = false;
+            majReseauRelie();
+            removeCouche('mw-rs-tmp');
+            message('Cliquez les ouvrages du réseau dans l\'ordre (source → captage → réservoir → borne).', 'info');
+        }
+
+        function annulerRelier() {
+            reseauPoints = [];
+            reseauRelies = [];
+            reseauRelierActif = false;
+            parId('mw-rs-relier').hidden = false;
+            parId('mw-rs-fin').hidden = true;
+            parId('mw-rs-ann').hidden = true;
+            majReseauRelie();
+            removeCouche('mw-rs-tmp');
+        }
+
+        function terminerRelier() {
+            if (reseauPoints.length < 2) { message('Au moins 2 points requis.', 'erreur'); return; }
+            if (!projetActif) return;
+            var nom = parId('mw-rs-nom').value.trim() || 'Conduite du réseau';
+            post(apiTraces, {
+                projet_id: projetActif.id,
+                nom: nom,
+                coordonnees: reseauPoints,
+                observations: 'Conduite du réseau : ' + reseauRelies.map(function (r) {
+                    return r.ouvrage.type + '#' + r.ouvrage.id;
+                }).join(' → ')
+            }).then(function (d) {
+                if (!d.ok) { message(d.erreur || 'Erreur.', 'erreur'); return; }
+                traces.push(d.trace);
+                annulerRelier();
+                majTout();
+                message('Conduite du réseau enregistrée (' + Math.round(d.trace.longueur_m) + ' m, ' +
+                    reseauRelies.length + ' ouvrage(s) relié(s)).', 'succes');
+            });
+        }
+
+        function majReseauRelie() {
+            parId('mw-rs-len').textContent = formatDist(CORE.longueurTrace(reseauPoints));
+            parId('mw-rs-nb').textContent = reseauRelies.length;
+            var el = parId('mw-rs-liste');
+            el.innerHTML = reseauRelies.length
+                ? reseauRelies.map(function (r) {
+                    return '<div class="i"><span>' + CORE.emojiOuvrage(r.ouvrage.type, r.ouvrage.sous_type) +
+                        ' ' + ex(r.ouvrage.nom || r.ouvrage.type + ' #' + r.ouvrage.id) + '</span></div>';
+                }).join('')
+                : '<p class="mw-indice">Aucun ouvrage relié pour l\'instant.</p>';
+        }
+
+        function ajouterPointReseau(lng, lat, alt) {
+            if (!reseauRelierActif) return;
+            var o = CORE.ouvragePlusProche(ouvrages, lng, lat, 60);
+            if (o) {
+                if (reseauRelies.some(function (r) { return r.ouvrage.id === o.id; })) {
+                    message('Cet ouvrage est déjà relié.', 'erreur');
+                    return;
+                }
+                reseauPoints.push([lng, lat, o.altitude_m != null ? o.altitude_m : null]);
+                reseauRelies.push({ ouvrage: o });
+            } else {
+                reseauPoints.push([lng, lat, alt]);
+            }
+            majReseauRelie();
+            removeCouche('mw-rs-tmp');
+            if (reseauPoints.length >= 2) {
+                ajouterGeoJSON('mw-rs-tmp', [CORE.traceGeoJSON(reseauPoints, {})], 'line', '#8b5cf6');
+            }
+        }
+
+        function majReseau() {
+            var sel = parId('mw-rs-filtre');
+            if (!sel) return;
+            var courant = sel.value || '';
+            var types = [];
+            ouvrages.forEach(function (o) {
+                if (types.indexOf(o.type) === -1) types.push(o.type);
+            });
+            sel.innerHTML = '<option value="">Tous les ouvrages</option>';
+            types.sort().forEach(function (t) {
+                var op = document.createElement('option');
+                op.value = t;
+                op.textContent = (TYPES[t] || {}).emoji + ' ' + (TYPES[t] || {}).label || t;
+                sel.appendChild(op);
+            });
+            if (types.indexOf(courant) !== -1) sel.value = courant;
+            var el = parId('mw-rs-ouvrages');
+            var liste = courant ? ouvrages.filter(function (o) { return o.type === courant; }) : ouvrages;
+            if (!liste.length) { el.textContent = 'Aucun ouvrage.'; return; }
+            el.innerHTML = '';
+            liste.forEach(function (o) {
+                var div = document.createElement('div');
+                div.className = 'i';
+                var st = o.sous_type ? CORE.emojiOuvrage(o.type, o.sous_type) : (TYPES[o.type] || {}).emoji;
+                div.innerHTML = '<span>' + st + ' ' + ex(o.nom || o.type + ' #' + o.id) + '</span>' +
+                    '<b>' + (o.altitude_m != null ? Math.round(o.altitude_m) + ' m' : '') + '</b>';
+                div.addEventListener('click', function () {
+                    carte.flyTo({ center: [o.longitude, o.latitude], zoom: Math.max(carte.getZoom(), 15) });
+                });
+                el.appendChild(div);
+            });
         }
 
         // ── Profil canvas ──
@@ -2494,10 +2648,17 @@ function majVillagesCarte() {
             if (tab === 'analyse') majAnalyse();
             if (tab === 'collecte') listeOuvrages();
             if (tab === 'trace') { afficherMesures(); listeTraces(); }
+            if (tab === 'reseau') { majReseauUI(); majReseau(); }
         }
         panneau.querySelectorAll('.mw-onglets button').forEach(function (b) {
             b.addEventListener('click', function () { choisirOnglet(b.getAttribute('data-tab')); });
         });
+
+        // ── Constructeur de réseau ──
+        parJouet(parId('mw-rs-relier'), 'click', demarrerRelier);
+        parJouet(parId('mw-rs-fin'), 'click', terminerRelier);
+        parJouet(parId('mw-rs-ann'), 'click', annulerRelier);
+        parJouet(parId('mw-rs-filtre'), 'change', majReseau);
 
         // ── Bouton d'ouverture ──
         var bouton = document.createElement('button');
