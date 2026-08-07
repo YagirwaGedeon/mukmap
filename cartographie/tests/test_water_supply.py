@@ -464,3 +464,38 @@ class TestAdductionConsommationRepere(BaseCartographieTest):
         self.assertEqual(o['sous_type'], 'sommet')
         self.assertEqual(o['releve_repere']['description'], 'Vue sur toute la vallée')
         self.assertEqual(o['releve_repere']['date_releve'], '2026-08-08')
+
+
+class TestAdductionProfilPdf(BaseCartographieTest):
+    """Export du PROFIL EN LONG d'une trace au format PDF."""
+
+    def creer_trace(self, coordonnees):
+        pid = self.client.post('/api/adduction/projets/',
+                               data=json.dumps({'nom': 'Profil PDF', 'zone_nom': 'Irumu',
+                                                'bbox': [30.2, 1.3, 30.5, 1.5]}),
+                               content_type='application/json').json()['projet']['id']
+        r = self.client.post('/api/adduction/traces/',
+                             data=json.dumps({'projet_id': pid, 'nom': 'Trace profil',
+                                              'coordonnees': coordonnees}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        return r.json()['trace']['id']
+
+    def test_profil_pdf_genere(self):
+        tid = self.creer_trace([[30.30, 1.40, 1250], [30.31, 1.41, 1230],
+                                [30.32, 1.42, 1200], [30.33, 1.43, 1260]])
+        r = self.client.get(f'/api/adduction/traces/{tid}/profil.pdf')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], 'application/pdf')
+        self.assertIn('attachment;', r['Content-Disposition'])
+        self.assertTrue(r.content.startswith(b'%PDF'), 'en-tête PDF')
+        self.assertGreater(len(r.content), 1000, 'PDF non vide')
+
+    def test_profil_pdf_sans_altitude(self):
+        tid = self.creer_trace([[30.30, 1.40], [30.31, 1.41], [30.32, 1.42]])
+        r = self.client.get(f'/api/adduction/traces/{tid}/profil.pdf')
+        self.assertEqual(r.status_code, 400)
+
+    def test_profil_pdf_trace_absente(self):
+        r = self.client.get('/api/adduction/traces/99999/profil.pdf')
+        self.assertEqual(r.status_code, 404)

@@ -12,6 +12,7 @@ import io
 import json
 import math
 import csv
+import re
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
@@ -911,3 +912,287 @@ def _point3(p):
         except (TypeError, ValueError):
             alt = None
     return lon, lat, alt
+
+
+# ─── PROFIL EN LONG (calculs miroir du CORE JS) ───────────────────
+
+
+def _profil_detaille(t):
+    """Profil d'une trace : [{dist, alt, pente, lon, lat}, ...].
+
+    Miroir Python du CORE JS (profilDetaille) : distance cumulée (m),
+    altitude (m), pente du segment suivant (%), coordonnées [lon, lat].
+    """
+    coords = t.coordonnees or []
+    out, cum = [], 0.0
+    n = len(coords)
+    for i in range(n):
+        lon, lat, alt = _point3(coords[i])
+        pente = None
+        if i < n - 1:
+            _, _, alt_a = _point3(coords[i])
+            _, _, alt_b = _point3(coords[i + 1])
+            d2 = _distance_m(lat, lon, _point3(coords[i + 1])[1], _point3(coords[i + 1])[0])
+            if alt_a is not None and alt_b is not None and d2 > 0:
+                pente = ((alt_b - alt_a) / d2) * 100
+        elif n >= 2:
+            _, _, alt_a = _point3(coords[n - 2])
+            _, _, alt_b = _point3(coords[n - 1])
+            d2 = _distance_m(_point3(coords[n - 2])[1], _point3(coords[n - 2])[0],
+                             _point3(coords[n - 1])[1], _point3(coords[n - 1])[0])
+            if alt_a is not None and alt_b is not None and d2 > 0:
+                pente = ((alt_b - alt_a) / d2) * 100
+        if i > 0:
+            _, lat_p, _ = _point3(coords[i - 1])
+            lon_p, _, _ = _point3(coords[i - 1])
+            cum += _distance_m(lat_p, lon_p, lat, lon)
+        out.append({'dist': round(cum, 1), 'alt': alt, 'pente': pente, 'lon': lon, 'lat': lat})
+    return out
+
+
+def _profil_extrema(profil):
+    """Points hauts (max locaux) et bas (min locaux) d'un profil."""
+    out = []
+    n = len(profil)
+    for i in range(1, n - 1):
+        a, b, c = profil[i - 1]['alt'], profil[i]['alt'], profil[i + 1]['alt']
+        if a is None or b is None or c is None:
+            continue
+        if b > a and b > c:
+            out.append({'i': i, 'dist': profil[i]['dist'], 'alt': b, 'type': 'haut'})
+        elif b < a and b < c:
+            out.append({'i': i, 'dist': profil[i]['dist'], 'alt': b, 'type': 'bas'})
+    return out
+
+
+def _profil_zones(profil, seuil):
+    """Tronçons consécutifs dont la pente absolue dépasse `seuil` (%)."""
+    out, courant = [], None
+    for i in range(len(profil) - 1):
+        p = profil[i]['pente']
+        fort = p is not None and abs(p) >= seuil
+        if fort:
+            if courant is None:
+                courant = {'debut_i': i, 'debut_dist': profil[i]['dist'], 'pente_max': 0.0}
+            if abs(p) > courant['pente_max']:
+                courant['pente_max'] = abs(p)
+            courant['fin_i'] = i + 1
+            courant['fin_dist'] = profil[i + 1]['dist']
+        elif courant is not None:
+            out.append(courant)
+            courant = None
+    if courant is not None:
+        out.append(courant)
+    for z in out:
+        z['longueur_m'] = round(z['fin_dist'] - z['debut_dist'], 1)
+    return out
+
+
+def _profil_reservoir(profil):
+    """Point culminant du profil (emplacement potentiel de réservoir)."""
+    meilleur = None
+    for p in profil:
+        if p['alt'] is None:
+            continue
+        if meilleur is None or p['alt'] > meilleur['alt']:
+            meilleur = {'dist': p['dist'], 'alt': p['alt'], 'lon': p['lon'], 'lat': p['lat']}
+    return meilleur
+
+
+def _reperes_proches(t, seuil_m=100):
+    """Repères (type='repere') du projet situés à <= seuil_m m du tracé."""
+    out = []
+    for o in t.projet.ouvrages.filter(type='repere'):
+        meilleur = None
+        for i, c in enumerate(t.coordonnees or []):
+            d = _distance_m(o.latitude, o.longitude, c[1], c[0])
+            if meilleur is None or d < meilleur['dist']:
+                meilleur = {'dist': d, 'index': i}
+        if meilleur is not None and meilleur['dist'] <= seuil_m:
+            cum = 0.0
+            for i in range(1, meilleur['index'] + 1):
+                cum += _distance_m(t.coordonnees[i - 1][1], t.coordonnees[i - 1][0],
+                                   t.coordonnees[i][1], t.coordonnees[i][0])
+            out.append({'nom': o.nom, 'sous_type': o.get_sous_type_display() or o.sous_type,
+                        'dist': round(meilleur['dist']), 'cumulee': round(cum)})
+    out.sort(key=lambda r: r['cumulee'])
+    return out
+
+
+@login_required
+def export_profil_pdf(request, pk):
+    """Génère le PROFIL EN LONG d'une trace en PDF (graphique Distance →
+    Altitude avec points hauts/bas, fortes pentes, contre-pentes,
+    réservoir potentiel et repères proches)."""
+    t = get_object_or_404(TraceAdduction, pk=pk)
+    profil = _profil_detaille(t)
+    if len(profil) < 2:
+        return JsonResponse({'erreur': 'Trace trop courte pour un profil.'}, status=400)
+    alts = [p['alt'] for p in profil if p['alt'] is not None]
+    if len(alts) < 2:
+        return JsonResponse({'erreur': 'Altitude indisponible pour cette trace.'}, status=400)
+    alt_min, alt_max = min(alts), max(alts)
+    if alt_min == alt_max:
+        alt_min -= 2
+        alt_max += 2
+    dist_max = profil[-1]['dist'] or 1
+    extrema = _profil_extrema(profil)
+    zones = _profil_zones(profil, 10)
+    reservoir = _profil_reservoir(profil)
+    reperes = _reperes_proches(t)
+    longueur = t.longueur_m or 0
+
+    from fpdf import FPDF
+
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+    W, H = 297.0, 210.0
+    M = 14.0
+    pdf.set_fill_color(255, 255, 255)
+    pdf.rect(0, 0, W, H, 'F')
+    pdf.set_draw_color(77, 67, 246)
+    pdf.set_line_width(0.8)
+    pdf.rect(M - 2, M - 2, W - 2 * (M - 2), H - 2 * (M - 2))
+
+    pdf.set_font('helvetica', 'B', 14)
+    pdf.set_text_color(20, 20, 35)
+    pdf.text(M, M + 6, 'PROFIL EN LONG - ' + str(t.nom or 'Tracé #' + str(t.pk)).upper())
+    pdf.set_font('helvetica', '', 9)
+    pdf.set_text_color(90, 90, 120)
+    pdf.text(M, M + 12, f"Projet : {t.projet.nom}   ·   Longueur : {longueur:.0f} m"
+                         f"   ·   Points : {len(profil)}"
+                         f"   ·   Altitude : {min(alts):.0f} - {max(alts):.0f} m"
+                         f"   ·   Dénivelé net : {_denivele_net(t):+.0f} m")
+    if t.observations:
+        pdf.set_font('helvetica', 'I', 8)
+        pdf.text(M, M + 17, str(t.observations)[:140])
+
+    # Zone graphique
+    GX, GY, GW, GH = M + 4, M + 24, W - 2 * M - 8, 108.0
+    pdf.set_draw_color(190, 195, 220)
+    pdf.set_line_width(0.15)
+    for g in range(5):
+        x = GX + (GW * g / 4)
+        pdf.line(x, GY, x, GY + GH)
+        pdf.set_font('helvetica', '', 7)
+        pdf.set_text_color(120, 120, 150)
+        pdf.text(x - 2, GY + GH + 4, f"{dist_max * g / 4 / 1000:.2f} km")
+    for g in range(5):
+        y = GY + GH - (GH * g / 4)
+        pdf.line(GX, y, GX + GW, y)
+        pdf.text(GX - 10, y + 2, f"{alt_min + (alt_max - alt_min) * g / 4:.0f} m")
+
+    def X(d):
+        return GX + (d / dist_max) * GW
+
+    def Y(a):
+        return GY + GH - ((a - alt_min) / (alt_max - alt_min)) * GH
+
+    # Zones de forte pente (fond)
+    for z in zones:
+        pdf.set_fill_color(247, 214, 214)
+        pdf.rect(X(z['debut_dist']), GY, max(0.5, X(z['fin_dist']) - X(z['debut_dist'])), GH, 'F')
+
+    # Ligne du profil
+    pdf.set_draw_color(6, 182, 212)
+    pdf.set_line_width(0.7)
+    points_ligne = [(X(p['dist']), Y(p['alt'])) for p in profil if p['alt'] is not None]
+    for i in range(1, len(points_ligne)):
+        pdf.line(points_ligne[i - 1][0], points_ligne[i - 1][1], points_ligne[i][0], points_ligne[i][1])
+
+    # Points hauts / bas
+    for e in extrema:
+        x, y = X(e['dist']), Y(e['alt'])
+        if e['type'] == 'haut':
+            pdf.set_fill_color(34, 197, 94)
+            pdf.polygon([(x, y - 4.5), (x + 4.5, y + 3), (x - 4.5, y + 3)], style='F')
+        else:
+            pdf.set_fill_color(239, 68, 68)
+            pdf.polygon([(x - 4.5, y - 3), (x + 4.5, y - 3), (x, y + 4.5)], style='F')
+
+    # Réservoir potentiel
+    if reservoir:
+        x, y = X(reservoir['dist']), Y(reservoir['alt'])
+        pdf.set_fill_color(168, 85, 247)
+        pdf.ellipse(x - 2.5, y - 2.5, 5, 5, 'F')
+        pdf.set_font('helvetica', 'B', 7)
+        pdf.set_text_color(168, 85, 247)
+        pdf.text(x + 3, y - 1, f"Réservoir {reservoir['alt']:.0f} m")
+
+    # Repères proches
+    for r in reperes:
+        x = GX + (r['cumulee'] / dist_max) * GW
+        pdf.set_draw_color(245, 158, 11)
+        pdf.set_line_width(0.6)
+        pdf.rect(x - 1.8, GY + GH - 1.8, 3.6, 3.6)
+        pdf.set_font('helvetica', '', 7)
+        pdf.set_text_color(245, 158, 11)
+        pdf.text(x + 2, GY + GH - 3, r['sous_type'])
+
+    # Légende
+    ly = GY + GH + 10
+    pdf.set_font('helvetica', 'B', 8)
+    pdf.set_text_color(30, 30, 50)
+    pdf.text(M, ly, 'Légende :')
+    pdf.set_font('helvetica', '', 8)
+    pdf.set_text_color(60, 60, 90)
+    pdf.set_fill_color(34, 197, 94)
+    pdf.rect(M + 26, ly - 3, 3, 3, 'F')
+    pdf.text(M + 31, ly, 'point haut')
+    pdf.set_fill_color(239, 68, 68)
+    pdf.rect(M + 52, ly - 3, 3, 3, 'F')
+    pdf.text(M + 57, ly, 'point bas')
+    pdf.set_fill_color(247, 214, 214)
+    pdf.rect(M + 76, ly - 3, 3, 3, 'F')
+    pdf.text(M + 81, ly, 'forte pente')
+    pdf.set_fill_color(168, 85, 247)
+    pdf.rect(M + 105, ly - 3, 3, 3, 'F')
+    pdf.text(M + 110, ly, 'réservoir potentiel')
+    pdf.set_draw_color(245, 158, 11)
+    pdf.rect(M + 160, ly - 3, 3, 3)
+    pdf.text(M + 165, ly, 'repère')
+
+    # Tableau des zones / repères
+    ly2 = ly + 9
+    if zones or reperes:
+        pdf.set_font('helvetica', 'B', 8)
+        pdf.set_text_color(30, 30, 50)
+        pdf.text(M, ly2, 'Zones à attention technique :')
+        pdf.set_font('helvetica', '', 8)
+        pdf.set_text_color(60, 60, 90)
+        yt = ly2 + 5
+        for z in zones[:8]:
+            pdf.text(M + 4, yt, f"- forte pente {z['pente_max']:.0f} % sur {z['longueur_m']:.0f} m"
+                                f" (de {z['debut_dist']:.0f} à {z['fin_dist']:.0f} m)")
+            yt += 4.5
+        if reperes:
+            pdf.text(M, yt + 2, 'Repères sur le tracé :')
+            yt += 6
+            for r in reperes[:6]:
+                pdf.text(M + 4, yt, f"- {r['sous_type']} ({r['nom']}) à {r['cumulee']} m, "
+                                    f"à {r['dist']} m du tracé")
+                yt += 4.5
+
+    pdf.set_font('helvetica', 'I', 7)
+    pdf.set_text_color(140, 140, 170)
+    pdf.text(M, H - M - 2, 'Généré automatiquement par MUKMAP - Water Supply Survey.')
+
+    from .branding import NOM, VERSION
+    nom_fichier = 'profil_en_long_' + (re.sub(r'[^\w\-]', '_', str(t.nom or 'trace'))[:40] or 'trace')
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.pdf"'
+    response.write(bytes(pdf.output()))
+    return response
+
+
+def _denivele_net(t):
+    coords = t.coordonnees or []
+    if len(coords) < 2:
+        return 0
+    alt1 = coords[0][2] if len(coords[0]) > 2 else None
+    alt2 = coords[-1][2] if len(coords[-1]) > 2 else None
+    try:
+        return float(alt2) - float(alt1)
+    except (TypeError, ValueError):
+        return 0

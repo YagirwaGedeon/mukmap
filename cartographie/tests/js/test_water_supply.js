@@ -153,6 +153,56 @@ assert.strictEqual(rel.denivele.positif, 50);
 assert.strictEqual(rel.denivele.net, 20);
 assert.ok(rel.longueur > 0);
 
+// ── profil en long (détaillé) ──────────────────────────────────────
+// Trace : montée +12 m, descente −8 m (contre-pente), remontée +3 m.
+const traceP = [[0, 0, 100], [0.001, 0, 112], [0.002, 0, 104], [0.003, 0, 107]];
+const pd = C.profilDetaille(traceP);
+assert.strictEqual(pd.length, 4);
+assert.strictEqual(pd[0].dist, 0);
+assert.strictEqual(pd[0].alt, 100);
+assert.ok(pd[0].pente > 10.6 && pd[0].pente < 10.9, 'pente 100→112 ≈ +10,8 % (' + pd[0].pente + ')');
+assert.ok(pd[1].pente < -7.1 && pd[1].pente > -7.3, 'pente 112→104 ≈ -7,2 % (' + pd[1].pente + ')');
+assert.ok(pd[3].dist > 330 && pd[3].dist < 340, 'cumulée ≈ 334 m (' + pd[3].dist + ')');
+assert.ok(pd[3].pente > 2.6 && pd[3].pente < 2.8, 'dernier point : pente du segment précédent ≈ +2,7 %');
+const exP = C.extremaProfil(pd);
+assert.strictEqual(exP.length, 2);
+assert.strictEqual(exP[0].type, 'haut');
+assert.strictEqual(exP[0].alt, 112);
+assert.strictEqual(exP[1].type, 'bas');
+assert.strictEqual(exP[1].alt, 104);
+assert.strictEqual(C.extremaProfil(pd.slice(0, 2)).length, 0, 'moins de 3 points → aucun extremum');
+
+const zfP = C.zonesFortesPentes(pd, 10);
+assert.strictEqual(zfP.length, 1, '1 zone de forte pente');
+assert.ok(zfP[0].pente_max > 10.6 && zfP[0].pente_max < 10.9, 'pente_max ≈ 10,8 %');
+assert.strictEqual(zfP[0].debut_i, 0);
+assert.strictEqual(zfP[0].fin_i, 1);
+
+const cpP = C.contrepentes(pd, 1);
+assert.strictEqual(cpP.length, 1, '1 contre-pente (net > 0)');
+assert.strictEqual(cpP[0].debut_i, 1);
+assert.strictEqual(cpP[0].fin_i, 2);
+assert.ok(cpP[0].pente_min < -7.1, 'pente_min de la contre-pente');
+assert.strictEqual(C.contrepentes([{alt: 100, pente: 5}, {alt: 105, pente: null}]).length, 0, 'sans altitude → pas de contre-pente');
+
+const resP = C.reservoirPotentiel(pd);
+assert.strictEqual(resP.alt, 112);
+assert.ok(resP.dist > 100 && resP.dist < 125, 'réservoir ≈ point 2 (' + resP.dist + ')');
+assert.strictEqual(C.reservoirPotentiel([{alt: null}, {alt: null}]), null, 'aucune altitude → null');
+
+const zaP = C.zonesAttention(pd, 10, 1);
+assert.strictEqual(zaP.length, 2, 'forte pente + contre-pente');
+assert.strictEqual(zaP[0].raison, 'forte_pente');
+assert.strictEqual(zaP[1].raison, 'contre_pente');
+
+const repProche = {id: 51, type: 'repere', nom: 'R51', latitude: 0, longitude: 0.001, altitude_m: null};
+const repLoin = {id: 52, type: 'repere', nom: 'R52', latitude: 2, longitude: 2, altitude_m: null};
+const repTest = C.reperesSurTrace(traceP, [repProche, repLoin, {id: 53, type: 'source', nom: 'S53', latitude: 0.001, longitude: 0, altitude_m: null}], 100);
+assert.strictEqual(repTest.length, 1, 'seul le repère proche est retenu');
+assert.strictEqual(repTest[0].ouvrage.nom, 'R51');
+assert.strictEqual(repTest[0].dist_m, 0);
+assert.ok(repTest[0].dist_cumulee_m > 100 && repTest[0].dist_cumulee_m < 125, 'cumulée du repère ≈ 111 m');
+
 // ── altitudes / analyse ──────────────────────────────────────────
 const ouvrages = [
     {id: 1, type: 'source', nom: 'S1', latitude: 0, longitude: 0, altitude_m: 1250, beneficiaires: 120},

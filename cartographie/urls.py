@@ -111,4 +111,5 @@ urlpatterns = [
     path('api/adduction/ouvrages/<int:pk>/', water_supply.detail_ouvrage, name='api_adduction_ouvrage'),
     path('api/adduction/traces/', water_supply.liste_traces, name='api_adduction_traces'),
     path('api/adduction/traces/<int:pk>/', water_supply.detail_trace, name='api_adduction_trace'),
+    path('api/adduction/traces/<int:pk>/profil.pdf', water_supply.export_profil_pdf, name='api_adduction_profil_pdf'),
 ]

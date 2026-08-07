@@ -330,6 +330,175 @@
             };
         },
 
+        // ── PROFIL EN LONG ─────────────────────────────────────────
+        // Profil détaillé d'une trace : pour chaque point → distance
+        // cumulée (m), altitude (m), pente du segment suivant (%), et
+        // coordonnées [lon, lat].
+        profilDetaille: function (coords) {
+            var out = [], cum = 0;
+            var n = (coords || []).length;
+            for (var i = 0; i < n; i++) {
+                var alt = coords[i][2] != null ? coords[i][2] : null;
+                if (i > 0) cum += CORE.distanceCoord(coords[i - 1], coords[i]);
+                var pente = null;
+                if (i < n - 1) {
+                    var a = coords[i], b = coords[i + 1];
+                    if (a[2] != null && b[2] != null) {
+                        var d2 = CORE.distanceCoord(a, b);
+                        if (d2 > 0) pente = ((b[2] - a[2]) / d2) * 100;
+                    }
+                } else if (n >= 2) {
+                    var ap = coords[n - 2], bp = coords[n - 1];
+                    if (ap[2] != null && bp[2] != null) {
+                        var dp = CORE.distanceCoord(ap, bp);
+                        if (dp > 0) pente = ((bp[2] - ap[2]) / dp) * 100;
+                    }
+                }
+                out.push({ dist: Math.round(cum * 10) / 10, alt: alt, pente: pente,
+                           lon: coords[i][0], lat: coords[i][1] });
+            }
+            return out;
+        },
+
+        // Points hauts (max locaux) et bas (min locaux) d'un profil
+        // (profil = [{dist, alt, pente, lon, lat}]).
+        extremaProfil: function (profil) {
+            var out = [];
+            var n = (profil || []).length;
+            if (n < 3) return out;
+            for (var i = 1; i < n - 1; i++) {
+                var a = profil[i - 1].alt, b = profil[i].alt, c = profil[i + 1].alt;
+                if (a == null || b == null || c == null) continue;
+                if (b > a && b > c) out.push({ i: i, dist: profil[i].dist, alt: b, type: 'haut' });
+                else if (b < a && b < c) out.push({ i: i, dist: profil[i].dist, alt: b, type: 'bas' });
+            }
+            return out;
+        },
+
+        // Tronçons consécutifs dont la pente (absolue) dépasse le seuil
+        // (%). → [{debut_i, fin_i, debut_dist, fin_dist, longueur_m, pente_max}].
+        zonesFortesPentes: function (profil, seuil) {
+            var out = [], courant = null;
+            seuil = seuil || 10;
+            for (var i = 0; i < (profil || []).length - 1; i++) {
+                var p = profil[i].pente;
+                var fort = p != null && Math.abs(p) >= seuil;
+                if (fort) {
+                    if (!courant) courant = { debut_i: i, debut_dist: profil[i].dist, pente_max: 0 };
+                    if (Math.abs(p) > courant.pente_max) courant.pente_max = Math.abs(p);
+                    courant.fin_i = i + 1;
+                    courant.fin_dist = profil[i + 1].dist;
+                } else if (courant) {
+                    out.push(courant);
+                    courant = null;
+                }
+            }
+            if (courant) out.push(courant);
+            out.forEach(function (z) {
+                z.longueur_m = Math.round((z.fin_dist - z.debut_dist) * 10) / 10;
+                z.pente_max = Math.round(z.pente_max * 10) / 10;
+            });
+            return out;
+        },
+
+        // Zones de contre-pente : tronçons dont la pente est de signe
+        // opposé au dénivelé net du tracé (remontée si le réseau descend).
+        contrepentes: function (profil, seuil) {
+            var net = 0;
+            var n = (profil || []).length;
+            if (n >= 2 && profil[0].alt != null && profil[n - 1].alt != null) {
+                net = profil[n - 1].alt - profil[0].alt;
+            }
+            if (net === 0) return [];
+            var out = [], courant = null;
+            seuil = seuil || 1;
+            for (var i = 0; i < n - 1; i++) {
+                var p = profil[i].pente;
+                var contre = p != null && ((net > 0 && p < -seuil) || (net < 0 && p > seuil));
+                if (contre) {
+                    if (!courant) courant = { debut_i: i, debut_dist: profil[i].dist, pente_min: p };
+                    if (p < courant.pente_min) courant.pente_min = p;
+                    courant.fin_i = i + 1;
+                    courant.fin_dist = profil[i + 1].dist;
+                } else if (courant) {
+                    out.push(courant);
+                    courant = null;
+                }
+            }
+            if (courant) out.push(courant);
+            out.forEach(function (z) {
+                z.longueur_m = Math.round((z.fin_dist - z.debut_dist) * 10) / 10;
+                z.pente_min = Math.round(z.pente_min * 10) / 10;
+            });
+            return out;
+        },
+
+        // Emplacement potentiel d'un réservoir : point culminant du
+        // profil (altitude maximale) → {dist, alt, lon, lat} | null.
+        reservoirPotentiel: function (profil) {
+            var meilleur = null;
+            (profil || []).forEach(function (p) {
+                if (p.alt == null) return;
+                if (!meilleur || p.alt > meilleur.alt) {
+                    meilleur = { dist: p.dist, alt: p.alt, lon: p.lon, lat: p.lat };
+                }
+            });
+            return meilleur;
+        },
+
+        // Zones nécessitant une attention technique : union des zones de
+        // forte pente (seuilFort) et des contre-pentes → liste de segments.
+        zonesAttention: function (profil, seuilFort, seuilContre) {
+            var zones = CORE.zonesFortesPentes(profil, seuilFort).map(function (z) {
+                return { debut_i: z.debut_i, fin_i: z.fin_i, debut_dist: z.debut_dist,
+                         fin_dist: z.fin_dist, longueur_m: z.longueur_m, raison: 'forte_pente' };
+            });
+            CORE.contrepentes(profil, seuilContre).forEach(function (z) {
+                var debut = Math.max(z.debut_i, 0), fin = Math.min(z.fin_i, (profil || []).length - 1);
+                var existe = zones.some(function (x) {
+                    return x.debut_i === debut && x.fin_i === fin;
+                });
+                if (!existe) {
+                    zones.push({ debut_i: z.debut_i, fin_i: z.fin_i, debut_dist: z.debut_dist,
+                                 fin_dist: z.fin_dist, longueur_m: z.longueur_m, raison: 'contre_pente' });
+                }
+            });
+            zones.sort(function (a, b) { return a.debut_i - b.debut_i; });
+            return zones;
+        },
+
+        // Repères du projet situés à moins de `seuilM` mètres du tracé :
+        // → [{ouvrage, dist_m, dist_cumulee_m, index_point}].
+        reperesSurTrace: function (coords, ouvrages, seuilM) {
+            var out = [];
+            seuilM = seuilM || 100;
+            (ouvrages || []).forEach(function (o) {
+                if (o.type !== 'repere') return;
+                var meilleur = null;
+                for (var i = 0; i < (coords || []).length; i++) {
+                    var c = coords[i];
+                    var d = CORE.distance(o.latitude, o.longitude, c[1], c[0]);
+                    if (!meilleur || d < meilleur.dist) {
+                        meilleur = { dist: d, index: i };
+                    }
+                }
+                if (meilleur && meilleur.dist <= seuilM) {
+                    var cum = 0;
+                    for (var i = 1; i <= meilleur.index; i++) {
+                        cum += CORE.distanceCoord(coords[i - 1], coords[i]);
+                    }
+                    out.push({
+                        ouvrage: o,
+                        dist_m: Math.round(meilleur.dist),
+                        dist_cumulee_m: Math.round(cum),
+                        index_point: meilleur.index
+                    });
+                }
+            });
+            out.sort(function (a, b) { return a.dist_cumulee_m - b.dist_cumulee_m; });
+            return out;
+        },
+
         // Altitudes min/max d'une liste d'ouvrages.
         plageAltitudes: function (ouvrages) {
             var alts = [];
@@ -652,6 +821,16 @@
             '<div class="mw-ligne"><span>Bénéficiaires totaux</span><b id="mw-benef-gp">—</b></div>' +
             '<div class="mw-ligne"><span>Ouvrages</span><b id="mw-nb-ouv">—</b></div>' +
             '<canvas id="mw-chart" width="280" height="90"></canvas>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>📈 PROFIL EN LONG</span><select id="mw-profil-trace">' +
+            '<option value="">— Choisir une trace —</option></select></div>' +
+            '<canvas id="mw-profil-canvas" width="560" height="240"></canvas>' +
+            '<div class="mw-ligne" id="mw-profil-info"><span>Survolez le profil</span><b>—</b></div>' +
+            '<div class="mw-liste" id="mw-profil-analyse"></div>' +
+            '<div class="mw-boutons">' +
+            '<button type="button" id="mw-export-png">🖼 Export image (PNG)</button>' +
+            '<button type="button" id="mw-export-pdf">📄 Export PDF</button></div>' +
+            '</div>' +
             '</div>' +
             '<div data-panel="rapport" hidden>' +
             '<div class="mw-boutons"><button type="button" id="mw-gen-rapport">📄 Générer le rapport</button></div>' +
@@ -1625,6 +1804,7 @@ function majVillagesCarte() {
             majTracesCarte();
             listeOuvrages();
             listeTraces();
+            majProfilTraces();
             majAnalyse();
         }
 
@@ -1676,6 +1856,263 @@ function majVillagesCarte() {
             ctx.fillText(Math.round(altMin) + ' m', 2, h - 2);
             ctx.fillText(Math.round(altMax) + ' m', 2, 12);
         }
+
+        // ── PROFIL EN LONG ──
+        var profilCourant = [];
+        var traceProfilCourante = null;
+
+        function majProfilTraces() {
+            var sel = parId('mw-profil-trace');
+            if (!sel) return;
+            var courant = parseInt(sel.value, 10) || (traceProfilCourante ? traceProfilCourante.id : null);
+            var existe = false;
+            sel.innerHTML = '<option value="">— Choisir une trace —</option>';
+            traces.forEach(function (t) {
+                var o = document.createElement('option');
+                o.value = t.id;
+                o.textContent = '📏 ' + (t.nom || 'Tracé #' + t.id) + ' — ' +
+                    Math.round(t.longueur_m || 0) + ' m';
+                if (courant === t.id) { o.selected = true; existe = true; }
+                sel.appendChild(o);
+            });
+            if (!existe && courant) { traceProfilCourante = null; profilCourant = []; }
+        }
+
+        function traceProfilSelectionnee() {
+            var id = parseInt(parId('mw-profil-trace').value, 10);
+            if (!id) return null;
+            for (var i = 0; i < traces.length; i++) {
+                if (traces[i].id === id) return traces[i];
+            }
+            return null;
+        }
+
+        function dessinerProfilLong() {
+            var cv = parId('mw-profil-canvas');
+            if (!cv || !cv.getContext) return;
+            var ctx = cv.getContext('2d');
+            ctx.clearRect(0, 0, cv.width, cv.height);
+            var t = traceProfilSelectionnee();
+            var info = parId('mw-profil-info');
+            if (!t || !t.coordonnees || t.coordonnees.length < 2) {
+                ctx.fillStyle = '#a0a3c2'; ctx.font = '12px sans-serif';
+                ctx.fillText('Choisissez une trace pour afficher le profil en long.', 20, 120);
+                if (info) { info.querySelector('span').textContent = 'Survolez le profil'; info.querySelector('b').textContent = '—'; }
+                parId('mw-profil-analyse').innerHTML = '';
+                return;
+            }
+            profilCourant = CORE.profilDetaille(t.coordonnees);
+            traceProfilCourante = t;
+            var w = cv.width, h = cv.height, padL = 46, padR = 12, padT = 14, padB = 22;
+            var alts = profilCourant.filter(function (p) { return p.alt != null; });
+            var altMin = Infinity, altMax = -Infinity, distMax = 0;
+            profilCourant.forEach(function (p) {
+                if (p.alt != null) { if (p.alt < altMin) altMin = p.alt; if (p.alt > altMax) altMax = p.alt; }
+                if (p.dist > distMax) distMax = p.dist;
+            });
+            if (alts.length < 2) {
+                ctx.fillStyle = '#a0a3c2'; ctx.font = '12px sans-serif';
+                ctx.fillText('Altitude indisponible pour cette trace.', 20, 120);
+                return;
+            }
+            if (altMin === altMax) { altMin -= 2; altMax += 2; }
+            var X = function (d) { return padL + (d / (distMax || 1)) * (w - padL - padR); };
+            var Y = function (a) { return h - padB - ((a - altMin) / (altMax - altMin)) * (h - padT - padB); };
+            // Grille + axes
+            ctx.strokeStyle = 'rgba(100,110,150,.25)'; ctx.lineWidth = 1;
+            for (var g = 0; g <= 4; g++) {
+                var gx = padL + (g / 4) * (w - padL - padR);
+                ctx.beginPath(); ctx.moveTo(gx, padT); ctx.lineTo(gx, h - padB); ctx.stroke();
+                ctx.fillStyle = '#a0a3c2'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+                ctx.fillText(Math.round(distMax * g / 4 / 10) / 100 + ' km', gx, h - 8);
+            }
+            for (var ga = 0; ga <= 4; ga++) {
+                var ay = Y(altMin + ((altMax - altMin) * ga / 4));
+                ctx.beginPath(); ctx.moveTo(padL, ay); ctx.lineTo(w - padR, ay); ctx.stroke();
+                ctx.fillStyle = '#a0a3c2'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+                ctx.fillText(Math.round(altMin + ((altMax - altMin) * ga / 4)) + ' m', padL - 5, ay + 3);
+            }
+            ctx.textAlign = 'left';
+            // Zones d'attention (fond)
+            CORE.zonesAttention(profilCourant, 10, 1).forEach(function (z) {
+                var x1 = X(z.debut_dist), x2 = X(z.fin_dist);
+                ctx.fillStyle = z.raison === 'contre_pente' ? 'rgba(245,158,11,.22)' : 'rgba(239,68,68,.20)';
+                ctx.fillRect(x1, padT, Math.max(1, x2 - x1), h - padT - padB);
+            });
+            // Ligne du profil
+            ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2; ctx.beginPath();
+            var deb = false;
+            profilCourant.forEach(function (p) {
+                if (p.alt == null) return;
+                var x = X(p.dist), y = Y(p.alt);
+                if (!deb) { ctx.moveTo(x, y); deb = true; } else { ctx.lineTo(x, y); }
+            });
+            ctx.stroke();
+            // Points hauts / bas
+            CORE.extremaProfil(profilCourant).forEach(function (e) {
+                var x = X(e.dist), y = Y(e.alt);
+                ctx.fillStyle = e.type === 'haut' ? '#22c55e' : '#ef4444';
+                ctx.beginPath();
+                if (e.type === 'haut') {
+                    ctx.moveTo(x, y - 6); ctx.lineTo(x + 6, y + 4); ctx.lineTo(x - 6, y + 4);
+                } else {
+                    ctx.moveTo(x - 6, y - 4); ctx.lineTo(x + 6, y - 4); ctx.lineTo(x, y + 6);
+                }
+                ctx.closePath(); ctx.fill();
+            });
+            // Réservoir potentiel
+            var res = CORE.reservoirPotentiel(profilCourant);
+            if (res && res.alt != null) {
+                var xr = X(res.dist), yr = Y(res.alt);
+                ctx.fillStyle = '#a855f7';
+                ctx.beginPath(); ctx.arc(xr, yr - 8, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+                ctx.fillText('R', xr, yr - 5);
+                ctx.textAlign = 'left';
+            }
+            // Repères proches
+            CORE.reperesSurTrace(t.coordonnees, ouvrages, 100).forEach(function (r) {
+                var x = X(r.dist_cumulee_m), y = Y(r.ouvrage.altitude_m != null ? r.ouvrage.altitude_m : altMin);
+                ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(x - 5, y); ctx.lineTo(x, y - 5); ctx.lineTo(x + 5, y); ctx.lineTo(x, y + 5);
+                ctx.closePath(); ctx.stroke();
+                ctx.fillStyle = '#f59e0b'; ctx.font = '8px sans-serif';
+                ctx.fillText(r.ouvrage.sous_type_label || r.ouvrage.sous_type || 'repère', x + 7, y - 4);
+            });
+            ctx.fillStyle = '#22d3ee'; ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('Profil en long — ' + (t.nom || 'Tracé #' + t.id), padL, 12);
+            majProfilAnalyse(t);
+        }
+
+        function majProfilAnalyse(t) {
+            var el = parId('mw-profil-analyse');
+            if (!el) return;
+            var lignes = [];
+            var a = CORE.analyseTraceGps(t.coordonnees);
+            lignes.push('<div class="mw-ligne"><span>Longueur / horizontale</span><b>' +
+                formatDist(a.longueur_totale) + ' / ' + formatDist(a.distance_horizontale) + '</b></div>');
+            lignes.push('<div class="mw-ligne"><span>Dénivelé + / − / net</span><b>+' +
+                Math.round(a.denivele_positif) + ' / −' + Math.round(a.denivele_negatif) + ' / ' +
+                (CORE.deniveleNet(t.coordonnees) != null ? Math.round(CORE.deniveleNet(t.coordonnees)) : '—') +
+                ' m</b></div>');
+            var ex = CORE.extremaProfil(profilCourant);
+            if (ex.length) {
+                lignes.push('<div class="mw-ligne"><span>Points hauts / bas</span><b>' +
+                    ex.filter(function (e) { return e.type === 'haut'; }).length + ' / ' +
+                    ex.filter(function (e) { return e.type === 'bas'; }).length + '</b></div>');
+                ex.forEach(function (e) {
+                    lignes.push('<div class="mw-ligne" style="font-size:.68rem"><span>' +
+                        (e.type === 'haut' ? '▲' : '▼') + ' ' +
+                        (e.type === 'haut' ? 'Haut' : 'Bas') + ' @ ' + Math.round(e.dist) + ' m</span><b>' +
+                        Math.round(e.alt) + ' m</b></div>');
+                });
+            }
+            var res = CORE.reservoirPotentiel(profilCourant);
+            if (res) {
+                lignes.push('<div class="mw-ligne" style="color:#a855f7"><span>🛢 Réservoir potentiel</span><b>' +
+                    Math.round(res.dist) + ' m · ' + Math.round(res.alt) + ' m</b></div>');
+            }
+            var za = CORE.zonesAttention(profilCourant, 10, 1);
+            if (za.length) {
+                lignes.push('<div class="mw-ligne"><span>Zones à attention technique</span><b>' +
+                    za.length + '</b></div>');
+                za.forEach(function (z) {
+                    lignes.push('<div class="mw-ligne" style="font-size:.68rem"><span>' +
+                        (z.raison === 'contre_pente' ? '↗ Contre-pente' : '⚠ Forte pente') +
+                        ' @ ' + Math.round(z.debut_dist) + '–' + Math.round(z.fin_dist) + ' m</span><b>' +
+                        z.longueur_m + ' m</b></div>');
+                });
+            }
+            var reps = CORE.reperesSurTrace(t.coordonnees, ouvrages, 100);
+            if (reps.length) {
+                lignes.push('<div class="mw-ligne"><span>Repères sur le tracé</span><b>' +
+                    reps.length + '</b></div>');
+                reps.forEach(function (r) {
+                    lignes.push('<div class="mw-ligne" style="font-size:.68rem"><span>🧭 ' +
+                        ex(r.ouvrage.nom || 'repère') + '</span><b>' + Math.round(r.dist_cumulee_m) +
+                        ' m · ' + r.dist_m + ' m</b></div>');
+                });
+            }
+            if (!lignes.length) lignes.push('<div class="mw-ligne"><span>Aucune donnée</span><b>—</b></div>');
+            el.innerHTML = lignes.join('');
+        }
+
+        parJouet(parId('mw-profil-trace'), 'change', dessinerProfilLong);
+
+        parId('mw-profil-canvas').addEventListener('mousemove', function (e) {
+            var cv = parId('mw-profil-canvas');
+            var info = parId('mw-profil-info');
+            if (!profilCourant.length || profilCourant.length < 2 || !info) return;
+            var rect = cv.getBoundingClientRect();
+            var relX = (e.clientX - rect.left) * (cv.width / rect.width);
+            var padL = 46, w = cv.width, padR = 12;
+            var distMax = profilCourant[profilCourant.length - 1].dist || 1;
+            var dist = ((relX - padL) / (w - padL - padR)) * distMax;
+            var meilleur = null;
+            for (var i = 0; i < profilCourant.length; i++) {
+                var p = profilCourant[i];
+                if (!meilleur || Math.abs(p.dist - dist) < Math.abs(meilleur.p.dist - dist)) {
+                    meilleur = { p: p, i: i };
+                }
+            }
+            var m = meilleur;
+            var rep = CORE.reperesSurTrace(traceProfilCourante ? traceProfilCourante.coordonnees : [], ouvrages, 100);
+            var repPoint = null;
+            rep.forEach(function (r) {
+                if (r.index_point === m.i) repPoint = r.ouvrage;
+            });
+            var txt = 'D ' + Math.round(m.p.dist) + ' m · Alt ' + (m.p.alt != null ? Math.round(m.p.alt) + ' m' : '—') +
+                ' · Pente ' + (m.p.pente != null ? m.p.pente.toFixed(1) + ' %' : '—') +
+                ' · ' + m.p.lat.toFixed(5) + ', ' + m.p.lon.toFixed(5);
+            if (repPoint) {
+                txt += ' · 🧭 ' + (repPoint.sous_type_label || repPoint.sous_type || 'repère');
+            }
+            info.querySelector('span').textContent = txt;
+            info.querySelector('b').textContent = m.p.dist.toFixed(0) + ' m';
+        });
+        parId('mw-profil-canvas').addEventListener('mouseleave', function () {
+            var info = parId('mw-profil-info');
+            if (info) {
+                info.querySelector('span').textContent = 'Survolez le profil';
+                info.querySelector('b').textContent = '—';
+            }
+        });
+
+        parJouet(parId('mw-export-png'), 'click', function () {
+            var cv = parId('mw-profil-canvas');
+            if (!cv) return;
+            var nom = (traceProfilCourante && traceProfilCourante.nom || 'profil').toLowerCase().replace(/\s+/g, '_');
+            var a = document.createElement('a');
+            a.href = cv.toDataURL('image/png');
+            a.download = 'profil_en_long_' + nom + '.png';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function () { a.remove(); }, 1500);
+            message('Profil exporté en image (PNG).', 'succes');
+        });
+
+        parJouet(parId('mw-export-pdf'), 'click', function () {
+            var t = traceProfilSelectionnee();
+            if (!t) { message('Choisissez d\'abord une trace.', 'erreur'); return; }
+            fetch(apiTraces + t.id + '/profil.pdf', { credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) {
+                    if (!r.ok) { message('Export PDF indisponible.', 'erreur'); return null; }
+                    return r.blob();
+                })
+                .then(function (blob) {
+                    if (!blob) return;
+                    var nom = (t.nom || 'trace_' + t.id).toLowerCase().replace(/\s+/g, '_');
+                    var a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'profil_en_long_' + nom + '.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+                    message('Profil exporté en PDF.', 'succes');
+                });
+        });
 
         // ── Rapport ──
         parId('mw-gen-rapport').addEventListener('click', function () {
