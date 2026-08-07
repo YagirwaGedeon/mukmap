@@ -203,6 +203,43 @@ assert.strictEqual(repTest[0].ouvrage.nom, 'R51');
 assert.strictEqual(repTest[0].dist_m, 0);
 assert.ok(repTest[0].dist_cumulee_m > 100 && repTest[0].dist_cumulee_m < 125, 'cumulée du repère ≈ 111 m');
 
+// ── analyse système source → village ───────────────────────────────
+const srcS = {id: 1, type: 'source', nom: 'Source', latitude: 0, longitude: 0, altitude_m: 1000};
+const vlgS = {id: 2, type: 'village', nom: 'Village', latitude: 0.01, longitude: 0, altitude_m: 1050};
+const sys = C.analyserSysteme(srcS, vlgS, [
+    {id: 3, type: 'borne', nom: 'BF1', latitude: 0.003, longitude: 0, altitude_m: 1020},
+    {id: 4, type: 'borne', nom: 'BF2', latitude: 0.007, longitude: 0, altitude_m: 1040}
+], null);
+assert.strictEqual(sys.distance_m, 1112, 'distance source→village ≈ 1112 m (' + sys.distance_m + ')');
+assert.strictEqual(sys.denivele_net_m, 50, 'dénivelé net +50 m');
+assert.strictEqual(sys.denivele_total_m, 50, 'dénivelé total 50 m');
+assert.strictEqual(sys.altitude_source_m, 1000, 'altitude source');
+assert.strictEqual(sys.altitude_village_m, 1050, 'altitude village');
+assert.strictEqual(sys.bornes.count, 2, '2 bornes');
+assert.strictEqual(sys.bornes.min, 1020, 'borne la plus basse');
+assert.strictEqual(sys.bornes.max, 1040, 'borne la plus haute');
+assert.strictEqual(sys.bornes.moy, 1030, 'altitude moyenne des bornes');
+assert.strictEqual(sys.longueur_m, sys.distance_m, 'sans trace : longueur = distance directe');
+assert.ok(sys.pente_moyenne_pct > 4.4 && sys.pente_moyenne_pct < 4.6, 'pente moyenne ≈ 4,5 % (' + sys.pente_moyenne_pct + ')');
+assert.strictEqual(sys.point_haut_m, 1050, 'point le plus haut = village');
+assert.strictEqual(sys.point_bas_m, 1000, 'point le plus bas = source');
+
+// avec un tracé (sinueux) fourni
+const sys2 = C.analyserSysteme(srcS, vlgS, [],
+    {coordonnees: [[0, 0, 1000], [0.005, 0.002, 1100], [0.01, 0, 1050]]});
+assert.ok(sys2.longueur_m > 1112, 'trace sinueuse plus longue (' + sys2.longueur_m + ')');
+assert.ok(sys2.pente_moyenne_pct > 4 && sys2.pente_moyenne_pct < 4.5, 'pente moyenne sur trace');
+assert.strictEqual(sys2.point_haut_m, 1100, 'point haut sur la trace');
+assert.strictEqual(sys2.bornes.count, 0, 'aucune borne');
+
+// altitudes manquantes / source absente
+const sys3 = C.analyserSysteme({id: 5, type: 'source', nom: 'S', latitude: 0, longitude: 0, altitude_m: null},
+    {id: 6, type: 'village', nom: 'V', latitude: 0.01, longitude: 0, altitude_m: null}, [], null);
+assert.strictEqual(sys3.denivele_net_m, null, 'dénivelé indisponible');
+assert.strictEqual(sys3.pente_moyenne_pct, null, 'pente indisponible');
+assert.strictEqual(sys3.point_haut_m, null, 'aucun point haut');
+assert.strictEqual(C.analyserSysteme(null, vlgS, [], null), null, 'source manquante → null');
+
 // ── altitudes / analyse ──────────────────────────────────────────
 const ouvrages = [
     {id: 1, type: 'source', nom: 'S1', latitude: 0, longitude: 0, altitude_m: 1250, beneficiaires: 120},

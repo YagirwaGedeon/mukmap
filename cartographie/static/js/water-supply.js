@@ -499,6 +499,66 @@
             return out;
         },
 
+        // ── ANALYSE SYSTÈME SOURCE → VILLAGE ────────────────────────
+        // Synthèse hydraulique d'un système source/village/points de
+        // consommation : distance, dénivelé, altitudes, longueur du
+        // tracé (trace optionnelle), pente moyenne, point haut/bas.
+        analyserSysteme: function (source, village, conso, trace) {
+            if (!source || !village) return null;
+            var res = {
+                valide: true,
+                distance_m: 0,
+                denivele_net_m: null,
+                denivele_total_m: null,
+                altitude_source_m: null,
+                altitude_village_m: null,
+                bornes: { count: 0, min: null, max: null, moy: null },
+                longueur_m: 0,
+                pente_moyenne_pct: null,
+                point_haut_m: null,
+                point_bas_m: null
+            };
+            res.distance_m = CORE.distance(source.latitude, source.longitude,
+                                           village.latitude, village.longitude);
+            if (source.altitude_m != null) res.altitude_source_m = Number(source.altitude_m);
+            if (village.altitude_m != null) res.altitude_village_m = Number(village.altitude_m);
+            if (res.altitude_source_m != null && res.altitude_village_m != null) {
+                res.denivele_net_m = Math.round((res.altitude_village_m - res.altitude_source_m) * 10) / 10;
+                res.denivele_total_m = Math.abs(res.denivele_net_m);
+            }
+            var alts = [];
+            if (res.altitude_source_m != null) alts.push(res.altitude_source_m);
+            if (res.altitude_village_m != null) alts.push(res.altitude_village_m);
+            (conso || []).forEach(function (o) {
+                if (o.altitude_m == null) return;
+                var a = Number(o.altitude_m);
+                res.bornes.count += 1;
+                if (res.bornes.min == null || a < res.bornes.min) res.bornes.min = a;
+                if (res.bornes.max == null || a > res.bornes.max) res.bornes.max = a;
+                res.bornes.moy = (res.bornes.moy || 0) + a;
+                alts.push(a);
+            });
+            if (res.bornes.count) res.bornes.moy = Math.round(res.bornes.moy / res.bornes.count);
+            var coords = trace && trace.coordonnees && trace.coordonnees.length > 1
+                ? trace.coordonnees : null;
+            var longueurTrace = coords ? CORE.longueurTrace(coords) : 0;
+            res.longueur_m = longueurTrace > 0 ? longueurTrace : res.distance_m;
+            (coords || []).forEach(function (c) {
+                if (c[2] == null) return;
+                alts.push(Number(c[2]));
+            });
+            if (res.denivele_net_m != null && res.longueur_m > 0) {
+                res.pente_moyenne_pct = Math.round((res.denivele_net_m / res.longueur_m) * 1000) / 10;
+            }
+            if (alts.length) {
+                res.point_haut_m = Math.round(Math.max.apply(null, alts));
+                res.point_bas_m = Math.round(Math.min.apply(null, alts));
+            }
+            res.distance_m = Math.round(res.distance_m);
+            res.longueur_m = Math.round(res.longueur_m);
+            return res;
+        },
+
         // Altitudes min/max d'une liste d'ouvrages.
         plageAltitudes: function (ouvrages) {
             var alts = [];
@@ -831,6 +891,21 @@
             '<button type="button" id="mw-export-png">🖼 Export image (PNG)</button>' +
             '<button type="button" id="mw-export-pdf">📄 Export PDF</button></div>' +
             '</div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>🔍 ANALYSER LE SYSTÈME</span></div>' +
+            '<div class="mw-ligne"><span>Source</span><select id="mw-sys-source">' +
+            '<option value="">— Choisir une source —</option></select></div>' +
+            '<div class="mw-ligne"><span>Village</span><select id="mw-sys-village">' +
+            '<option value="">— Choisir un village —</option></select></div>' +
+            '<div class="mw-ligne"><span>Points de consommation</span>' +
+            '<select id="mw-sys-conso" multiple size="3">' +
+            '<option value="">— Aucun —</option></select></div>' +
+            '<div class="mw-ligne"><span>Tracé (optionnel)</span><select id="mw-sys-trace">' +
+            '<option value="">— Distance directe —</option></select></div>' +
+            '<div class="mw-boutons">' +
+            '<button type="button" id="mw-sys-analyser">🔍 Analyser</button></div>' +
+            '<div class="mw-liste" id="mw-sys-resultat"></div>' +
+            '</div>' +
             '</div>' +
             '<div data-panel="rapport" hidden>' +
             '<div class="mw-boutons"><button type="button" id="mw-gen-rapport">📄 Générer le rapport</button></div>' +
@@ -876,6 +951,10 @@
             '.mw-liste .i{display:flex;justify-content:space-between;gap:6px;padding:3px 4px;border-radius:6px;cursor:pointer;}' +
             '.mw-liste .i:hover{background:rgba(6,182,212,.1);}' +
             '.mw-gps-blok{border-top:1px dashed var(--border,#3d4060);margin-top:6px;padding-top:4px;}' +
+            '.mw-sys-table{width:100%;border-collapse:collapse;font-size:.74rem;margin-top:4px;}' +
+            '.mw-sys-table th,.mw-sys-table td{border-bottom:1px solid var(--border,#3d4060);padding:3px 4px;text-align:left;}' +
+            '.mw-sys-table th{color:#22d3ee;font-size:.7rem;font-weight:800;}' +
+            '.mw-sys-table td:last-child{text-align:right;color:var(--text,#e8e9f3);font-weight:700;}' +
             '.mw-gps-etat{font-size:.74rem;font-weight:800;padding:3px 0;}' +
             '.mw-gps-actions button{background:rgba(34,197,94,.1);border-color:#22c55e;color:#4ade80;}' +
             '.mw-gps-actions #mw-fin-gps{background:rgba(6,182,212,.16);border-color:#22d3ee;color:#22d3ee;}' +
@@ -1821,6 +1900,107 @@ function majVillagesCarte() {
             parId('mw-long-gp').textContent = formatDist(lenC);
             parId('mw-benef-gp').textContent = benef;
             parId('mw-nb-ouv').textContent = (ouvrages || []).length;
+            majSysSysteme();
+        }
+
+        // ── ANALYSE SYSTÈME SOURCE → VILLAGE ──
+        function remplirSelectSys(sel, liste, typeEmoji) {
+            if (!sel) return;
+            var courant = parseInt(sel.value, 10) || 0;
+            sel.innerHTML = '';
+            if (!typeEmoji) {
+                var o0 = document.createElement('option');
+                o0.value = '';
+                o0.textContent = sel.id === 'mw-sys-conso' ? '— Aucun —' : '— Choisir —';
+                sel.appendChild(o0);
+            }
+            liste.forEach(function (o) {
+                var op = document.createElement('option');
+                op.value = o.id;
+                op.textContent = (typeEmoji ? typeEmoji + ' ' : '') + (o.nom || '#' + o.id) +
+                    (o.altitude_m != null ? ' (' + Math.round(o.altitude_m) + ' m)' : '');
+                if (o.id === courant) op.selected = true;
+                sel.appendChild(op);
+            });
+        }
+
+        function majSysSysteme() {
+            remplirSelectSys(parId('mw-sys-source'),
+                ouvrages.filter(function (o) { return o.type === 'source'; }), '💧');
+            remplirSelectSys(parId('mw-sys-village'),
+                ouvrages.filter(function (o) { return o.type === 'village'; }), '🏘️');
+            remplirSelectSys(parId('mw-sys-conso'),
+                ouvrages.filter(function (o) { return o.type === 'borne' || o.type === 'consommation'; }), '🚰');
+            var selT = parId('mw-sys-trace');
+            if (selT) {
+                var cur = parseInt(selT.value, 10) || 0;
+                selT.innerHTML = '<option value="">— Distance directe —</option>';
+                traces.forEach(function (t) {
+                    var op = document.createElement('option');
+                    op.value = t.id;
+                    op.textContent = '📏 ' + (t.nom || 'Tracé #' + t.id) + ' — ' +
+                        Math.round(t.longueur_m || 0) + ' m';
+                    if (t.id === cur) op.selected = true;
+                    selT.appendChild(op);
+                });
+            }
+            analyserSystemeUI();
+        }
+
+        function analyserSystemeUI() {
+            var src = ouvrageParId(parseInt(parId('mw-sys-source').value, 10));
+            var vlg = ouvrageParId(parseInt(parId('mw-sys-village').value, 10));
+            var consoSel = parId('mw-sys-conso');
+            var conso = [];
+            Array.prototype.forEach.call(consoSel.options, function (op) {
+                if (op.selected && op.value) conso.push(ouvrageParId(parseInt(op.value, 10)));
+            });
+            var trace = null;
+            var tid = parseInt(parId('mw-sys-trace').value, 10);
+            if (tid) traces.forEach(function (t) { if (t.id === tid) trace = t; });
+            var r = CORE.analyserSysteme(src, vlg, conso, trace);
+            var el = parId('mw-sys-resultat');
+            if (!r) {
+                el.innerHTML = '<p class="mw-indice">Choisissez une source et un village pour ' +
+                    'analyser le système.</p>';
+                return;
+            }
+            var lignes = [
+                ['Distance source → village', formatDist(r.distance_m)],
+                ['Dénivelé total', r.denivele_total_m != null ? Math.abs(r.denivele_total_m) + ' m' : '—'],
+                ['Altitude source', r.altitude_source_m != null ? Math.round(r.altitude_source_m) + ' m' : '—'],
+                ['Altitude village', r.altitude_village_m != null ? Math.round(r.altitude_village_m) + ' m' : '—'],
+                ['Altitude bornes-fontaines',
+                    r.bornes.count ? (r.bornes.min + '–' + r.bornes.max + ' m (moy ' + r.bornes.moy + ' m)') : '—'],
+                ['Longueur du tracé', formatDist(r.longueur_m)],
+                ['Pente moyenne', r.pente_moyenne_pct != null ? r.pente_moyenne_pct + ' %' : '—'],
+                ['Point le plus haut', r.point_haut_m != null ? r.point_haut_m + ' m' : '—'],
+                ['Point le plus bas', r.point_bas_m != null ? r.point_bas_m + ' m' : '—']
+            ];
+            var html = '<table class="mw-sys-table">' +
+                '<tr><th colspan="2">SYNTHÈSE ' + (src.nom || 'Source').toUpperCase() + ' → ' +
+                (vlg.nom || 'Village').toUpperCase() + '</th></tr>';
+            lignes.forEach(function (l) {
+                html += '<tr><td>' + l[0] + '</td><td>' + l[1] + '</td></tr>';
+            });
+            if (r.denivele_net_m != null && r.denivele_net_m < 0) {
+                html += '<tr><td colspan="2" class="mw-indice">💚 Village plus bas que la source : ' +
+                    'écoulement gravitaire possible.</td></tr>';
+            } else if (r.denivele_net_m === 0) {
+                html += '<tr><td colspan="2" class="mw-indice">⚠ Altitudes identiques : vérifier la pente de pose.</td></tr>';
+            } else if (r.denivele_net_m != null && r.denivele_net_m > 0) {
+                html += '<tr><td colspan="2" class="mw-indice">⚠ Village plus haut que la source : ' +
+                    'pompage ou recherche d\'une source plus élevée requis.</td></tr>';
+            }
+            html += '</table>';
+            el.innerHTML = html;
+        }
+
+        function ouvrageParId(id) {
+            for (var i = 0; i < ouvrages.length; i++) {
+                if (ouvrages[i].id === id) return ouvrages[i];
+            }
+            return null;
         }
 
         // ── Profil canvas ──
@@ -2112,6 +2292,19 @@ function majVillagesCarte() {
                     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
                     message('Profil exporté en PDF.', 'succes');
                 });
+        });
+
+        // ── ANALYSE SYSTÈME SOURCE → VILLAGE ──
+        parJouet(parId('mw-sys-analyser'), 'click', function () {
+            if (!parId('mw-sys-source').value || !parId('mw-sys-village').value) {
+                message('Choisissez une source et un village.', 'erreur');
+            }
+            analyserSystemeUI();
+        });
+        ['mw-sys-source', 'mw-sys-village', 'mw-sys-conso', 'mw-sys-trace'].forEach(function (id) {
+            var sel = parId(id);
+            if (!sel) return;
+            sel.addEventListener('change', analyserSystemeUI);
         });
 
         // ── Rapport ──
