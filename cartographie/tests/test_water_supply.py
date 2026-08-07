@@ -525,6 +525,104 @@ class TestAdductionReseau(BaseCartographieTest):
             self.assertIn(attendu, ids_reservoirs)
 
 
+class TestAdductionReservoir(BaseCartographieTest):
+    """Type RÉSERVOIR / CHÂTEAU D'EAU : formulaire spécialisé
+    (capacité, niveau d'eau, état, existant / proposé, photos)."""
+
+    def test_reservoir_complet(self):
+        pid = self.client.post('/api/adduction/projets/',
+                               data=json.dumps({'nom': 'Réservoirs'}),
+                               content_type='application/json').json()['projet']['id']
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'reservoir',
+                                              'sous_type': 'chateau_eau',
+                                              'nom': 'Château d\'eau de Bogoro',
+                                              'latitude': 1.42, 'longitude': 30.32,
+                                              'altitude_m': 1285, 'village': 'Bogoro I',
+                                              'reservoir': {'capacite_m3': 120,
+                                                            'niveau_eau_m': 3.5,
+                                                            'etat': 'bon',
+                                                            'existant_propose': 'existant',
+                                                            'photos': ['data:image/jpeg;base64,CCCC']}}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        o = r.json()['ouvrage']
+        self.assertEqual(o['sous_type'], 'chateau_eau')
+        self.assertEqual(o['altitude_m'], 1285)
+        rv = o['releve_reservoir']
+        self.assertEqual(rv['capacite_m3'], 120)
+        self.assertEqual(rv['niveau_eau_m'], 3.5)
+        self.assertEqual(rv['etat'], 'bon')
+        self.assertEqual(rv['existant_propose'], 'existant')
+        self.assertEqual(len(rv['photos']), 1)
+        # le formulaire spécialisé n'existe pas pour un autre type
+        self.assertIsNone(o['releve_consommation'])
+        self.assertIsNone(o['releve_repere'])
+
+    def test_reservoir_sous_type_invalide(self):
+        pid = self.client.post('/api/adduction/projets/',
+                               data=json.dumps({'nom': 'Réservoirs 2'}),
+                               content_type='application/json').json()['projet']['id']
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'reservoir',
+                                              'sous_type': 'piscine', 'nom': 'X',
+                                              'latitude': 1, 'longitude': 2}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_reservoir_valeurs_invalides_ignorees(self):
+        pid = self.client.post('/api/adduction/projets/',
+                               data=json.dumps({'nom': 'Réservoirs 3'}),
+                               content_type='application/json').json()['projet']['id']
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'reservoir',
+                                              'sous_type': 'reservoir', 'nom': 'Rés. 1',
+                                              'latitude': 1, 'longitude': 2,
+                                              'reservoir': {'capacite_m3': 'abc',
+                                                            'etat': 'volcan',
+                                                            'existant_propose': 'peut-etre',
+                                                            'photos': ['bonne',
+                                                                       'https://exemple.fr/a.jpg',
+                                                                       123]}}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        rv = r.json()['ouvrage']['releve_reservoir']
+        self.assertIsNone(rv['capacite_m3'])
+        self.assertEqual(rv['etat'], '')
+        self.assertEqual(rv['existant_propose'], '')
+        self.assertEqual(len(rv['photos']), 2)
+
+    def test_reservoir_mise_a_jour(self):
+        pid = self.client.post('/api/adduction/projets/',
+                               data=json.dumps({'nom': 'Réservoirs 4'}),
+                               content_type='application/json').json()['projet']['id']
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'reservoir',
+                                              'sous_type': 'reservoir', 'nom': 'Rés. A',
+                                              'latitude': 1.4, 'longitude': 30.3,
+                                              'reservoir': {'capacite_m3': 60,
+                                                            'etat': 'moyen'}}),
+                             content_type='application/json')
+        oid = r.json()['ouvrage']['id']
+        r = self.client.put(f'/api/adduction/ouvrages/{oid}/',
+                            data=json.dumps({'type': 'reservoir', 'sous_type': 'chateau_eau',
+                                             'nom': 'Château A', 'latitude': 1.4,
+                                             'longitude': 30.3,
+                                             'reservoir': {'capacite_m3': 200,
+                                                           'niveau_eau_m': 4.0,
+                                                           'etat': 'hors_service',
+                                                           'existant_propose': 'propose'}}),
+                            content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        o = r.json()['ouvrage']
+        self.assertEqual(o['sous_type'], 'chateau_eau')
+        rv = o['releve_reservoir']
+        self.assertEqual(rv['capacite_m3'], 200)
+        self.assertEqual(rv['niveau_eau_m'], 4.0)
+        self.assertEqual(rv['etat'], 'hors_service')
+        self.assertEqual(rv['existant_propose'], 'propose')
+
+
 class TestAdductionProfilPdf(BaseCartographieTest):
     """Export du PROFIL EN LONG d'une trace au format PDF."""
 

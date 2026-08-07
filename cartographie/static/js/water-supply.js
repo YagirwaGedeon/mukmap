@@ -512,6 +512,40 @@
             return meilleur;
         },
 
+        // Sites potentiels à étudier pour l'implantation d'un réservoir :
+        // repères de terrain signalés comme point haut / sommet / colline
+        // (avec altitude) + point culminant de chaque trace de projet.
+        // Résultats INDICATIFS : ne constituent pas une validation
+        // hydraulique — une étude de terrain (nivellement, étude de sol,
+        // hydraulique) est requise avant toute décision.
+        sitesPotentielsReservoir: function (ouvrages, traces, options) {
+            var opts = options || {};
+            var max = opts.max == null ? 8 : opts.max;
+            var candidats = [];
+            (ouvrages || []).forEach(function (o) {
+                if (o.type !== 'repere') return;
+                var st = String(o.sous_type || '');
+                if (['point_haut', 'sommet', 'colline'].indexOf(st) === -1) return;
+                if (o.altitude_m == null) return;
+                candidats.push({
+                    source: 'repere', id: o.id, nom: o.nom || 'Repère #' + o.id,
+                    altitude_m: o.altitude_m, latitude: o.latitude, longitude: o.longitude,
+                    sous_type: st
+                });
+            });
+            (traces || []).forEach(function (tr) {
+                var rp = CORE.reservoirPotentiel(CORE.profilDetaille(tr.coordonnees || []));
+                if (!rp) return;
+                candidats.push({
+                    source: 'trace', id: tr.id, nom: tr.nom || 'Trace #' + tr.id,
+                    altitude_m: rp.alt, latitude: rp.lat, longitude: rp.lon,
+                    sous_type: 'point_culminant'
+                });
+            });
+            candidats.sort(function (a, b) { return b.altitude_m - a.altitude_m; });
+            return candidats.slice(0, max);
+        },
+
         // Zones nécessitant une attention technique : union des zones de
         // forte pente (seuilFort) et des contre-pentes → liste de segments.
         zonesAttention: function (profil, seuilFort, seuilContre) {
@@ -900,6 +934,16 @@
             '<input type="file" id="mw-r-photo" accept="image/*"></div>' +
             '<div class="mw-ligne" id="mw-r-photo-apercu" hidden><b id="mw-r-photo-nb">Photo prise</b></div>' +
             '</div>' +
+            '<div id="mw-form-reservoir" hidden>' +
+            '<div class="mw-deux"><input type="number" id="mw-rv-capacite" step="1" min="0" placeholder="Capacité (m³)">' +
+            '<input type="number" id="mw-rv-niveau" step="0.01" min="0" placeholder="Niveau d\'eau (m)"></div>' +
+            '<div class="mw-deux"><select id="mw-rv-etat"><option value="">État…</option><option value="bon">Bon</option>' +
+            '<option value="moyen">Moyen</option><option value="mauvais">Mauvais</option><option value="hors_service">Hors service</option></select>' +
+            '<select id="mw-rv-existant"><option value="">Existant / proposé…</option><option value="existant">Existant</option>' +
+            '<option value="propose">Proposé</option></select></div>' +
+            '<input type="file" id="mw-rv-photos" accept="image/*" multiple>' +
+            '<div class="mw-ligne" id="mw-rv-photos-apercu" hidden><b id="mw-rv-photos-nb">0 photo</b></div>' +
+            '</div>' +
             '<input type="text" id="mw-carac" placeholder="Caract. tech. (ex : débit 1,2 l/s)">' +
             '<textarea id="mw-obs" rows="2" placeholder="Observations de terrain"></textarea>' +
             '<div class="mw-boutons"><button type="button" id="mw-pick-gps">📡 GPS</button>' +
@@ -957,6 +1001,12 @@
             '<div class="mw-ligne"><span>🏗 OUVRAGES DU RÉSEAU</span></div>' +
             '<div class="mw-ligne"><span>Filtre</span><select id="mw-rs-filtre"></select></div>' +
             '<div class="mw-liste" id="mw-rs-ouvrages"></div>' +
+            '</div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>🔺 SITES POTENTIELS DE RÉSERVOIR</span></div>' +
+            '<p class="mw-indice">Points hauts repérés (repères point haut / sommet / colline) et points culminants des tracés, classés par altitude.</p>' +
+            '<p class="mw-avertissement">⚠️ Sites potentiels à étudier : cette liste ne constitue pas une validation hydraulique définitive. Une étude de terrain (nivellement, étude de sol, hydraulique) est requise avant toute implantation.</p>' +
+            '<div class="mw-liste" id="mw-sites-reservoir"></div>' +
             '</div>' +
             '<div class="mw-gps-blok">' +
             '<div class="mw-ligne"><span>🚰 RÉSEAU D\'ADDUCTION</span></div>' +
@@ -1042,6 +1092,8 @@
             '.mw-liste .i{display:flex;justify-content:space-between;gap:6px;padding:3px 4px;border-radius:6px;cursor:pointer;}' +
             '.mw-liste .i:hover{background:rgba(6,182,212,.1);}' +
             '.mw-gps-blok{border-top:1px dashed var(--border,#3d4060);margin-top:6px;padding-top:4px;}' +
+            '.mw-avertissement{font-size:.7rem;color:#fbbf24;background:rgba(251,191,36,.08);' +
+            'border:1px dashed rgba(251,191,36,.4);border-radius:6px;padding:4px 6px;margin:4px 0;}' +
             '.mw-sys-table{width:100%;border-collapse:collapse;font-size:.74rem;margin-top:4px;}' +
             '.mw-sys-table th,.mw-sys-table td{border-bottom:1px solid var(--border,#3d4060);padding:3px 4px;text-align:left;}' +
             '.mw-sys-table th{color:#22d3ee;font-size:.7rem;font-weight:800;}' +
@@ -1296,6 +1348,16 @@
                     date_releve: parId('mw-r-date').value
                 };
             }
+            if (obj.type === 'reservoir') {
+                obj.sous_type = parId('mw-sous-type').value;
+                obj.reservoir = {
+                    capacite_m3: toF(parId('mw-rv-capacite').value),
+                    niveau_eau_m: toF(parId('mw-rv-niveau').value),
+                    etat: parId('mw-rv-etat').value,
+                    existant_propose: parId('mw-rv-existant').value,
+                    photos: photosReservoir.slice()
+                };
+            }
             return obj;
         }
         function viderFormulaire() {
@@ -1333,9 +1395,15 @@
             parId('mw-r-description').value = '';
             parId('mw-r-date').value = '';
             parId('mw-r-photo').value = '';
+            parId('mw-rv-capacite').value = '';
+            parId('mw-rv-niveau').value = '';
+            parId('mw-rv-etat').value = '';
+            parId('mw-rv-existant').value = '';
+            parId('mw-rv-photos').value = '';
             parId('mw-c-photos').value = '';
             photosConsommation = [];
             photoRepere = '';
+            photosReservoir = [];
             majApercuPhotos();
             geometrieCourante = [];
             majPolyInfo();
@@ -1422,6 +1490,12 @@
             parId('mw-c-debit').value = rc.debit_estime || '';
             parId('mw-c-besoin').value = rc.besoin_estime || '';
             photosConsommation = (rc.photos || []).slice();
+            var rv = o.releve_reservoir || {};
+            parId('mw-rv-capacite').value = rv.capacite_m3 != null ? rv.capacite_m3 : '';
+            parId('mw-rv-niveau').value = rv.niveau_eau_m != null ? rv.niveau_eau_m : '';
+            parId('mw-rv-etat').value = rv.etat || '';
+            parId('mw-rv-existant').value = rv.existant_propose || '';
+            photosReservoir = (rv.photos || []).slice();
             var rr = o.releve_repere || {};
             parId('mw-r-description').value = (rr.description || o.description || '');
             parId('mw-r-date').value = rr.date_releve || '';
@@ -1438,13 +1512,17 @@
         var enDessinGeom = false;
         var photosConsommation = [];
         var photoRepere = '';
+        var photosReservoir = [];
 
-        // Aperçu des photos du point de consommation / repère.
+        // Aperçu des photos du point de consommation / repère / réservoir.
         function majApercuPhotos() {
             parId('mw-c-photos-apercu').hidden = !photosConsommation.length;
             parId('mw-c-photos-nb').textContent = photosConsommation.length + ' photo' +
                 (photosConsommation.length > 1 ? 's' : '');
             parId('mw-r-photo-apercu').hidden = !photoRepere;
+            parId('mw-rv-photos-apercu').hidden = !photosReservoir.length;
+            parId('mw-rv-photos-nb').textContent = photosReservoir.length + ' photo' +
+                (photosReservoir.length > 1 ? 's' : '');
         }
 
         // Lit les fichiers images et les compresse en data URL (max 900 px, JPEG).
@@ -1487,6 +1565,12 @@
                 majApercuPhotos();
             });
         });
+        parId('mw-rv-photos').addEventListener('change', function () {
+            fichiersEnDataUrls(this.files, function (urls) {
+                photosReservoir = photosReservoir.concat(urls).slice(0, 20);
+                majApercuPhotos();
+            });
+        });
         function majPolyInfo() {
             var el = parId('mw-poly-info');
             if (!el) return;
@@ -1502,7 +1586,7 @@
         function actualiserFormParType() {
             var t = parId('mw-type').value;
             remplirSousTypes();
-            parId('mw-sous-type').hidden = !['source', 'consommation', 'repere'].includes(t);
+            parId('mw-sous-type').hidden = !['source', 'consommation', 'repere', 'reservoir', 'reseau'].includes(t);
             parId('mw-repr').hidden = t !== 'village';
             parId('mw-poly-actions').hidden = t !== 'village';
             parId('mw-poly-info').hidden = t !== 'village';
@@ -1511,6 +1595,7 @@
             parId('mw-s-avertissement').hidden = t !== 'source';
             parId('mw-form-consommation').hidden = t !== 'consommation';
             parId('mw-form-repere').hidden = t !== 'repere';
+            parId('mw-form-reservoir').hidden = t !== 'reservoir';
             if (t !== 'village') { enDessinGeom = false; actualiserBoutonsGeom(); }
         }
         function actualiserReprVillage() {
@@ -2250,6 +2335,30 @@ function majVillagesCarte() {
                     '<b>' + (o.altitude_m != null ? Math.round(o.altitude_m) + ' m' : '') + '</b>';
                 div.addEventListener('click', function () {
                     carte.flyTo({ center: [o.longitude, o.latitude], zoom: Math.max(carte.getZoom(), 15) });
+                });
+                el.appendChild(div);
+            });
+            majSitesReservoir();
+        }
+
+        function majSitesReservoir() {
+            var el = parId('mw-sites-reservoir');
+            if (!el) return;
+            var sites = CORE.sitesPotentielsReservoir(ouvrages, traces);
+            if (!sites.length) {
+                el.textContent = 'Aucun point haut repéré. Ajoutez des repères point haut / sommet / colline (avec altitude) ou dessinez des tracés.';
+                return;
+            }
+            el.innerHTML = '';
+            sites.forEach(function (s) {
+                var div = document.createElement('div');
+                div.className = 'i';
+                var ic = s.source === 'repere' ? '📍' : '📐';
+                var origine = s.source === 'repere' ? 'Repère' : 'Point culminant du tracé';
+                div.innerHTML = '<span>' + ic + ' ' + ex(s.nom) + ' · ' + origine + '</span>' +
+                    '<b>' + Math.round(s.altitude_m) + ' m</b>';
+                div.addEventListener('click', function () {
+                    carte.flyTo({ center: [s.longitude, s.latitude], zoom: Math.max(carte.getZoom(), 15) });
                 });
                 el.appendChild(div);
             });

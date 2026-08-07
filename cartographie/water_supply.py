@@ -18,7 +18,8 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404
 
-from .models import ProjetAdduction, OuvrageHydraulique, TraceAdduction, ReleveSource, ReleveVillage, ReleveConsommation, ReleveRepere
+from .models import (ProjetAdduction, OuvrageHydraulique, TraceAdduction, ReleveSource,
+                     ReleveVillage, ReleveConsommation, ReleveRepere, ReleveReservoir)
 from .views import _audit
 
 # RAYON_TERRE = 6371000.0
@@ -71,6 +72,12 @@ def _serialiser_ouvrage(o):
             rr = o.releve_repere
         except ReleveRepere.DoesNotExist:
             rr = None
+    rrv = None
+    if o.type == 'reservoir':
+        try:
+            rrv = o.releve_reservoir
+        except ReleveReservoir.DoesNotExist:
+            rrv = None
     return {
         'id': o.pk,
         'projet_id': o.projet_id,
@@ -108,6 +115,7 @@ def _serialiser_ouvrage(o):
         'releve_village': _serialiser_releve_village(rv),
         'releve_consommation': _serialiser_releve_consommation(rc),
         'releve_repere': _serialiser_releve_repere(rr),
+        'releve_reservoir': _serialiser_releve_reservoir(rrv),
     }
 
 
@@ -183,6 +191,19 @@ def _serialiser_releve_repere(rr):
         'description': rr.description,
         'photo': rr.photo,
         'date_releve': rr.date_releve.isoformat() if rr.date_releve else None,
+    }
+
+
+def _serialiser_releve_reservoir(rrv):
+    """Sérialise le formulaire spécialisé Réservoir / château d'eau (None si absent)."""
+    if rrv is None:
+        return None
+    return {
+        'capacite_m3': rrv.capacite_m3,
+        'niveau_eau_m': rrv.niveau_eau_m,
+        'etat': rrv.etat,
+        'existant_propose': rrv.existant_propose,
+        'photos': rrv.photos or [],
     }
 
 
@@ -453,6 +474,37 @@ def _creer_releve_repere(o, data):
         rr.date_releve = None
     rr.save()
     return rr
+
+
+def _creer_releve_reservoir(o, data):
+    """Crée ou met à jour le formulaire spécialisé Réservoir / château d'eau."""
+    if o.type != 'reservoir':
+        return None
+    rrv_data = data.get('reservoir')
+    if not isinstance(rrv_data, dict):
+        rrv_data = {}
+    try:
+        rrv, _ = ReleveReservoir.objects.get_or_create(ouvrage=o)
+    except ReleveReservoir.MultipleObjectsReturned:
+        rrv = ReleveReservoir.objects.filter(ouvrage=o).first()
+    for champ in ('capacite_m3', 'niveau_eau_m'):
+        v = rrv_data.get(champ)
+        if v in (None, ''):
+            setattr(rrv, champ, None)
+        else:
+            try:
+                setattr(rrv, champ, float(v))
+            except (TypeError, ValueError):
+                setattr(rrv, champ, None)
+    etat = str(rrv_data.get('etat') or '')
+    rrv.etat = etat if etat in dict(ReleveReservoir.ETAT_POINT_CHOICES) else ''
+    ep = str(rrv_data.get('existant_propose') or '')
+    rrv.existant_propose = ep if ep in dict(ReleveReservoir.EXISTANT_PROPOSE_CHOICES) else ''
+    photos = rrv_data.get('photos')
+    if isinstance(photos, list):
+        rrv.photos = [str(p) for p in photos if isinstance(p, str) and p.strip()][:20]
+    rrv.save()
+    return rrv
 
 
 # ─── Projets ───────────────────────────────────────────────────────
@@ -786,6 +838,7 @@ def liste_ouvrages(request):
             _creer_releve_village(o, data)
             _creer_releve_consommation(o, data)
             _creer_releve_repere(o, data)
+            _creer_releve_reservoir(o, data)
         except ValueError as e:
             return JsonResponse({'erreur': str(e)}, status=400)
         _audit(request, 'Relevé d\'ouvrage hydraulique', f"Ouvrage #{o.pk} - {o.nom} ({o.type})")
@@ -824,6 +877,7 @@ def detail_ouvrage(request, pk):
         _creer_releve_village(o, data)
         _creer_releve_consommation(o, data)
         _creer_releve_repere(o, data)
+        _creer_releve_reservoir(o, data)
     except ValueError as e:
         return JsonResponse({'erreur': str(e)}, status=400)
     _audit(request, 'Modification d\'ouvrage hydraulique', f"Ouvrage #{o.pk} - {o.nom}")

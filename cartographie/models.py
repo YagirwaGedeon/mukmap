@@ -821,6 +821,36 @@ class ReleveRepere(models.Model):
         return f"Relevé repère #{self.ouvrage_id}"
 
 
+class ReleveReservoir(models.Model):
+    """Formulaire spécialisé RÉSERVOIR / CHÂTEAU D'EAU.
+
+    Emplacement (nom + coordonnées sur l'ouvrage), altitude, type
+    (réservoir / château d'eau via `sous_type`), capacité, état,
+    existant / proposé, niveau d'eau, observations et photos.
+    """
+    TYPE_RESERVOIR_CHOICES = OuvrageHydraulique.RESERVOIR_CHOICES
+    ETAT_POINT_CHOICES = OuvrageHydraulique.ETAT_POINT_CHOICES
+    EXISTANT_PROPOSE_CHOICES = OuvrageHydraulique.EXISTANT_PROPOSE_CHOICES
+    ouvrage = models.OneToOneField(OuvrageHydraulique, on_delete=models.CASCADE,
+                                   related_name='releve_reservoir', verbose_name="Ouvrage")
+
+    capacite_m3 = models.FloatField(null=True, blank=True, verbose_name="Capacité (m³)")
+    niveau_eau_m = models.FloatField(null=True, blank=True, verbose_name="Niveau d'eau (m)")
+    etat = models.CharField(max_length=20, choices=ETAT_POINT_CHOICES, default='',
+                            blank=True, verbose_name="État")
+    existant_propose = models.CharField(max_length=10, choices=EXISTANT_PROPOSE_CHOICES, default='',
+                                        blank=True, verbose_name="Existant / proposé")
+    photos = models.JSONField(default=list, blank=True, verbose_name="Photos de terrain",
+                              help_text="Liste d'images (URL ou données base64) prises sur site")
+
+    class Meta:
+        verbose_name = "Relevé spécialisé — Réservoir / château d'eau"
+        verbose_name_plural = "Relevés spécialisés — Réservoirs / châteaux d'eau"
+
+    def __str__(self):
+        return f"Relevé réservoir #{self.ouvrage_id}"
+
+
 class TraceAdduction(models.Model):
     """Tracé d'un itinéraire potentiel de conduite d'eau (polygone plan)"""
     projet = models.ForeignKey('ProjetAdduction', on_delete=models.CASCADE, related_name='tracs', verbose_name="Projet")

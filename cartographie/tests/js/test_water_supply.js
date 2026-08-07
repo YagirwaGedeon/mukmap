@@ -329,4 +329,31 @@ assert.ok(raSymboles.includes('BORNE-FONTAINE'));
 assert.ok(raSymboles.includes('obsx'));
 assert.ok(raSymboles.includes('500'));
 
+// ── Sites potentiels de réservoir ─────────────────────────────────
+const repHaut = {id: 11, type: 'repere', sous_type: 'point_haut', nom: 'Colline Kivu', altitude_m: 1350, latitude: 1.4, longitude: 30.3};
+const repSommet = {id: 12, type: 'repere', sous_type: 'sommet', nom: "Sommet M'boga", altitude_m: 1410, latitude: 1.5, longitude: 30.4};
+const repPont = {id: 13, type: 'repere', sous_type: 'pont', nom: 'Pont', altitude_m: 1200, latitude: 1.3, longitude: 30.2};
+const repSansAlt = {id: 14, type: 'repere', sous_type: 'colline', nom: 'Colline ?', latitude: 1.3, longitude: 30.2};
+const tracesRes = [
+    {id: 21, nom: 'Tracé A', coordonnees: [[30.2, 1.3, 1150], [30.25, 1.35, 1300], [30.3, 1.4, 1200]]},
+    {id: 22, nom: 'Tracé B', coordonnees: [[30.1, 1.2, 900]]}
+];
+const sites = C.sitesPotentielsReservoir([repHaut, repSommet, repPont, repSansAlt], [tracesRes[0]], {max: 10});
+assert.strictEqual(sites.length, 3, '2 repères hauts + 1 point culminant de tracé');
+assert.strictEqual(sites[0].nom, "Sommet M'boga", 'tri par altitude décroissante');
+assert.strictEqual(sites[0].source, 'repere');
+assert.ok(sites[1].source === 'repere' && sites[1].altitude_m === 1350, '2e candidat : repère 1350 m');
+assert.strictEqual(sites[2].source, 'trace', 'point culminant du tracé');
+assert.strictEqual(sites[2].altitude_m, 1300);
+assert.deepStrictEqual([sites[2].latitude, sites[2].longitude], [1.35, 30.25]);
+const sites2 = C.sitesPotentielsReservoir([], [tracesRes[1]], {max: 2});
+assert.strictEqual(sites2.length, 1, 'tracé mono-point retenu (altitude connue)');
+const sites3 = C.sitesPotentielsReservoir([repSommet], [], {max: 0});
+assert.strictEqual(sites3.length, 0, 'max=0 → aucun candidat');
+const sites4 = C.sitesPotentielsReservoir([repSommet, repHaut], [], {max: 1});
+assert.strictEqual(sites4.length, 1, 'limite max respectée');
+assert.strictEqual(sites4[0].nom, "Sommet M'boga");
+const sitesVides = C.sitesPotentielsReservoir([], []);
+assert.strictEqual(sitesVides.length, 0, 'aucun candidat sans donnée');
+
 console.log('test_water_supply : TOUT OK');
