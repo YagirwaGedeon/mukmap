@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+import hashlib
 
 
 class PointGeographique(models.Model):
@@ -291,9 +292,38 @@ class CodeAccesAvance(models.Model):
         return f"{self.get_type_display()} #{self.pk} ({self.utilisations} utilisations)"
 
     @staticmethod
-    def hacher(code):
-        import hashlib
+    def _normaliser(code):
+        """Normalisation identique au moment du stockage et de la vérification."""
+        return str(code).strip().upper()
+
+    @staticmethod
+    def _hacher_legacy(code):
+        """Ancienne empreinte SHA-256 non salée (rétro-compatibilité)."""
         return hashlib.sha256(('mukmap|' + str(code)).strip().upper().encode('utf-8')).hexdigest()
+
+    @staticmethod
+    def hacher(code):
+        """Empreinte sécurisée (PBKDF2 via Django). Salée, lent par conception."""
+        from django.contrib.auth.hashers import make_password
+        return make_password(CodeAccesAvance._normaliser(code))
+
+    def verifier_code(self, code):
+        """Vérifie un code saisi contre l'empreinte stockée.
+
+        Accepte les anciennes empreintes SHA-256 et les migre vers PBKDF2 au
+        premier succès pour ne pas invalider les codes déjà distribués.
+        """
+        from django.contrib.auth.hashers import check_password
+        code_brut = str(code).strip().upper()
+        h = self.code_hash or ''
+        if '$' in h:
+            return check_password(code_brut, h)
+        if h == CodeAccesAvance._hacher_legacy(code_brut):
+            self.code_hash = CodeAccesAvance.hacher(code_brut)
+            if self.pk:
+                self.save(update_fields=['code_hash'])
+            return True
+        return False
 
     @staticmethod
     def generer():

@@ -28,7 +28,7 @@ Desktop.ini
 # Divers
 *.docx.tmp
 
-# Secrets et logs locaux (jamais à commiter)
+# Secrets et logs locaux (jamais Ã  commiter)
 .django-secret
 server.log
 server_err.log

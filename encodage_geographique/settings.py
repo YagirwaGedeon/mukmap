@@ -3,11 +3,28 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'f998wrqpz9#^gho2+chj8a#*608t@azsym^qq(yr+e3ev2@p&z'
 
-DEBUG = True
+def _lire_secret():
+    """Clé secrète : variable d'environnement DJANGO_SECRET_KEY, sinon fichier
+    local .django-secret (généré une fois, hors versionnage). Jamais de clé
+    codée en dur dans le dépôt."""
+    valeur = os.environ.get('DJANGO_SECRET_KEY')
+    if valeur:
+        return valeur.strip() or None
+    fichier = BASE_DIR / '.django-secret'
+    if fichier.exists():
+        return fichier.read_text().strip() or None
+    from django.core.management.utils import get_random_secret_key
+    valeur = get_random_secret_key()
+    fichier.write_text(valeur)
+    return valeur
 
-ALLOWED_HOSTS = ['*']
+
+SECRET_KEY = _lire_secret()
+
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes', 'on')
+
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',') if h.strip()]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -85,3 +102,14 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Mots de passe par défaut connus à signaler aux superadmins pour qu'ils les
+# changent. Surcharger via DJANGO_PASSWORDS_DEFAUT (listes séparées par des virgules).
+PASSWORDS_DEFAUT_SUPERADMIN = [
+    p.strip()
+    for p in os.environ.get(
+        'DJANGO_PASSWORDS_DEFAUT',
+        'YENE2026,VALIO2026,DECHARTE2026',
+    ).split(',')
+    if p.strip()
+]

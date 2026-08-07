@@ -157,7 +157,7 @@ def connexion(request):
         _audit(request, "Connexion")
 
         if user.is_superuser:
-            if password in ('YENE2026', 'VALIO2026', 'DECHARTE2026'):
+            if password in settings.PASSWORDS_DEFAUT_SUPERADMIN:
                 messages.warning(request, "Veuillez changer votre mot de passe dès que possible.")
             return redirect('index_cartographie')
 
@@ -3205,8 +3205,11 @@ def api_mode(request):
 
 
 def _valider_code(request, code, user):
-    empreinte = CodeAccesAvance.hacher(code)
-    obj = CodeAccesAvance.objects.filter(code_hash=empreinte).first()
+    obj = None
+    for candidat in CodeAccesAvance.objects.all():
+        if candidat.verifier_code(code):
+            obj = candidat
+            break
     if obj is None or not obj.est_valide():
         _audit(request, "Échec de validation d'un code Mode Avancé")
         return JsonResponse({'ok': False, 'besoin_code': True, 'erreur': 'Code invalide ou expiré.'}, status=403)
