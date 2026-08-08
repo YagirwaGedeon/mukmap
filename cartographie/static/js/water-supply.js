@@ -2343,6 +2343,15 @@ function majVillagesCarte() {
             majProfilTraces();
             majAnalyse();
             majReseau();
+            // La cartographie thématique ré-applique ses filtres et styles
+            // après chaque mise à jour des données du module Adduction.
+            try {
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                    window.dispatchEvent(new CustomEvent('mukmap:eau-maj', {
+                        detail: { ouvrages: ouvrages.slice(), traces: traces.slice() }
+                    }));
+                }
+            } catch (e) { /* module optionnel */ }
         }
 
         // ── Analyse ──
