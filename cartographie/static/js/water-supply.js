@@ -546,6 +546,173 @@
             return candidats.slice(0, max);
         },
 
+        // ── Mesures terrain ──────────────────────────────────────────
+        // Distance (m) entre deux ouvrages {latitude, longitude}.
+        distanceOuvrages: function (a, b) {
+            if (!a || !b || a.latitude == null || a.longitude == null ||
+                b.latitude == null || b.longitude == null) return null;
+            return CORE.distanceCoord([a.longitude, a.latitude], [b.longitude, b.latitude]);
+        },
+
+        // Dénivelé entre deux points : {altA, altB, difference} (null si
+        // une altitude manque). différence = altB − altA.
+        deniveleEntre: function (a, b) {
+            if (!a || !b || a.altitude_m == null || b.altitude_m == null) return null;
+            return { altA: a.altitude_m, altB: b.altitude_m, difference: b.altitude_m - a.altitude_m };
+        },
+
+        // Pente (%) entre deux points : (Δalt / distance) × 100.
+        penteEntre: function (a, b) {
+            var d = CORE.distanceOuvrages(a, b);
+            var dn = CORE.deniveleEntre(a, b);
+            if (d == null || d <= 0 || !dn) return null;
+            return { distance_m: d, denivele_m: dn.difference,
+                     pente_pct: Math.round((dn.difference / d) * 10000) / 100 };
+        },
+
+        // Aire (m²) d'un polygone [[lng, lat], ...] par projection
+        // équirectangulaire locale (formule de l'aire / Shoelace).
+        airePolygoneGeo: function (coords) {
+            var pts = (coords || []).filter(function (p) { return p && p.length >= 2; });
+            if (pts.length < 3) return null;
+            var lat0 = 0, lng0 = 0;
+            pts.forEach(function (p) { lat0 += p[1]; lng0 += p[0]; });
+            lat0 /= pts.length; lng0 /= pts.length;
+            var deg = Math.PI / 180;
+            var c = Math.cos(lat0 * deg);
+            var x = pts.map(function (p) { return (p[0] - lng0) * 111320 * c; });
+            var y = pts.map(function (p) { return (p[1] - lat0) * 110540; });
+            var s = 0;
+            for (var i = 0; i < pts.length; i++) {
+                var j = (i + 1) % pts.length;
+                s += (x[i] * y[j]) - (x[j] * y[i]);
+            }
+            return Math.abs(s) / 2;
+        },
+
+        // Enveloppe convexe (Andrew) de [[lng, lat], ...] → sommets.
+        convexHull: function (pts) {
+            var list = (pts || []).filter(function (p) { return p && p.length >= 2; })
+                .map(function (p) { return [p[0], p[1]]; });
+            if (list.length < 3) return list.slice();
+            list.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+            function croix(o, a, b) {
+                return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+            }
+            var bas = [], haut = [], i;
+            for (i = 0; i < list.length; i++) {
+                while (bas.length >= 2 && croix(bas[bas.length - 2], bas[bas.length - 1], list[i]) <= 0) bas.pop();
+                bas.push(list[i]);
+            }
+            for (i = list.length - 1; i >= 0; i--) {
+                while (haut.length >= 2 && croix(haut[haut.length - 2], haut[haut.length - 1], list[i]) <= 0) haut.pop();
+                haut.push(list[i]);
+            }
+            bas.pop(); haut.pop();
+            return bas.concat(haut);
+        },
+
+        // Emprise du projet : bbox des ouvrages → {polygone, aire_m2}.
+        bboxOuvrages: function (ouvrages) {
+            var pts = (ouvrages || []).filter(function (o) {
+                return o.longitude != null && o.latitude != null;
+            });
+            if (!pts.length) return null;
+            var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            pts.forEach(function (p) {
+                if (p.longitude < minX) minX = p.longitude;
+                if (p.longitude > maxX) maxX = p.longitude;
+                if (p.latitude < minY) minY = p.latitude;
+                if (p.latitude > maxY) maxY = p.latitude;
+            });
+            var poly = [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
+            return { bbox: [minX, minY, maxX, maxY], polygone: poly,
+                     aire_m2: CORE.airePolygoneGeo(poly) };
+        },
+
+        // Zone d'intervention : enveloppe convexe des ouvrages clés
+        // (source, réservoir, consommation, borne, réseau) ; repli sur
+        // tous les ouvrages si moins de 3 clés. → {polygone, aire_m2}.
+        zoneIntervention: function (ouvrages) {
+            var cles = (ouvrages || []).filter(function (o) {
+                return ['source', 'reservoir', 'consommation', 'borne', 'reseau'].indexOf(o.type) !== -1 &&
+                    o.longitude != null && o.latitude != null;
+            });
+            if (cles.length < 3) {
+                cles = (ouvrages || []).filter(function (o) {
+                    return o.longitude != null && o.latitude != null;
+                });
+            }
+            if (cles.length < 3) return null;
+            var hull = CORE.convexHull(cles.map(function (o) { return [o.longitude, o.latitude]; }));
+            return { polygone: hull, aire_m2: CORE.airePolygoneGeo(hull), nb_ouvrages: cles.length };
+        },
+
+        // Bassin versant APPROXIMATIF : enveloppe convexe des points de
+        // terrain relevés (ouvrages avec altitude + points des tracés)
+        // situés à moins de `rayonKm` du point d'intérêt et à une
+        // altitude ≥ à la sienne. Résultat INDICATIF : une délimitation
+        // précise exige un modèle numérique de terrain (MNT).
+        bassinVersantApprox: function (centre, ouvrages, traces, rayonKm) {
+            if (!centre || centre.latitude == null || centre.longitude == null) return null;
+            rayonKm = rayonKm == null ? 2 : rayonKm;
+            var pts = [];
+            (ouvrages || []).forEach(function (o) {
+                if (o.longitude == null || o.latitude == null || o.altitude_m == null) return;
+                pts.push([o.longitude, o.latitude, o.altitude_m]);
+            });
+            (traces || []).forEach(function (tr) {
+                (tr.coordonnees || []).forEach(function (c) {
+                    if (c.length >= 3 && c[0] != null && c[1] != null && c[2] != null) {
+                        pts.push([c[0], c[1], c[2]]);
+                    }
+                });
+            });
+            var cAlt = centre.altitude_m;
+            var up = [];
+            pts.forEach(function (p) {
+                var d = CORE.distance(centre.latitude, centre.longitude, p[1], p[0]);
+                if (d > rayonKm * 1000) return;
+                if (cAlt != null && p[2] <= cAlt) return;
+                up.push([p[0], p[1]]);
+            });
+            if (up.length < 3) return null;
+            var hull = CORE.convexHull(up);
+            return { polygone: hull, aire_m2: CORE.airePolygoneGeo(hull),
+                     nb_points: up.length, rayon_km: rayonKm };
+        },
+
+        // Pente le long d'une trace/conduite : {longueur_m, denivele_m,
+        // pente_pct (moyenne), pente_max_pct} — null si données absentes.
+        penteTrace: function (tr) {
+            var coords = (tr && tr.coordonnees) || [];
+            if (coords.length < 2) return null;
+            var longueur = 0, altMin = null, altMax = null, penteMax = 0, avecAlt = 0;
+            for (var i = 0; i < coords.length; i++) {
+                if (i > 0) longueur += CORE.distanceCoord(coords[i - 1], coords[i]);
+                var alt = coords[i][2];
+                if (alt != null) {
+                    avecAlt++;
+                    if (altMin == null || alt < altMin) altMin = alt;
+                    if (altMax == null || alt > altMax) altMax = alt;
+                }
+                if (i > 0) {
+                    var a = coords[i - 1][2], b = coords[i][2];
+                    if (a != null && b != null) {
+                        var d2 = CORE.distanceCoord(coords[i - 1], coords[i]);
+                        if (d2 > 0) {
+                            var p = Math.abs(((b - a) / d2) * 100);
+                            if (p > penteMax) penteMax = p;
+                        }
+                    }
+                }
+            }
+            if (!avecAlt || altMin == null) return null;
+            return { longueur_m: longueur, denivele_m: altMax - altMin,
+                     pente_pct: longueur > 0 ? Math.round((((altMax - altMin) / longueur) * 100) * 100) / 100 : 0,
+                     pente_max_pct: Math.round(penteMax * 100) / 100 };
+        },
+
         // Zones nécessitant une attention technique : union des zones de
         // forte pente (seuilFort) et des contre-pentes → liste de segments.
         zonesAttention: function (profil, seuilFort, seuilContre) {
@@ -835,6 +1002,7 @@
         '<button type="button" data-tab="trace">Conduites</button>' +
         '<button type="button" data-tab="reseau">Réseau</button>' +
         '<button type="button" data-tab="analyse">Analyse</button>' +
+        '<button type="button" data-tab="mesures">Mesures</button>' +
             '<button type="button" data-tab="rapport">Rapport</button>' +
             '</div>' +
             '<div class="mw-contenu">' +
@@ -1046,6 +1214,47 @@
             '<div class="mw-boutons">' +
             '<button type="button" id="mw-sys-analyser">🔍 Analyser</button></div>' +
             '<div class="mw-liste" id="mw-sys-resultat"></div>' +
+            '</div>' +
+            '</div>' +
+            '<div data-panel="mesures" hidden>' +
+            '<p class="mw-indice">Boîte à outils de mesures terrain : distances, surfaces, dénivelés et pentes.</p>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>📏 DISTANCE</span></div>' +
+            '<div class="mw-deux"><select id="mw-ms-a"></select><select id="mw-ms-b"></select></div>' +
+            '<div class="mw-boutons">' +
+            '<button type="button" data-preset="source_village">Source → village</button>' +
+            '<button type="button" data-preset="source_reservoir">Source → réservoir</button>' +
+            '<button type="button" data-preset="reservoir_borne">Réservoir → borne</button></div>' +
+            '<div class="mw-boutons">' +
+            '<button type="button" id="mw-ms-clic">📌 Mesurer sur la carte</button></div>' +
+            '<div class="mw-ligne"><span>Distance A → B</span><b id="mw-ms-dist">—</b></div>' +
+            '</div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>🔺 SURFACE</span></div>' +
+            '<div class="mw-deux"><select id="mw-ms-type">' +
+            '<option value="village">Zone du village</option>' +
+            '<option value="emprise">Emprise du projet</option>' +
+            '<option value="intervention">Zone d\'intervention</option>' +
+            '<option value="bassin">Bassin versant approximatif</option></select>' +
+            '<select id="mw-ms-obj"></select></div>' +
+            '<div class="mw-ligne" id="mw-ms-rayon-ligne"><span>Rayon (km)</span>' +
+            '<input type="number" id="mw-ms-rayon" min="0.1" step="0.1" value="2"></div>' +
+            '<div class="mw-boutons"><button type="button" id="mw-ms-calculer">🧮 Calculer</button></div>' +
+            '<div class="mw-ligne"><span>Surface</span><b id="mw-ms-aire">—</b></div>' +
+            '<p class="mw-indice" id="mw-ms-surf-info"></p>' +
+            '<p class="mw-avertissement" id="mw-ms-bassin-avert" hidden>⚠️ Bassin versant APPROXIMATIF : enveloppe convexe des points de terrain relevés (plus élevés, à moins de R km). Une délimitation précise exige un modèle numérique de terrain (MNT).</p>' +
+            '</div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>⛰ DÉNIVELÉ (A → B)</span></div>' +
+            '<div class="mw-ligne"><span>Altitude A</span><b id="mw-ms-alt-a">—</b></div>' +
+            '<div class="mw-ligne"><span>Altitude B</span><b id="mw-ms-alt-b">—</b></div>' +
+            '<div class="mw-ligne"><span>Différence</span><b id="mw-ms-alt-d">—</b></div>' +
+            '</div>' +
+            '<div class="mw-gps-blok">' +
+            '<div class="mw-ligne"><span>📈 PENTE</span></div>' +
+            '<div class="mw-ligne"><span>Pente A → B</span><b id="mw-ms-pente">—</b></div>' +
+            '<div class="mw-ligne"><span>Le long d\'une conduite</span><select id="mw-ms-trace"></select></div>' +
+            '<div class="mw-liste" id="mw-ms-pente-trace"></div>' +
             '</div>' +
             '</div>' +
             '<div data-panel="rapport" hidden>' +
@@ -2003,6 +2212,10 @@
                 dessinerTempTrace();
                 return;
             }
+            if (mesureClicActif) {
+                ajouterClicMesure(lng, lat);
+                return;
+            }
             if (reseauRelierActif) {
                 ajouterPointReseau(lng, lat, toF(parId('mw-alt').value));
                 return;
@@ -2758,6 +2971,7 @@ function majVillagesCarte() {
             if (tab === 'collecte') listeOuvrages();
             if (tab === 'trace') { afficherMesures(); listeTraces(); }
             if (tab === 'reseau') { majReseauUI(); majReseau(); }
+            if (tab === 'mesures') majMesures();
         }
         panneau.querySelectorAll('.mw-onglets button').forEach(function (b) {
             b.addEventListener('click', function () { choisirOnglet(b.getAttribute('data-tab')); });
@@ -2769,7 +2983,221 @@ function majVillagesCarte() {
         parJouet(parId('mw-rs-ann'), 'click', annulerRelier);
         parJouet(parId('mw-rs-filtre'), 'change', majReseau);
 
-        // ── Bouton d'ouverture ──
+        // ── Boîte à outils : mesures terrain ──
+        var mesureClicActif = false;
+        var mesureClics = [];
+
+        function formaterDistance(m) {
+            if (m == null) return '—';
+            if (m >= 1000) return Math.round(m) + ' m (' + (m / 1000).toFixed(2) + ' km)';
+            return Math.round(m) + ' m';
+        }
+        function formaterAire(m2) {
+            if (m2 == null) return '—';
+            if (m2 >= 1000000) return Math.round(m2 / 1000000) + ' km²';
+            if (m2 >= 20000) return Math.round(m2 / 10000) + ' ha (' + Math.round(m2) + ' m²)';
+            return Math.round(m2) + ' m²';
+        }
+        function remplirSelectOuvrages(sel) {
+            var options = '<option value="">— Choisir —</option>';
+            ['source', 'reservoir', 'consommation', 'borne', 'village', 'repere', 'reseau'].forEach(function (t) {
+                var liste = ouvrages.filter(function (o) { return o.type === t; });
+                if (!liste.length) return;
+                var emoji = (TYPES[t] || {}).emoji || '📍';
+                options += '<optgroup label="' + emoji + ' ' + ((TYPES[t] || {}).label || t) + '">';
+                liste.forEach(function (o) {
+                    var alt = o.altitude_m != null ? ' · ' + Math.round(o.altitude_m) + ' m' : '';
+                    options += '<option value="' + o.id + '">' + ex(o.nom || t + ' #' + o.id) + alt + '</option>';
+                });
+                options += '</optgroup>';
+            });
+            sel.innerHTML = options;
+        }
+        function remplirObjSurface() {
+            var sel = parId('mw-ms-obj');
+            var type = parId('mw-ms-type').value;
+            if (type === 'village') {
+                var villages = ouvrages.filter(function (o) { return o.type === 'village'; });
+                sel.innerHTML = '<option value="">— Village (polygone requis) —</option>';
+                villages.forEach(function (o) {
+                    sel.innerHTML += '<option value="' + o.id + '">' + ex(o.nom) +
+                        (o.geometrie && o.geometrie.length >= 3 ? ' · polygone ✓' : ' · point') + '</option>';
+                });
+            } else if (type === 'bassin') {
+                sel.innerHTML = '<option value="">— Point d\'intérêt (source…) —</option>';
+                ouvrages.forEach(function (o) {
+                    if (o.longitude == null) return;
+                    sel.innerHTML += '<option value="' + o.id + '">' + ex(o.nom || o.type + ' #' + o.id) +
+                        (o.altitude_m != null ? ' · ' + Math.round(o.altitude_m) + ' m' : '') + '</option>';
+                });
+            } else {
+                sel.innerHTML = '<option value="auto">Calcul automatique</option>';
+            }
+        }
+        function majMesures() {
+            remplirSelectOuvrages(parId('mw-ms-a'));
+            remplirSelectOuvrages(parId('mw-ms-b'));
+            remplirObjSurface();
+            var selT = parId('mw-ms-trace');
+            selT.innerHTML = '<option value="">— Aucune conduite —</option>';
+            traces.forEach(function (tr) {
+                selT.innerHTML += '<option value="' + tr.id + '">' + ex(tr.nom || 'Trace #' + tr.id) + '</option>';
+            });
+            dessinerSurfaceSelonType();
+            recalculerMesures();
+            majPenteTrace();
+        }
+        function recalculerMesures() {
+            var a = ouvrageParId(parId('mw-ms-a').value);
+            var b = ouvrageParId(parId('mw-ms-b').value);
+            var d = a && b ? CORE.distanceOuvrages(a, b) : null;
+            parId('mw-ms-dist').textContent = formaterDistance(d);
+            var dn = a && b ? CORE.deniveleEntre(a, b) : null;
+            parId('mw-ms-alt-a').textContent = dn ? Math.round(dn.altA) + ' m' : '—';
+            parId('mw-ms-alt-b').textContent = dn ? Math.round(dn.altB) + ' m' : '—';
+            parId('mw-ms-alt-d').textContent = dn ? Math.round(Math.abs(dn.difference) * 10) / 10 + ' m' : '—';
+            var p = a && b ? CORE.penteEntre(a, b) : null;
+            parId('mw-ms-pente').textContent = p ? p.pente_pct + ' %' : '—';
+            dessinerLigneMesure(a, b);
+        }
+        function majPenteTrace() {
+            var sel = parId('mw-ms-trace');
+            var el = parId('mw-ms-pente-trace');
+            var tr = null;
+            traces.forEach(function (t) { if (String(t.id) === sel.value) tr = t; });
+            if (!tr) { el.textContent = ''; return; }
+            var res = CORE.penteTrace(tr);
+            if (!res) { el.textContent = 'Altitude manquante sur la conduite : pente impossible.'; return; }
+            el.innerHTML = '';
+            [['Longueur', formaterDistance(res.longueur_m)],
+             ['Dénivelé total', Math.round(res.denivele_m) + ' m'],
+             ['Pente moyenne', res.pente_pct + ' %'],
+             ['Pente max', res.pente_max_pct + ' %']].forEach(function (ligne) {
+                var di = document.createElement('div');
+                di.className = 'mw-ligne';
+                di.innerHTML = '<span>' + ligne[0] + '</span><b>' + ligne[1] + '</b>';
+                el.appendChild(di);
+            });
+        }
+        function dessinerLigneMesure(a, b) {
+            removeCouche('mw-ms-ligne');
+            if (a && b && a.longitude != null && b.longitude != null) {
+                ajouterGeoJSON('mw-ms-ligne', [CORE.traceGeoJSON([[a.longitude, a.latitude], [b.longitude, b.latitude]], { nom: 'Mesure' })], 'line', '#22d3ee');
+            }
+        }
+        function dessinerSurface(poly, nom) {
+            removeCouche('mw-ms-surf');
+            if (!poly || !poly.length) return;
+            ajouterGeoJSON('mw-ms-surf', [CORE.polygoneGeoJSON(poly.concat([poly[0]]), { nom: nom || 'Surface' })], 'polygone', '#f59e0b');
+        }
+        function dessinerSurfaceSelonType() {
+            var type = parId('mw-ms-type').value;
+            parId('mw-ms-rayon-ligne').hidden = type !== 'bassin';
+            parId('mw-ms-bassin-avert').hidden = type !== 'bassin';
+        }
+        function calculerSurface() {
+            var type = parId('mw-ms-type').value;
+            var res = null, nom = '';
+            if (type === 'village') {
+                var o = ouvrageParId(parId('mw-ms-obj').value);
+                if (!o) { message('Sélectionnez un village (polygone requis).', 'erreur'); return; }
+                if (!o.geometrie || o.geometrie.length < 3) { message('Ce village n\'a pas de polygone.', 'erreur'); return; }
+                res = { polygone: o.geometrie, aire_m2: CORE.airePolygoneGeo(o.geometrie), nb_points: o.geometrie.length };
+                nom = 'Zone du village : ' + (o.nom || '');
+            } else if (type === 'emprise') {
+                res = CORE.bboxOuvrages(ouvrages);
+                if (!res) { message('Aucun ouvrage pour calculer l\'emprise.', 'erreur'); return; }
+                nom = 'Emprise du projet (rectangle englobant des ouvrages)';
+            } else if (type === 'intervention') {
+                res = CORE.zoneIntervention(ouvrages);
+                if (!res) { message('Moins de 3 ouvrages pour délimiter la zone d\'intervention.', 'erreur'); return; }
+                nom = 'Zone d\'intervention (enveloppe des ouvrages clés)';
+            } else if (type === 'bassin') {
+                var c = ouvrageParId(parId('mw-ms-obj').value);
+                if (!c) { message('Sélectionnez un point d\'intérêt (source, repère…).', 'erreur'); return; }
+                var rayon = toF(parId('mw-ms-rayon').value) || 2;
+                res = CORE.bassinVersantApprox(c, ouvrages, traces, rayon);
+                if (!res) {
+                    message('Données insuffisantes : il faut ≥ 3 points de terrain plus élevés que le point, à moins de ' + rayon + ' km.', 'erreur');
+                    return;
+                }
+                nom = 'Bassin versant approximatif (' + res.nb_points + ' points de terrain)';
+            }
+            parId('mw-ms-aire').textContent = formaterAire(res.aire_m2);
+            parId('mw-ms-surf-info').textContent = nom;
+            dessinerSurface(res.polygone, nom);
+            message('Surface : ' + formaterAire(res.aire_m2), 'succes');
+        }
+        function appliquerPreset(preset) {
+            function premier(type, sousType) {
+                for (var i = 0; i < ouvrages.length; i++) {
+                    var o = ouvrages[i];
+                    if (o.type === type && (!sousType || o.sous_type === sousType)) return o;
+                }
+                if (sousType) return premier(type);
+                return null;
+            }
+            var a = null, b = null;
+            if (preset === 'source_village') { a = premier('source'); b = premier('village') || premier('consommation'); }
+            else if (preset === 'source_reservoir') { a = premier('source'); b = premier('reservoir'); }
+            else if (preset === 'reservoir_borne') { a = premier('reservoir'); b = premier('consommation', 'borne_fontaine') || premier('consommation'); }
+            if (!a || !b) { message('Ouvrages manquants pour ce préréglage (source, village, réservoir ou borne).', 'erreur'); return; }
+            parId('mw-ms-a').value = String(a.id);
+            parId('mw-ms-b').value = String(b.id);
+            recalculerMesures();
+            message('Préréglage appliqué : ' + ex(a.nom) + ' → ' + ex(b.nom) + '.', 'succes');
+        }
+        function basculerMesureClic() {
+            mesureClicActif = !mesureClicActif;
+            mesureClics = [];
+            removeCouche('mw-ms-clic-p');
+            removeCouche('mw-ms-clic-l');
+            var bt = parId('mw-ms-clic');
+            bt.textContent = mesureClicActif ? '🛑 Arrêter la mesure' : '📌 Mesurer sur la carte';
+            message(mesureClicActif ? 'Cliquez la carte : point A…' : 'Mesure sur la carte désactivée.', 'info');
+        }
+        function ajouterClicMesure(lng, lat) {
+            if (!mesureClicActif || mesureClics.length >= 2) return;
+            var o = CORE.ouvragePlusProche(ouvrages, lng, lat, 60);
+            var point = { latitude: lat, longitude: lng, altitude_m: o ? o.altitude_m : (toF(parId('mw-alt').value) || null) };
+            if (o) point.nom = o.nom;
+            mesureClics.push(point);
+            if (mesureClics.length === 1) {
+                ajouterGeoJSON('mw-ms-clic-p', [CORE.pointGeoJSON ? CORE.pointGeoJSON([lng, lat], { nom: 'A' }) : {
+                    type: 'Feature', properties: { nom: 'A' },
+                    geometry: { type: 'Point', coordinates: [lng, lat] }
+                }], 'point', '#22d3ee');
+                message('Point A (' + lat.toFixed(5) + ', ' + lng.toFixed(5) + ') — cliquez le point B.', 'info');
+                return;
+            }
+            var a = mesureClics[0], b = mesureClics[1];
+            removeCouche('mw-ms-clic-p');
+            ajouterGeoJSON('mw-ms-clic-l', [CORE.traceGeoJSON([[a.longitude, a.latitude], [b.longitude, b.latitude]], { nom: 'Mesure carte' })], 'line', '#22d3ee');
+            var d = CORE.distanceOuvrages(a, b);
+            var dn = CORE.deniveleEntre(a, b);
+            var p = CORE.penteEntre(a, b);
+            parId('mw-ms-a').value = '';
+            parId('mw-ms-b').value = '';
+            parId('mw-ms-dist').textContent = formaterDistance(d);
+            parId('mw-ms-alt-a').textContent = dn ? Math.round(dn.altA) + ' m' : (a.altitude_m != null ? Math.round(a.altitude_m) + ' m' : '—');
+            parId('mw-ms-alt-b').textContent = dn ? Math.round(dn.altB) + ' m' : (b.altitude_m != null ? Math.round(b.altitude_m) + ' m' : '—');
+            parId('mw-ms-alt-d').textContent = dn ? Math.round(Math.abs(dn.difference) * 10) / 10 + ' m' : '—';
+            parId('mw-ms-pente').textContent = p ? p.pente_pct + ' %' : '—';
+            var msg = 'Distance : ' + formaterDistance(d);
+            if (p) msg += ' · Pente : ' + p.pente_pct + ' %';
+            message(msg, 'succes');
+        }
+        parJouet(parId('mw-ms-a'), 'change', recalculerMesures);
+        parJouet(parId('mw-ms-b'), 'change', recalculerMesures);
+        parJouet(parId('mw-ms-trace'), 'change', majPenteTrace);
+        parJouet(parId('mw-ms-type'), 'change', function () { remplirObjSurface(); dessinerSurfaceSelonType(); });
+        parJouet(parId('mw-ms-calculer'), 'click', calculerSurface);
+        parJouet(parId('mw-ms-clic'), 'click', basculerMesureClic);
+        panneau.querySelectorAll('[data-preset]').forEach(function (bt) {
+            bt.addEventListener('click', function () { appliquerPreset(bt.getAttribute('data-preset')); });
+        });
+        parJouet(parId('mw-ms-rayon'), 'change', function () { if (parId('mw-ms-type').value === 'bassin') calculerSurface(); });
+
         var bouton = document.createElement('button');
         bouton.id = 'mukmap-water-bouton';
         bouton.textContent = '💧';

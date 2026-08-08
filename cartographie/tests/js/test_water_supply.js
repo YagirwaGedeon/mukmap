@@ -356,4 +356,78 @@ assert.strictEqual(sites4[0].nom, "Sommet M'boga");
 const sitesVides = C.sitesPotentielsReservoir([], []);
 assert.strictEqual(sitesVides.length, 0, 'aucun candidat sans donnée');
 
+// ── Mesures terrain ───────────────────────────────────────────────
+const m1 = {id: 101, latitude: 1.4, longitude: 30.3, altitude_m: 1245, nom: 'Source A'};
+const m2 = {id: 102, latitude: 1.45, longitude: 30.3, altitude_m: 1180, nom: 'Village B'};
+const dAB = C.distanceOuvrages(m1, m2);
+assert.ok(dAB > 5550 && dAB < 5570, 'distance source→village ≈ 5,56 km (' + dAB + ')');
+assert.strictEqual(C.distanceOuvrages(m1, null), null, 'distance avec objet manquant');
+assert.strictEqual(C.distanceOuvrages({latitude: 1}, m2), null, 'distance sans longitude');
+
+const dnAB = C.deniveleEntre(m1, m2);
+assert.deepStrictEqual(dnAB, {altA: 1245, altB: 1180, difference: -65},
+    'dénivelé : A=1245, B=1180, différence = -65 m');
+assert.strictEqual(C.deniveleEntre(m1, {latitude: 1, longitude: 2}), null, 'dénivelé sans altitude');
+
+const pAB = C.penteEntre(m1, m2);
+assert.ok(Math.abs(pAB.pente_pct - (-1.17)) < 0.02, 'pente A→B ≈ -1,17 % (' + pAB.pente_pct + ')');
+assert.strictEqual(C.penteEntre(m1, m1), null, 'distance nulle → pente impossible');
+
+// aire d'un carré ~0,01° × 0,01° ≈ 1,23 km²
+const carre = [[30.0, 1.4], [30.01, 1.4], [30.01, 1.41], [30.0, 1.41]];
+const aireCarre = C.airePolygoneGeo(carre);
+assert.ok(aireCarre > 1200000 && aireCarre < 1260000, 'aire du carré ≈ 1,23 km² (' + Math.round(aireCarre) + ')');
+assert.strictEqual(C.airePolygoneGeo([[0, 0], [1, 1]]), null, 'moins de 3 sommets → null');
+assert.strictEqual(C.airePolygoneGeo([]), null, 'aucun sommet → null');
+
+const hull = C.convexHull([[0, 0], [1, 0], [1, 1], [0, 1], [0.5, 0.5], [0.5, 0.9]]);
+assert.strictEqual(hull.length, 4, 'enveloppe de 4 sommets (' + hull.length + ')');
+assert.ok(hull.some((p) => p[0] === 0 && p[1] === 0) && hull.some((p) => p[0] === 1 && p[1] === 1),
+    'coins (0,0) et (1,1) présents dans l\'enveloppe');
+assert.strictEqual(C.convexHull([[0, 0], [1, 1]]).length, 2, '2 points → pas d\'enveloppe');
+
+const emprise = C.bboxOuvrages([m1, m2, {latitude: 1.3, longitude: 30.5, nom: 'X'}]);
+assert.strictEqual(emprise.bbox.length, 4, 'bbox 4 valeurs');
+assert.deepStrictEqual(emprise.bbox, [30.3, 1.3, 30.5, 1.45]);
+assert.ok(emprise.aire_m2 > 0, 'aire de l\'emprise positive');
+assert.strictEqual(C.bboxOuvrages([]), null, 'aucun ouvrage → null');
+
+const zone = C.zoneIntervention([m1, m2, {id: 103, type: 'reservoir', latitude: 1.42, longitude: 30.35},
+    {id: 104, type: 'borne_fontaine', latitude: 1.41, longitude: 30.34}]);
+assert.ok(zone.polygone.length >= 3, 'zone d\'intervention : enveloppe (' + zone.polygone.length + ' sommets)');
+assert.ok(zone.aire_m2 > 0, 'aire de la zone d\'intervention positive');
+assert.strictEqual(C.zoneIntervention([m1, m2]), null, '2 ouvrages seulement → null');
+
+const bassin = C.bassinVersantApprox(
+    {latitude: 1.4, longitude: 30.3, altitude_m: 500},
+    [
+        {id: 201, latitude: 1.4005, longitude: 30.3005, altitude_m: 520},
+        {id: 202, latitude: 1.4010, longitude: 30.2995, altitude_m: 525},
+        {id: 203, latitude: 1.3995, longitude: 30.3010, altitude_m: 550},
+        {id: 204, latitude: 1.4020, longitude: 30.3020, altitude_m: 480},
+        {id: 205, latitude: 1.4, longitude: 30.35, altitude_m: 900}
+    ],
+    [{id: 301, nom: 'T', coordonnees: [[30.3, 1.3990, 600]]}], 2);
+assert.ok(bassin && bassin.polygone.length >= 3, 'bassin versant approximatif calculé');
+assert.strictEqual(bassin.nb_points, 4, 'point bas exclu, point distant exclu, trace incluse (4 pts)');
+assert.ok(bassin.aire_m2 > 0, 'aire du bassin positive');
+assert.strictEqual(C.bassinVersantApprox(null, [], [], 1), null, 'centre manquant → null');
+const bassinIsole = C.bassinVersantApprox({latitude: 1.4, longitude: 30.3, altitude_m: 100}, [], [], 2);
+assert.strictEqual(bassinIsole, null, 'moins de 3 points → null');
+const bassinRayonNul = C.bassinVersantApprox({latitude: 1.4, longitude: 30.3, altitude_m: 500},
+    [{id: 211, latitude: 1.4005, longitude: 30.3005, altitude_m: 520},
+     {id: 212, latitude: 1.4010, longitude: 30.2995, altitude_m: 525},
+     {id: 213, latitude: 1.3995, longitude: 30.3010, altitude_m: 550}], [], 0.15);
+assert.ok(bassinRayonNul && bassinRayonNul.polygone.length >= 3, 'rayon 150 m autour de la source');
+assert.strictEqual(bassinRayonNul.nb_points, 3, '3 points dans le rayon de 150 m');
+
+const conduite3 = {id: 401, nom: 'Conduite principale', coordonnees: [[30.3, 1.4, 1000], [30.31, 1.4, 1005], [30.32, 1.4, 1010]]};
+const pt = C.penteTrace(conduite3);
+assert.ok(pt.longueur_m > 2200 && pt.longueur_m < 2300, 'longueur conduite ≈ 2,2 km (' + Math.round(pt.longueur_m) + ')');
+assert.strictEqual(pt.denivele_m, 10, 'dénivelé total +10 m');
+assert.ok(Math.abs(pt.pente_pct - 0.45) < 0.05, 'pente moyenne ≈ 0,45 % (' + pt.pente_pct + ')');
+assert.ok(pt.pente_max_pct > 0.3 && pt.pente_max_pct < 0.6, 'pente max par segment (' + pt.pente_max_pct + ')');
+assert.strictEqual(C.penteTrace({id: 402, coordonnees: []}), null, 'pas de points → null');
+assert.strictEqual(C.penteTrace({id: 403, coordonnees: [[30.3, 1.4]]}), null, 'un seul point → null');
+
 console.log('test_water_supply : TOUT OK');
