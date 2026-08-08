@@ -128,11 +128,17 @@
         <div class="stat">
             <span class="pill accent">{{ total }} <span data-i18n="points">points</span></span>
             <span class="pill" id="visible-pill"></span>
+            <span style="flex:1;"></span>
+            <button type="button" class="btn btn-sm" id="sel-tous-bt"><span data-i18n="tout_selectionner">✅ Tout sélectionner</span></button>
+            <button type="button" class="btn btn-sm" id="sel-aucun-bt"><span data-i18n="tout_deselectionner">☐ Désélectionner</span></button>
+            <button type="button" class="btn btn-sm btn-danger" id="sel-suppr-bt" disabled><span data-i18n="supprimer_selection">🗑 Supprimer la sélection</span></button>
+            <span class="pill" id="selection-pill"></span>
         </div>
         <div class="tab-wrap">
             <table id="table-points">
                 <thead>
                     <tr>
+                        <th style="width:36px;"><input type="checkbox" id="sel-tous" title="Tout sélectionner" data-i18n-title="tout_selectionner"></th>
                         <th style="width:34px;"></th>
                         <th data-i18n="nom_lieu">Nom du lieu</th>
                         <th data-i18n="categorie">Catégorie</th>
@@ -148,6 +154,7 @@
                 <tbody>
                 {% for p in points %}
                     <tr class="ligne-principale" data-point="{{ p.pk }}">
+                        <td><input type="checkbox" class="sel-point" value="{{ p.pk }}" title="Sélectionner"></td>
                         <td><button type="button" class="chevron" title="Détails">▸</button></td>
                         <td><b>{{ p.nom }}</b>{% if p.description %}<div style="font-size:.7rem;color:var(--text-3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.description }}</div>{% endif %}</td>
                         <td><span class="badge" data-cat="{{ p.categorie }}"><span id="cat-emoji-{{ p.pk }}"></span> <span>{{ p.get_categorie_display }}</span></span></td>
@@ -164,7 +171,7 @@
                         </div></td>
                     </tr>
                     <tr class="ligne-detail" style="display:none;">
-                        <td colspan="10">
+                        <td colspan="11">
                             <div class="grille-details">
                                 <div class="ligne"><span class="cle">Catégorie</span><span class="val">{{ p.get_categorie_display }}</span></div>
                                 <div class="ligne"><span class="cle">État</span><span class="val">{{ p.get_statut_display }}</span></div>
@@ -190,7 +197,7 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="10">
+                    <tr><td colspan="11">
                         <div class="aucun"><div class="grand">🔍</div><div data-i18n="aucun_point_trouve">Aucun point ne correspond à votre recherche.</div></div>
                     </td></tr>
                 {% endfor %}
@@ -249,6 +256,67 @@ if (pidPoint) {
         setTimeout(() => tr.scrollIntoView({behavior:'smooth', block:'center'}), 150);
     }
 }
+
+// ── Sélection en masse : tout sélectionner / désélectionner / supprimer ──
+const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_token }}';
+const checkboxes = () => Array.from(document.querySelectorAll('#table-points tbody .sel-point'));
+const selectionPill = document.getElementById('selection-pill');
+const boutonSuppr = document.getElementById('sel-suppr-bt');
+const selectionnerTous = document.getElementById('sel-tous');
+const boutonTous = document.getElementById('sel-tous-bt');
+const boutonAucun = document.getElementById('sel-aucun-bt');
+const tradsSel = {
+    tout: () => '✅ Tout sélectionner',
+    aucun: () => '☐ Désélectionner',
+    supprimer: n => '🗑 Supprimer la sélection' + (n ? ' (' + n + ')' : ''),
+};
+function majSelection() {
+    const cases = checkboxes();
+    const n = cases.filter(c => c.checked).length;
+    if (selectionnerTous) selectionnerTous.checked = cases.length > 0 && n === cases.length;
+    selectionnerTous.indeterminate = n > 0 && n < cases.length;
+    if (boutonSuppr) { boutonSuppr.disabled = n === 0; boutonSuppr.textContent = tradsSel.supprimer(n); }
+    if (selectionPill) selectionPill.textContent = n ? n + ' sélectionné(s)' : '';
+}
+if (selectionnerTous) {
+    selectionnerTous.addEventListener('change', () => {
+        checkboxes().forEach(c => { c.checked = selectionnerTous.checked; });
+        majSelection();
+    });
+}
+if (boutonTous) boutonTous.addEventListener('click', () => {
+    checkboxes().forEach(c => { c.checked = true; });
+    majSelection();
+});
+if (boutonAucun) boutonAucun.addEventListener('click', () => {
+    checkboxes().forEach(c => { c.checked = false; });
+    majSelection();
+});
+checkboxes().forEach(c => c.addEventListener('change', majSelection));
+if (boutonSuppr) {
+    boutonSuppr.addEventListener('click', () => {
+        const ids = checkboxes().filter(c => c.checked).map(c => c.value);
+        if (!ids.length) return;
+        const message = 'Supprimer définitivement ' + ids.length + ' point(s) sélectionné(s) ? '
+            + 'Ils ne seront plus visibles sur la carte ni dans la liste. Cette action est irréversible.';
+        if (!window.confirm(message)) return;
+        boutonSuppr.disabled = true;
+        boutonSuppr.textContent = '⏳ Suppression…';
+        fetch('{% url "api_table_points_supprimer" %}', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify({ ids: ids.map(Number) }),
+        }).then(r => r.json()).then(d => {
+            if (d && d.ok) {
+                window.location.reload();
+            } else {
+                window.alert(d && d.erreur ? d.erreur : 'Échec de la suppression.');
+                majSelection();
+            }
+        }).catch(() => { window.alert('Erreur réseau lors de la suppression.'); majSelection(); });
+    });
+}
+majSelection();
 </script>
 {% include 'cartographie/_i18n.html' %}
 {% include 'cartographie/_pwa_body.html' %}
