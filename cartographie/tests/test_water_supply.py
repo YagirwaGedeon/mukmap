@@ -656,3 +656,66 @@ class TestAdductionProfilPdf(BaseCartographieTest):
     def test_profil_pdf_trace_absente(self):
         r = self.client.get('/api/adduction/traces/99999/profil.pdf')
         self.assertEqual(r.status_code, 404)
+
+
+class TestAdductionIdentifiants(BaseCartographieTest):
+    """Identifiants automatiques par type : SRC-001, VIL-001, BF-001, RES-001, CON-001, REP-001, PMP-001."""
+
+    def creer_projet(self, nom='Projet ID'):
+        return self.client.post('/api/adduction/projets/',
+                                data=json.dumps({'nom': nom, 'zone_nom': 'Irumu'}),
+                                content_type='application/json').json()['projet']['id']
+
+    def creer(self, pid, type_ouvrage, nom, sous_type=''):
+        data = {'projet_id': pid, 'type': type_ouvrage, 'nom': nom,
+                'latitude': 1.4, 'longitude': 30.3}
+        if sous_type:
+            data['sous_type'] = sous_type
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps(data), content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        return r.json()['ouvrage']
+
+    def test_codes_par_type(self):
+        pid = self.creer_projet()
+        attendus = [
+            ('source', 'SRC-001'), ('village', 'VIL-001'), ('borne', 'BF-001'),
+            ('reservoir', 'RES-001'),
+            ('reseau', 'CON-001', ''), ('repere', 'REP-001'),
+            ('reseau', 'PMP-001', 'station_pompage'),
+        ]
+        for type_ouvrage, attendu, *sous in attendus:
+            sous_type = sous[0] if sous else ''
+            o = self.creer(pid, type_ouvrage, 'Objet ' + type_ouvrage, sous_type)
+            self.assertEqual(o['code'], attendu, '%s → %s' % (type_ouvrage, attendu))
+
+    def test_sequence_et_projets_independants(self):
+        pid = self.creer_projet('Seq A')
+        self.assertEqual(self.creer(pid, 'source', 'S1')['code'], 'SRC-001')
+        self.assertEqual(self.creer(pid, 'source', 'S2')['code'], 'SRC-002')
+        self.assertEqual(self.creer(pid, 'borne', 'B1')['code'], 'BF-001')
+        pid2 = self.creer_projet('Seq B')
+        self.assertEqual(self.creer(pid2, 'source', 'S3')['code'], 'SRC-001', 'séquences par projet')
+
+    def test_code_personnalise_conserve(self):
+        pid = self.creer_projet()
+        r = self.client.post('/api/adduction/ouvrages/',
+                             data=json.dumps({'projet_id': pid, 'type': 'source',
+                                              'nom': 'Source perso', 'latitude': 1.4,
+                                              'longitude': 30.3, 'code': 'MINE-X'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.json()['ouvrage']['code'], 'MINE-X')
+        self.assertEqual(self.creer(pid, 'source', 'S auto')['code'], 'SRC-001',
+                         'le code perso ne consomme pas la séquence')
+
+    def test_mise_a_jour_conserve_identifiant(self):
+        pid = self.creer_projet()
+        oid = self.creer(pid, 'source', 'S maj')['id']
+        r = self.client.put(f'/api/adduction/ouvrages/{oid}/',
+                            data=json.dumps({'type': 'source', 'nom': 'S renommée',
+                                             'latitude': 1.41, 'longitude': 30.31}),
+                            content_type='application/json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['ouvrage']['code'], 'SRC-001',
+                         'l\'identifiant reste inchangé lors d\'une mise à jour sans code')

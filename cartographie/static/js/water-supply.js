@@ -528,7 +528,7 @@
                 if (['point_haut', 'sommet', 'colline'].indexOf(st) === -1) return;
                 if (o.altitude_m == null) return;
                 candidats.push({
-                    source: 'repere', id: o.id, nom: o.nom || 'Repère #' + o.id,
+                    source: 'repere', id: o.id, nom: (o.code ? o.code + ' · ' : '') + (o.nom || 'Repère #' + o.id),
                     altitude_m: o.altitude_m, latitude: o.latitude, longitude: o.longitude,
                     sous_type: st
                 });
@@ -1041,6 +1041,7 @@
             '<button type="button" id="mw-fin-poly" hidden>✅ Terminer</button>' +
             '<button type="button" id="mw-ann-poly" hidden>🗑 Annuler</button></div>' +
             '<div class="mw-ligne" id="mw-poly-info" hidden><span>Contour</span><b id="mw-poly-nb">—</b></div>' +
+            '<div class="mw-ligne" id="mw-ligne-id"><span>ID</span><b id="mw-id">—</b></div>' +
             '<input type="text" id="mw-nom" placeholder="Nom / localisation">' +
             '<div class="mw-deux"><input type="number" id="mw-alt" step="0.1" placeholder="Altitude (m)">' +
             '<input type="number" id="mw-benef" min="0" placeholder="Bénéficiaires"></div>' +
@@ -1570,6 +1571,7 @@
             return obj;
         }
         function viderFormulaire() {
+            if (parId('mw-id')) parId('mw-id').textContent = '— (auto)';
             parId('mw-nom').value = '';
             parId('mw-alt').value = '';
             parId('mw-benef').value = '';
@@ -1630,7 +1632,8 @@
                 var t = TYPES[o.type] || {};
                 var div = document.createElement('div');
                 div.className = 'i';
-                div.innerHTML = '<span>' + t.emoji + ' ' + ex(o.nom || '—') +
+                div.innerHTML = '<span>' + t.emoji + ' ' +
+                    (o.code ? '<b class="mw-code">' + ex(o.code) + '</b> ' : '') + ex(o.nom || '—') +
                     (o.altitude_m != null ? ' · ' + Math.round(o.altitude_m) + ' m' : '') + '</span>' +
                     '<span>' + ex((STATUTS[o.statut] || {}).label || o.statut) + '</span>';
                 div.addEventListener('click', function () { editerOuvrage(o); });
@@ -1647,6 +1650,7 @@
             geometrieCourante = (o.geometrie || []).slice();
             majPolyInfo();
             dessinerGeometrieTmp();
+            parId('mw-id').textContent = o.code || '—';
             parId('mw-nom').value = o.nom || '';
             parId('mw-alt').value = o.altitude_m != null ? o.altitude_m : '';
             parId('mw-benef').value = o.beneficiaires || '';
@@ -1713,7 +1717,7 @@
             parId('mw-maj-ouvrage').hidden = false;
             parId('mw-supp-ouvrage').hidden = false;
             parId('mw-maj-ouvrage').dataset.id = String(o.id);
-            message('Ouvrage sélectionné : ' + (o.nom || '#' + o.id), 'info');
+            message('Ouvrage sélectionné : ' + (o.code ? o.code + ' · ' : '') + (o.nom || '#' + o.id), 'info');
         }
 
         // ── Classification / représentation ──
@@ -2236,7 +2240,7 @@
             ouvrages.forEach(function (o) {
                 feats.push({
                     type: 'Feature',
-                    properties: { id: o.id, nom: o.nom, type: o.type, statut: o.statut, emoji: CORE.emojiOuvrage(o.type, o.sous_type) },
+                    properties: { id: o.id, nom: (o.code ? o.code + ' · ' : '') + o.nom, code: o.code || '', type: o.type, statut: o.statut, emoji: CORE.emojiOuvrage(o.type, o.sous_type) },
                     geometry: { type: 'Point', coordinates: [o.longitude, o.latitude] }
                 });
             });
@@ -2314,7 +2318,7 @@ function majVillagesCarte() {
             liste.forEach(function (o) {
                 var op = document.createElement('option');
                 op.value = o.id;
-                op.textContent = (typeEmoji ? typeEmoji + ' ' : '') + (o.nom || '#' + o.id) +
+                op.textContent = (typeEmoji ? typeEmoji + ' ' : '') + (o.code ? o.code + ' · ' : '') + (o.nom || '#' + o.id) +
                     (o.altitude_m != null ? ' (' + Math.round(o.altitude_m) + ' m)' : '');
                 if (o.id === courant) op.selected = true;
                 sel.appendChild(op);

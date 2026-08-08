@@ -236,6 +236,37 @@ def _distance_m(lat1, lon1, lat2, lon2):
     return 2 * RAYON_TERRE * math.asin(min(1, math.sqrt(a)))
 
 
+# ─── Identifiants automatiques ──────────────────────────────────
+
+
+SIGLES_AUTO = {
+    'source': 'SRC',      # Source d'eau
+    'village': 'VIL',     # Village desservi
+    'borne': 'BF',        # Borne-fontaine
+    'reservoir': 'RES',   # Réservoir / château d'eau
+    'repere': 'REP',      # Repère / point intermédiaire
+    'reseau': 'CON',      # Conduite / ouvrage du réseau
+}
+SIGLE_POMPE = 'PMP'
+
+
+def _generer_code_auto(projet_id, type_ouvrage, sous_type=''):
+    """Identifiant unique automatique par type, séquentiel par projet : SRC-001, VIL-002…"""
+    sigle = SIGLES_AUTO.get(type_ouvrage)
+    if type_ouvrage == 'reseau' and sous_type == 'station_pompage':
+        sigle = SIGLE_POMPE
+    if not sigle:
+        return ''
+    prefixe = sigle + '-'
+    max_n = 0
+    for c in OuvrageHydraulique.objects.filter(projet_id=projet_id, code__startswith=prefixe):
+        try:
+            max_n = max(max_n, int(c.code[len(prefixe):]))
+        except (ValueError, TypeError):
+            pass
+    return '%s%03d' % (prefixe, max_n + 1)
+
+
 def _creer_ouvrage_depuis(o, data):
     """Applique le payload JSON sur un ouvrage (création ou mise à jour)."""
     o.nom = str(data.get('nom') or '').strip()[:250]
@@ -287,7 +318,12 @@ def _creer_ouvrage_depuis(o, data):
         o.geometrie = [g for g in geometrie if isinstance(g, list) and len(g) >= 2]
     else:
         o.geometrie = []
-    o.code = str(data.get('code') or '').strip()[:30]
+    code_saisi = str(data.get('code') or '').strip()[:30]
+    if code_saisi:
+        o.code = code_saisi  # identifiant personnalisé conservé tel quel
+    elif not o.pk:
+        o.code = _generer_code_auto(o.projet_id, o.type, sous_type) or ''
+    # mise à jour sans code fourni : l'identifiant existant est conservé
     o.description = str(data.get('description') or '')
     try:
         alt = data.get('altitude_m')
