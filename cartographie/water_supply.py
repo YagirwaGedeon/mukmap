@@ -94,6 +94,7 @@ def _serialiser_ouvrage(o):
         'latitude': o.latitude,
         'longitude': o.longitude,
         'altitude_m': o.altitude_m,
+        'precision_gps_m': o.precision_gps_m,
         'beneficiaires': o.beneficiaires,
         'caracteristiques': o.caracteristiques or {},
         'qualites_eau': o.qualites_eau or {},
@@ -330,6 +331,11 @@ def _creer_ouvrage_depuis(o, data):
         o.altitude_m = float(alt) if alt not in (None, '') else None
     except (TypeError, ValueError):
         o.altitude_m = None
+    try:
+        precision = data.get('precision_gps_m')
+        o.precision_gps_m = float(precision) if precision not in (None, '') else None
+    except (TypeError, ValueError):
+        o.precision_gps_m = None
     try:
         o.beneficiaires = int(data.get('beneficiaires') or 0)
     except (TypeError, ValueError):

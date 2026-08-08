@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qualité des données — MUKMAP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+
+        #topbar {
+            position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px;
+            padding: 12px 22px; background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+            backdrop-filter: blur(14px); border-bottom: 1px solid var(--border);
+        }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .pastille { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+        .titre { font-weight: 800; font-size: 1rem; }
+        .sous-titre { font-size: .7rem; color: var(--text-3); }
+        nav { display: flex; gap: 6px; margin-left: 24px; flex-wrap: wrap; }
+        nav a {
+            text-decoration: none; color: var(--text-2); font-size: .8rem; font-weight: 600;
+            padding: 8px 14px; border-radius: 10px; transition: all .18s; display: flex; align-items: center; gap: 7px;
+        }
+        nav a:hover { background: var(--bg-3); color: var(--text); }
+        nav a.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; box-shadow: 0 4px 14px rgba(79,70,229,.35); }
+        .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+        .horloge { font-size: .75rem; font-weight: 600; color: var(--text-2); background: var(--bg-3); border: 1px solid var(--border); padding: 7px 12px; border-radius: 10px; letter-spacing: .5px; }
+
+        button { font-family: 'Inter', Arial, sans-serif; cursor: pointer; border: none; background: none; color: var(--text); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: .83rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+
+        .conteneur { padding: 22px; max-width: 1500px; margin: 0 auto; }
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; display: flex; align-items: center; gap: 14px; transition: transform .2s; }
+        .kpi:hover { transform: translateY(-3px); }
+        .kpi .ico { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
+        .kpi .valeur { font-size: 1.5rem; font-weight: 800; }
+        .kpi .libelle { font-size: .72rem; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .6px; }
+        .kpi .ico.vert { background: rgba(34,197,94,.15); }
+        .kpi .ico.rouge { background: rgba(239,68,68,.15); }
+        .kpi .ico.orange { background: rgba(245,158,11,.15); }
+        .kpi .ico.violet { background: rgba(109,93,246,.15); }
+
+        .filtres { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
+        .filtres label { font-size: .7rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; display: block; }
+        .filtres select, .filtres input { min-width: 170px; padding: 9px 12px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .83rem; }
+
+        .regles { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+        .regle-badge { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; font-size: .72rem; font-weight: 600; background: var(--bg-2); border: 1px solid var(--border); color: var(--text-2); text-decoration: none; transition: all .18s; }
+        .regle-badge:hover { border-color: var(--accent); color: var(--text); }
+        .regle-badge.actif { border-color: var(--accent); color: var(--text); background: rgba(109,93,246,.12); }
+        .regle-badge.erreur { color: var(--red); border-color: rgba(239,68,68,.4); }
+        .regle-badge.a_verifier { color: var(--orange); border-color: rgba(245,158,11,.4); }
+
+        table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+        th { text-align: left; color: var(--text-3); font-size: .68rem; text-transform: uppercase; letter-spacing: .8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+        td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:hover td { background: var(--bg-3); }
+        .badge { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: .68rem; font-weight: 600; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); }
+        .badge-danger { background: rgba(239,68,68,.15); color: var(--red); border-color: rgba(239,68,68,.3); }
+        .badge-vert { background: rgba(34,197,94,.15); color: var(--green); border-color: rgba(34,197,94,.3); }
+        .badge-jaune { background: rgba(245,158,11,.15); color: var(--orange); border-color: rgba(245,158,11,.3); }
+        .badge-bleu { background: rgba(59,130,246,.15); color: var(--blue); border-color: rgba(59,130,246,.3); }
+        .pastille-statut { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+
+        .vide { text-align: center; color: var(--text-3); padding: 40px 0; }
+
+        .pagination { display: flex; gap: 6px; justify-content: center; margin-top: 16px; align-items: center; }
+        .pagination a, .pagination span.page { padding: 7px 12px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text-2); text-decoration: none; font-size: .78rem; font-weight: 600; }
+        .pagination a:hover { border-color: var(--accent); color: var(--text); }
+        .pagination span.courante { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
+
+        @media (max-width: 900px) { nav { display: none; } }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<header id="topbar">
+    <div class="logo">
+        <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+        <div>
+            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
+            <div class="sous-titre">Contrôle de qualité — Validation automatique</div>
+        </div>
+    </div>
+    <nav>
+        <a href="{% url 'dashboard' %}"><i data-lucide="layout-dashboard"></i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'qualite_tableau' %}" class="actif"><i data-lucide="badge-check"></i> <span data-i18n="qualite_donnees">Qualité des données</span></a>
+        <a href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'points_liste' %}"><i data-lucide="map-pin"></i> <span data-i18n="tous_points">Tous les points</span></a>
+        <a href="{% url 'audit_list' %}"><i data-lucide="history"></i> <span data-i18n="historique">Historique</span></a>
+    </nav>
+    <div class="droite">
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <div class="horloge" id="horloge">--/--/---- --:--:--</div>
+        <button class="btn" id="btn-theme" title="Thème"><i data-lucide="moon"></i></button>
+        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+    </div>
+</header>
+
+<main class="conteneur">
+    <h2 style="margin-bottom:4px;"><span style="color:var(--accent);">🛡️</span> <span data-i18n="qualite_donnees">Qualité des données</span></h2>
+    <p style="font-size:.78rem;color:var(--text-3);margin-bottom:18px;" data-i18n="qualite_sous_titre">Contrôle automatique de validation des données</p>
+
+    <div class="kpis">
+        <div class="kpi"><div class="ico vert">🟢</div><div><div class="valeur">{{ totaux.ok }}</div><div class="libelle" data-i18n="qualite_conforme">Conforme</div></div></div>
+        <div class="kpi"><div class="ico orange">🟠</div><div><div class="valeur">{{ totaux.a_verifier }}</div><div class="libelle" data-i18n="qualite_a_verifier">À vérifier</div></div></div>
+        <div class="kpi"><div class="ico rouge">🔴</div><div><div class="valeur">{{ totaux.erreur }}</div><div class="libelle" data-i18n="qualite_erreur">Erreur</div></div></div>
+        <div class="kpi"><div class="ico violet">🧮</div><div><div class="valeur">{{ total_filtre }}<span style="font-size:.7rem;color:var(--text-3);"> / {{ totaux.ok|add:totaux.a_verifier|add:totaux.erreur }}</span></div><div class="libelle" data-i18n="qualite_total">Entités analysées</div></div></div>
+    </div>
+
+    {% if regles_stats %}
+    <div class="regles">
+        <a class="regle-badge {% if not regle_filtre %}actif{% endif %}" href="?{% if module_filtre %}module={{ module_filtre }}&{% endif %}{% if gravite_filtre %}gravite={{ gravite_filtre }}&{% endif %}{% if recherche %}q={{ recherche|urlencode }}&{% endif %}"><span data-i18n="qualite_regles">Règles détectées</span></a>
+        {% for r in regles_stats %}
+        <a class="regle-badge {{ r.gravite }}{% if regle_filtre == r.code %} actif{% endif %}" href="?regle={{ r.code }}{% if module_filtre %}&module={{ module_filtre }}{% endif %}{% if gravite_filtre %}&gravite={{ gravite_filtre }}{% endif %}"><span>●</span> <span data-i18n="{{ r.cle }}">{{ r.cle }}</span> <b>{{ r.nb }}</b></a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form class="filtres" method="GET" action="{% url 'qualite_tableau' %}">
+        <div>
+            <label data-i18n="qualite_modules">Modules</label>
+            <select name="module">
+                <option value="" {% if not module_filtre %}selected{% endif %} data-i18n="tout">Tout</option>
+                {% for cle, lib in module_choices %}
+                <option value="{{ cle }}" {% if module_filtre == cle %}selected{% endif %}>{{ lib }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label data-i18n="qualite_statut">Statut</label>
+            <select name="gravite">
+                <option value="" {% if not gravite_filtre %}selected{% endif %} data-i18n="tout">Tout</option>
+                <option value="erreur" {% if gravite_filtre == 'erreur' %}selected{% endif %} data-i18n="qualite_erreur">Erreur</option>
+                <option value="a_verifier" {% if gravite_filtre == 'a_verifier' %}selected{% endif %} data-i18n="qualite_a_verifier">À vérifier</option>
+                <option value="ok" {% if gravite_filtre == 'ok' %}selected{% endif %} data-i18n="qualite_conforme">Conforme</option>
+            </select>
+        </div>
+        <div>
+            <label data-i18n="qualite_recherche">Recherche</label>
+            <input type="text" name="q" value="{{ recherche }}" placeholder="Nom…">
+        </div>
+        <button type="submit" class="btn btn-primary" data-i18n="filtrer">Filtrer</button>
+        <a class="btn" href="{% url 'qualite_tableau' %}" data-i18n="qualite_reinitialiser">Réinitialiser</a>
+        <a class="btn" href="?export=csv{% if module_filtre %}&module={{ module_filtre }}{% endif %}{% if gravite_filtre %}&gravite={{ gravite_filtre }}{% endif %}{% if regle_filtre %}&regle={{ regle_filtre }}{% endif %}{% if recherche %}&q={{ recherche|urlencode }}{% endif %}" style="margin-left:auto;" data-i18n="qualite_export">Exporter CSV</a>
+    </form>
+
+    <div class="carte" style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:auto;padding:6px;">
+        <table>
+            <thead>
+                <tr>
+                    <th data-i18n="qualite_statut">Statut</th>
+                    <th data-i18n="qualite_modules">Module</th>
+                    <th>Type</th>
+                    <th data-i18n="qualite_entite">Entité</th>
+                    <th data-i18n="projet">Projet</th>
+                    <th>Position</th>
+                    <th data-i18n="qualite_regles">Règles</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for l in lignes %}
+                <tr>
+                    <td>
+                        {% if l.gravite == 'erreur' %}
+                            <span class="badge badge-danger"><span class="pastille-statut">🔴 <span data-i18n="qualite_erreur">Erreur</span></span></span>
+                        {% elif l.gravite == 'a_verifier' %}
+                            <span class="badge badge-jaune"><span class="pastille-statut">🟠 <span data-i18n="qualite_a_verifier">À vérifier</span></span></span>
+                        {% else %}
+                            <span class="badge badge-vert"><span class="pastille-statut">🟢 <span data-i18n="qualite_conforme">Conforme</span></span></span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-bleu" data-i18n="{{ l.module_cle }}">{{ l.module }}</span></td>
+                    <td>{{ l.type_leg }}</td>
+                    <td><b>{{ l.nom }}</b> <span style="color:var(--text-3);font-size:.68rem;">#{{ l.id }}</span></td>
+                    <td style="color:var(--text-2);">{{ l.projet|default:'—' }}</td>
+                    <td style="font-size:.72rem;color:var(--text-3);">{% if l.lat is not None %}{{ l.lat|floatformat:5 }}, {{ l.lon|floatformat:5 }}{% else %}—{% endif %}</td>
+                    <td>
+                        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+                        {% for c in l.codes %}
+                            <span class="badge {% if c.gravite == 'erreur' %}badge-danger{% elif c.gravite == 'a_verifier' %}badge-jaune{% else %}badge-vert{% endif %}"><span data-i18n="{{ c.cle }}">{{ c.cle }}</span></span>
+                        {% empty %}
+                            <span class="badge badge-vert">✓</span>
+                        {% endfor %}
+                        </div>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7" class="vide" data-i18n="qualite_aucune">Aucune entité ne correspond aux filtres.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="?page={{ page|add:-1 }}{% if module_filtre %}&module={{ module_filtre }}{% endif %}{% if gravite_filtre %}&gravite={{ gravite_filtre }}{% endif %}{% if regle_filtre %}&regle={{ regle_filtre }}{% endif %}{% if recherche %}&q={{ recherche|urlencode }}{% endif %}">←</a>
+        {% endif %}
+        {% for p in pages_range %}
+            {% if p == page %}
+                <span class="page courante">{{ p }}</span>
+            {% else %}
+                <a href="?page={{ p }}{% if module_filtre %}&module={{ module_filtre }}{% endif %}{% if gravite_filtre %}&gravite={{ gravite_filtre }}{% endif %}{% if regle_filtre %}&regle={{ regle_filtre }}{% endif %}{% if recherche %}&q={{ recherche|urlencode }}{% endif %}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if page < pages %}
+        <a href="?page={{ page|add:1 }}{% if module_filtre %}&module={{ module_filtre }}{% endif %}{% if gravite_filtre %}&gravite={{ gravite_filtre }}{% endif %}{% if regle_filtre %}&regle={{ regle_filtre }}{% endif %}{% if recherche %}&q={{ recherche|urlencode }}{% endif %}">→</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</main>
+
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+const theme = localStorage.getItem('theme') || 'dark';
+document.documentElement.dataset.theme = theme;
+document.getElementById('btn-theme').addEventListener('click', () => {
+    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+    location.reload();
+});
+function majHorloge() {
+    const n = new Date();
+    const p2 = v => String(v).padStart(2, '0');
+    const h = document.getElementById('horloge');
+    if (h) h.textContent = `${p2(n.getDate())}/${p2(n.getMonth() + 1)}/${n.getFullYear()} ${p2(n.getHours())}:${p2(n.getMinutes())}:${p2(n.getSeconds())}`;
+}
+majHorloge();
+setInterval(majHorloge, 1000);
+if (window.lucide) lucide.createIcons();
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

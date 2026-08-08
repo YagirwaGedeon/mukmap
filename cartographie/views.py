@@ -41,6 +41,16 @@ def _xml_safe(texte):
     return _xml_escape(str(texte))
 
 
+def _float_ou_nul(valeur):
+    """Float si convertible, sinon None (précision GPS facultative)."""
+    if valeur is None or valeur == '':
+        return None
+    try:
+        return float(valeur)
+    except (TypeError, ValueError):
+        return None
+
+
 def _est_admin(user):
     return user.is_authenticated and user.is_superuser
 
@@ -312,6 +322,7 @@ def index_cartographie(request):
             description=request.POST.get('description', ''),
             latitude=lat,
             longitude=lng,
+            precision_gps_m=_float_ou_nul(request.POST.get('precision_gps_m')),
             categorie=request.POST.get('categorie', 'autre'),
             statut=request.POST.get('statut', 'actif'),
             province=request.POST.get('province', ''),
@@ -557,6 +568,159 @@ def dashboard(request):
     }
     _audit(request, "Consultation du tableau de bord")
     return render(request, 'cartographie/dashboard.html', ctx)
+
+
+# ─── QUALITÉ DES DONNÉES ───────────────────────────────────────
+
+
+@login_required
+def tableau_qualite(request):
+    """Contrôle de qualité automatique : tableau des entités et des règles."""
+    from . import qualite
+    from .models import (OuvrageHydraulique, ReleveSource, ReleveConsommation,
+                         TraceAdduction, ProjetAdduction)
+
+    module_f = (request.GET.get('module') or '').strip()
+    regle_f = (request.GET.get('regle') or '').strip()
+    gravite_f = (request.GET.get('gravite') or '').strip()
+    texte_q = (request.GET.get('q') or '').strip().lower()
+    try:
+        page = max(1, int(request.GET.get('page') or 1))
+    except (TypeError, ValueError):
+        page = 1
+    par_page = 100
+
+    # 1) Points du module générique (hors corbeille)
+    points = list(PointGeographique.objects.filter(supprime=False)
+                  .select_related('projet', 'auteur'))
+    res_points = qualite.evaluer_points(points)
+
+    # 2) Ouvrages hydrauliques (+ débits présents dans les relevés)
+    ouvrages = list(OuvrageHydraulique.objects.select_related('projet').all())
+    releve_debits = {}
+    for reg_id in ReleveSource.objects.exclude(debit_mesure=None) \
+            .values_list('ouvrage_id', flat=True):
+        releve_debits[reg_id] = True
+    for reg_id in ReleveConsommation.objects.exclude(debit_estime=None) \
+            .values_list('ouvrage_id', flat=True):
+        releve_debits[reg_id] = True
+    res_ouv = qualite.evaluer_ouvrages(ouvrages, releve_debits)
+
+    # 3) Tracés de conduites (rattachement aux extrémités)
+    traces = list(TraceAdduction.objects.all())
+    ouvrages_par_proj = {}
+    for o in ouvrages:
+        ouvrages_par_proj.setdefault(o.projet_id, []).append(o)
+    res_traces = qualite.evaluer_traces(traces, ouvrages_par_proj)
+
+    # Consolidation en lignes
+    def etiquettes(codes):
+        return [{'code': c,
+                 'cle': qualite.REGLES_PAR_CODE.get(c, {}).get('cle', c),
+                 'gravite': qualite.REGLES_PAR_CODE.get(c, {}).get('gravite',
+                                                                   qualite.GRAVITE_OK)}
+                for c in sorted(codes)]
+
+    lignes = []
+    for p, codes, _gr in res_points:
+        lignes.append({
+            'module': 'points', 'module_cle': 'q_module_points',
+            'sigle': 'P', 'id': p.pk, 'nom': p.nom,
+            'type_leg': dict(PointGeographique.CATEGORIE_CHOICES).get(p.categorie, p.categorie),
+            'projet': p.projet.nom if p.projet else '',
+            'lat': p.latitude, 'lon': p.longitude,
+            'codes': etiquettes(codes),
+            'gravite': qualite.gravite_statut(codes),
+        })
+    for o, codes, _gr in res_ouv:
+        lignes.append({
+            'module': 'adduction', 'module_cle': 'q_module_adduction',
+            'sigle': 'A', 'id': o.pk, 'nom': o.nom,
+            'type_leg': dict(OuvrageHydraulique.TYPE_CHOICES).get(o.type, o.type),
+            'projet': o.projet.nom if o.projet else '',
+            'lat': o.latitude, 'lon': o.longitude,
+            'codes': etiquettes(codes),
+            'gravite': qualite.gravite_statut(codes),
+        })
+    for t, codes, _gr in res_traces:
+        projet_nom = ''
+        for o in ouvrages:
+            if o.projet_id == t.projet_id:
+                projet_nom = o.projet.nom if o.projet else ''
+                break
+        lignes.append({
+            'module': 'traces', 'module_cle': 'q_module_traces',
+            'sigle': 'T', 'id': t.pk, 'nom': t.nom or 'Tracé #' + str(t.pk),
+            'type_leg': 'Tracé de conduite',
+            'projet': projet_nom,
+            'lat': None, 'lon': None,
+            'codes': etiquettes(codes),
+            'gravite': qualite.gravite_statut(codes),
+        })
+
+    # Totaux globaux (avant filtres)
+    totaux = {qualite.GRAVITE_OK: 0, qualite.GRAVITE_A_VERIFIER: 0,
+              qualite.GRAVITE_ERREUR: 0}
+    for l in lignes:
+        totaux[l['gravite']] = totaux.get(l['gravite'], 0) + 1
+
+    # Statistiques par règle (entités touchées), sur toutes les lignes
+    regles_stats = []
+    for code, gravite, cle in qualite.REGLES:
+        nb = sum(1 for l in lignes if any(c['code'] == code for c in l['codes']))
+        if nb:
+            regles_stats.append({'code': code, 'gravite': gravite,
+                                 'cle': cle, 'nb': nb})
+    regles_stats.sort(key=lambda r: (-qualite.POIDS[r['gravite']], -r['nb']))
+
+    # Filtres
+    lignes_f = lignes
+    if module_f:
+        lignes_f = [l for l in lignes_f if l['module'] == module_f]
+    if gravite_f:
+        lignes_f = [l for l in lignes_f if l['gravite'] == gravite_f]
+    if regle_f:
+        lignes_f = [l for l in lignes_f
+                    if any(c['code'] == regle_f for c in l['codes'])]
+    if texte_q:
+        lignes_f = [l for l in lignes_f
+                    if texte_q in (l['nom'] or '').lower()
+                    or texte_q in (l['projet'] or '').lower()]
+    lignes_f.sort(key=lambda l: (-qualite.POIDS.get(l['gravite'], 0),
+                                 (l['nom'] or '').lower()))
+
+    if request.GET.get('export') == 'csv':
+        reponse = HttpResponse(content_type='text/csv; charset=utf-8')
+        reponse['Content-Disposition'] = 'attachment; filename="mukmap_qualite_donnees.csv"'
+        w = csv.writer(reponse)
+        en_tete = ['module', 'type', 'nom', 'projet', 'latitude', 'longitude',
+                   'statut', 'regles']
+        w.writerow(en_tete)
+        for l in lignes_f:
+            w.writerow([l['module'], l['type_leg'], l['nom'], l['projet'],
+                        l['lat'], l['lon'], l['gravite'],
+                        ' | '.join(c['code'] for c in l['codes'])])
+        return reponse
+
+    total_filtre = len(lignes_f)
+    debut = (page - 1) * par_page
+    lignes_page = lignes_f[debut:debut + par_page]
+    pages = max(1, math.ceil(total_filtre / par_page)) if total_filtre else 1
+
+    ctx = {
+        'lignes': lignes_page,
+        'totaux': totaux,
+        'regles_stats': regles_stats,
+        'total_filtre': total_filtre,
+        'page': page, 'pages': pages,
+        'pages_range': range(max(1, page - 4), min(pages, page + 4) + 1),
+        'module_filtre': module_f, 'regle_filtre': regle_f,
+        'gravite_filtre': gravite_f, 'recherche': texte_q,
+        'module_choices': [('points', 'Points'), ('adduction', 'Adduction'),
+                           ('traces', 'Tracés')],
+    }
+    _audit(request, "Consultation du tableau de qualité des données")
+    return render(request, 'cartographie/qualite_tableau.html', ctx)
 
 
 # ─── ACTIVITÉS ─────────────────────────────────────────────────

@@ -1504,6 +1504,15 @@
         });
 
         // ── Collecte ──
+        function precisionGpsPour(lat, lon) {
+            var f = window.__gpsDernierFix;
+            if (!f || typeof f.accuracy !== 'number') return null;
+            if (Date.now() - f.d > 20 * 60 * 1000) return null;
+            if (lat == null || lon == null) return null;
+            var d = CORE.distance(f.lat, f.lon, lat, lon);
+            if (d > 50) return null;
+            return Math.round(f.accuracy);
+        }
         function releverFormulaire() {
             var obj = {
                 type: parId('mw-type').value,
@@ -1514,6 +1523,7 @@
                 beneficiaires: parseInt(parId('mw-benef').value || 0, 10) || 0,
                 latitude: toF(parId('mw-lat').value),
                 longitude: toF(parId('mw-lon').value),
+                precision_gps_m: precisionGpsPour(toF(parId('mw-lat').value), toF(parId('mw-lon').value)),
                 caracteristiques: { details: parId('mw-carac').value.trim() },
                 observations: parId('mw-obs').value.trim()
             };

@@ -912,10 +912,10 @@
 <script src="{% static 'js/basemap-selector.js' %}?v=27"></script>
 <script src="{% static 'js/imagerie.js' %}?v=27"></script>
 <script src="{% static 'js/couches-wms.js' %}?v=27"></script>
-<script src="{% static 'js/offline.js' %}?v=31"></script>
-<script src="{% static 'js/gps.js' %}?v=28"></script>
+<script src="{% static 'js/offline.js' %}?v=32"></script>
+  <script src="{% static 'js/gps.js' %}?v=29"></script>
 <script src="{% static 'js/analyse-spatiale.js' %}?v=28"></script>
-<script src="{% static 'js/water-supply.js' %}?v=40"></script>
+<script src="{% static 'js/water-supply.js' %}?v=41"></script>
 <script>
 const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_token }}';
 
@@ -1158,6 +1158,35 @@ btnFondsPro.style.display = (etatModeInitial.mode === 'avance' && etatModeInitia
 // Sans réseau, la soumission du formulaire « Nouveau point » est
 // détournée vers le stockage local ; les photos sont mises en file,
 // tout sera synchronisé à la reconnexion.
+
+// Précision GPS du dernier fix (pour l'enrichissement des données).
+function gpsPrecisionPour(lat, lon) {
+    const f = window.__gpsDernierFix;
+    if (!f || typeof f.accuracy !== 'number') return null;
+    if (Date.now() - f.d > 20 * 60 * 1000) return null;
+    if (!isFinite(lat) || !isFinite(lon)) return null;
+    const d = Math.hypot(f.lat - lat, f.lon - lon) * 111320;
+    if (d > 50) return null;
+    return Math.round(f.accuracy);
+}
+const formeRapide = document.getElementById('form-point-rapide');
+if (formeRapide) {
+    formeRapide.addEventListener('submit', () => {
+        const lat = parseFloat(formeRapide.latitude ? formeRapide.latitude.value : NaN);
+        const lng = parseFloat(formeRapide.longitude ? formeRapide.longitude.value : NaN);
+        const acc = gpsPrecisionPour(lat, lng);
+        if (acc == null) return;
+        let hidden = formeRapide.querySelector('input[name="precision_gps_m"]');
+        if (!hidden) {
+            hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = 'precision_gps_m';
+            formeRapide.appendChild(hidden);
+        }
+        hidden.value = acc;
+    });
+}
+
 function brancherFormulaireHorsLigne() {
     const forme = document.getElementById('form-point-rapide');
     if (!forme || !window.MukmapOffline || !window.MukmapOffline.instance) return;
@@ -1172,7 +1201,8 @@ function brancherFormulaireHorsLigne() {
         const point = {
             nom: fd.get('nom'), categorie: fd.get('categorie'), statut: fd.get('statut'),
             province: fd.get('province'), commune: fd.get('commune'), quartier: fd.get('quartier'),
-            description: fd.get('description'), latitude: lat, longitude: lng
+            description: fd.get('description'), latitude: lat, longitude: lng,
+            precision_gps_m: gpsPrecisionPour(lat, lng)
         };
         const photos = [];
         forme.querySelectorAll('input[type="file"]').forEach(function (inp) {

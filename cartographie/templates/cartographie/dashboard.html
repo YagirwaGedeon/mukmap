@@ -116,6 +116,7 @@
         <a href="{% url 'itineraire_list' %}"><i data-lucide="route"></i> <span data-i18n="itineraires">Itinéraires</span></a>
         <a href="{% url 'audit_list' %}"><i data-lucide="history"></i> <span data-i18n="historique">Historique</span></a>
         <a href="{% url 'rapport_generer' %}"><i data-lucide="file-text"></i> <span data-i18n="rapports">Rapports</span></a>
+        <a href="{% url 'qualite_tableau' %}"><i data-lucide="badge-check"></i> <span data-i18n="qualite_donnees">Qualité des données</span></a>
         {% if user.is_superuser %}<a href="{% url 'agent_list' %}"><i data-lucide="users"></i> <span data-i18n="agents">Agents</span></a>{% endif %}
     </nav>
     <div class="droite">

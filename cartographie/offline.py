@@ -58,6 +58,9 @@ def _appliquer_edition(p, data):
         valeur = _champ_obligatoire(data, champ, float)
         if valeur is not None:
             setattr(p, champ, valeur)
+    precision = _champ_obligatoire(data, 'precision_gps_m', float)
+    if precision is not None:
+        p.precision_gps_m = precision
     if isinstance(data.get('donnees'), dict):
         p.donnees = {str(k): v for k, v in data['donnees'].items()}
     if data.get('synchro_id'):
@@ -130,6 +133,7 @@ def api_sync(request):
                 description=str(point_data.get('description') or ''),
                 latitude=lat,
                 longitude=lng,
+                precision_gps_m=_champ_obligatoire(point_data, 'precision_gps_m', float),
                 categorie=str(point_data.get('categorie') or 'autre'),
                 statut=str(point_data.get('statut') or 'actif'),
                 province=str(point_data.get('province') or ''),

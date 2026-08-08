@@ -272,6 +272,13 @@
             etat.watchId = navigator.geolocation.watchPosition(function (pos) {
                 etat.position = pos;
                 afficher();
+                // Dernier fix publié pour enrichir les formulaires (précision GPS)
+                if (typeof window !== 'undefined') {
+                    window.__gpsDernierFix = {
+                        lat: pos.coords.latitude, lon: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy, d: Date.now()
+                    };
+                }
                 if (etat.traceEnCours) {
                     etat.trace.push({ lat: pos.coords.latitude, lng: pos.coords.longitude,
                                       alt: pos.coords.altitude, time: new Date().toISOString() });

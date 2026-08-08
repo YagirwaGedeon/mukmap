@@ -22,6 +22,7 @@ class PointGeographique(models.Model):
     description = models.TextField(blank=True, verbose_name="Description")
     latitude = models.FloatField(verbose_name="Latitude")
     longitude = models.FloatField(verbose_name="Longitude")
+    precision_gps_m = models.FloatField(null=True, blank=True, verbose_name="Précision GPS (m)")
     photo = models.ImageField(upload_to='photos_lieux/', blank=True, verbose_name="Photo du lieu")
     categorie = models.CharField(max_length=20, choices=CATEGORIE_CHOICES, default='autre', verbose_name="Catégorie")
     statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='actif', verbose_name="État")
@@ -634,6 +635,7 @@ class OuvrageHydraulique(models.Model):
     latitude = models.FloatField(verbose_name="Latitude")
     longitude = models.FloatField(verbose_name="Longitude")
     altitude_m = models.FloatField(null=True, blank=True, verbose_name="Altitude (m)")
+    precision_gps_m = models.FloatField(null=True, blank=True, verbose_name="Précision GPS (m)")
     beneficiaires = models.PositiveIntegerField(default=0, verbose_name="Nombre de bénéficiaires")
     caracteristiques = models.JSONField(default=dict, blank=True, verbose_name="Caractéristiques techniques",
                                         help_text="Débit (l/s), profondeur, matériau, nombre de BF, etc.")

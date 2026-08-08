@@ -36,6 +36,7 @@ urlpatterns = [
     path('export/<str:format>/', views.export_points, name='export_points'),
 
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('qualite/', views.tableau_qualite, name='qualite_tableau'),
 
     path('point/<int:pk>/edit/', views.point_edit, name='point_edit'),
     path('point/<int:pk>/supprimer/', views.point_delete, name='point_delete'),

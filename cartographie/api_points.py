@@ -16,6 +16,16 @@ from django.http import JsonResponse
 from .models import PointGeographique
 from .views import _projet_actif, _audit
 
+
+def _float_ou_nul(valeur):
+    """Float si convertible, sinon None (précision GPS facultative)."""
+    if valeur is None or valeur == '':
+        return None
+    try:
+        return float(valeur)
+    except (TypeError, ValueError):
+        return None
+
 # ─── Registre des colonnes du modèle ─────────────────────────────
 # type : text | nb | date | choix | fkey
 CHAMPS_MODELE = {
@@ -585,6 +595,7 @@ def api_points_creer(request):
         description=str(data.get('description') or ''),
         latitude=lat,
         longitude=lng,
+        precision_gps_m=_float_ou_nul(data.get('precision_gps_m')),
         categorie=str(data.get('categorie') or 'autre'),
         statut=str(data.get('statut') or 'actif'),
         province=str(data.get('province') or ''),
@@ -623,6 +634,8 @@ def api_point_modifier(request, pk):
                 setattr(p, champ, float(data[champ]))
             except (TypeError, ValueError):
                 return JsonResponse({'erreur': f'Valeur invalide pour {champ}.'}, status=400)
+    if 'precision_gps_m' in data:
+        p.precision_gps_m = _float_ou_nul(data['precision_gps_m'])
     if isinstance(data.get('donnees'), dict):
         p.donnees = {str(k): v for k, v in data['donnees'].items()}
     p.save()
