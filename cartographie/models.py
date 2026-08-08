@@ -230,6 +230,11 @@ class MediaPoint(models.Model):
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='photo', verbose_name="Type")
     fichier = models.FileField(upload_to='medias_points/', verbose_name="Fichier")
     date_upload = models.DateTimeField(auto_now_add=True, verbose_name="Date d'upload")
+    date_prise = models.DateTimeField(null=True, blank=True, verbose_name="Date et heure de la photo")
+    latitude = models.FloatField(null=True, blank=True, verbose_name="Latitude GPS")
+    longitude = models.FloatField(null=True, blank=True, verbose_name="Longitude GPS")
+    utilisateur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='medias_uploades', verbose_name="Utilisateur")
+    commentaire = models.TextField(blank=True, verbose_name="Commentaire")
 
     class Meta:
         ordering = ['date_upload']

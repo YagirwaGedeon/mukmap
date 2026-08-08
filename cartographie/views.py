@@ -216,7 +216,48 @@ def profil_edit(request):
 # ─── PAGE PRINCIPALE (CARTE) ───────────────────────────────────
 
 
-def _creer_medias_point(point, fichiers):
+def _extraire_exif(fichier):
+    """Retourne (date_prise, latitude, longitude) extraits des EXIF d'une photo."""
+    date_prise = latitude = longitude = None
+    try:
+        import io as _io
+        from PIL import Image, ExifTags
+        contenu = fichier.read()
+        fichier.seek(0)
+        img = Image.open(_io.BytesIO(contenu))
+        exif = img._getexif() or {}
+        tags = {ExifTags.TAGS.get(k, k): v for k, v in exif.items()}
+        if tags.get('DateTimeOriginal'):
+            try:
+                from datetime import datetime as _dt
+                date_prise = _dt.strptime(tags['DateTimeOriginal'], '%Y:%m:%d %H:%M:%S')
+            except (ValueError, TypeError):
+                pass
+        gps = tags.get('GPSInfo')
+        if gps:
+            gps_tags = {ExifTags.GPSTAGS.get(k, k): v for k, v in gps.items()}
+
+            def _deg(v):
+                d, m, s = v
+                return float(d) + float(m) / 60.0 + float(s) / 3600.0
+            try:
+                lat = _deg(gps_tags['GPSLatitude'])
+                if gps_tags.get('GPSLatitudeRef') in ('S', 's'):
+                    lat = -lat
+                lng = _deg(gps_tags['GPSLongitude'])
+                if gps_tags.get('GPSLongitudeRef') in ('W', 'w'):
+                    lng = -lng
+                latitude, longitude = round(lat, 6), round(lng, 6)
+            except (KeyError, ValueError, TypeError):
+                pass
+        img.close()
+    except Exception:
+        pass
+    fichier.seek(0)
+    return date_prise, latitude, longitude
+
+
+def _creer_medias_point(point, fichiers, utilisateur=None, commentaire='', date_prise_defaut=None):
     for f in fichiers or []:
         ext = (f.name or '').rsplit('.', 1)[-1].lower() if '.' in (f.name or '') else ''
         if ext in ('png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'):
@@ -229,7 +270,15 @@ def _creer_medias_point(point, fichiers):
             type_media = 'audio'
         else:
             type_media = 'photo'
-        MediaPoint.objects.create(point=point, type=type_media, fichier=f)
+        date_prise, latitude, longitude = None, None, None
+        if type_media == 'photo':
+            date_prise, latitude, longitude = _extraire_exif(f)
+        MediaPoint.objects.create(
+            point=point, type=type_media, fichier=f,
+            date_prise=date_prise or date_prise_defaut,
+            latitude=latitude, longitude=longitude,
+            utilisateur=utilisateur, commentaire=commentaire,
+        )
 
 
 def index_cartographie(request):
@@ -275,7 +324,7 @@ def index_cartographie(request):
         if request.FILES.get('photo'):
             point.photo = request.FILES['photo']
             point.save()
-        _creer_medias_point(point, request.FILES.getlist('medias'))
+        _creer_medias_point(point, request.FILES.getlist('medias'), utilisateur=request.user, commentaire=request.POST.get('commentaire_medias', ''), date_prise_defaut=timezone.now())
         _audit(request, "Création de point", f"Point #{point.pk} - {nom} ({projet_actif.nom})")
         messages.success(request, f"Point « {nom} » enregistré.")
         return redirect('index_cartographie')
@@ -306,7 +355,12 @@ def index_cartographie(request):
             "donnees": p.donnees or {},
             "source_fichier": p.source_fichier,
             "source_format": p.source_format,
-            "medias": [{"url": m.fichier.url, "type": m.type} for m in p.medias.all()],
+            "medias": [{"url": m.fichier.url, "type": m.type,
+                        "date_prise": m.date_prise.strftime('%d/%m/%Y %H:%M') if m.date_prise else '',
+                        "date_upload": m.date_upload.strftime('%d/%m/%Y %H:%M'),
+                        "latitude": m.latitude, "longitude": m.longitude,
+                        "utilisateur": (m.utilisateur.get_full_name() or m.utilisateur.username) if m.utilisateur else '',
+                        "commentaire": m.commentaire} for m in p.medias.all()],
             "auteur": p.auteur.get_full_name() or p.auteur.username if p.auteur else 'Anonyme',
             "date": p.date_creation.strftime('%d/%m/%Y %H:%M'),
         }
@@ -2775,7 +2829,7 @@ def point_edit(request, pk):
         if request.FILES.get('photo'):
             point.photo = request.FILES['photo']
         point.save()
-        _creer_medias_point(point, request.FILES.getlist('medias'))
+        _creer_medias_point(point, request.FILES.getlist('medias'), utilisateur=request.user, commentaire=request.POST.get('commentaire_medias', ''), date_prise_defaut=timezone.now())
         _audit(request, "Modification de point", f"Point #{pk} - {point.nom}")
         messages.success(request, "Point mis à jour.")
         return redirect('index_cartographie')

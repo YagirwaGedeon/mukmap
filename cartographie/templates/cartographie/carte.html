@@ -175,8 +175,9 @@
         #panel-droit.ouvert { display: block; transform: translateX(0); opacity: 1; }
         #panel-droit .photo-principale { width: 100%; height: 190px; object-fit: cover; border-radius: 12px; margin-bottom: 12px; }
         #panel-droit .galerie { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
-        #panel-droit .galerie .g-item { position: relative; border-radius: 9px; overflow: hidden; cursor: pointer; aspect-ratio: 1; background: var(--bg-3); }
-        #panel-droit .galerie img { width: 100%; height: 100%; object-fit: cover; }
+        #panel-droit .galerie .g-item { position: relative; border-radius: 9px; overflow: hidden; cursor: pointer; background: var(--bg-3); display: flex; flex-direction: column; }
+        #panel-droit .galerie .g-item img { width: 100%; height: 84px; object-fit: cover; }
+        #panel-droit .galerie .g-item .g-meta { flex: 1; padding: 5px 7px 7px; font-size: .56rem; line-height: 1.4; color: var(--text-2); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
         #panel-droit .galerie .g-item .type-badge { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; background: rgba(0,0,0,.45); color: #fff; }
         .ligne-info { display: flex; justify-content: space-between; gap: 10px; font-size: .78rem; padding: 7px 0; border-bottom: 1px dashed var(--border); }
         .ligne-info .lib { color: var(--text-3); }
@@ -590,6 +591,7 @@
             <label data-i18n="galerie_multimedia">Galerie multimédia</label>
             <input type="file" name="medias" multiple accept="image/*,video/*,audio/*,.pdf" class="input-fichier">
             <div class="hint" data-i18n="type_detecte">Photos, vidéos, audio, PDF — le type est détecté automatiquement.</div>
+            <input type="text" name="commentaire_medias" placeholder="Commentaire des photos (date, lieu, remarque...)" data-i18n-ph="commentaire_medias" style="margin-top:8px;">
             <button type="submit" class="btn btn-primary" style="width:100%;margin-top:12px;">
                 <span data-lucide="plus-circle"></span> <span data-i18n="enregistrer_point">Enregistrer le point</span>
             </button>
@@ -1559,15 +1561,34 @@ function afficherTooltip(p, point) {
 function masquerTooltip() { clearTimeout(timerTooltip); timerTooltip = setTimeout(() => tooltip.style.display = 'none', 250); }
 
 // ─── POPUPS ───────────────────────────────────────────────────
+function metaPhotoHTML(m) {
+    const bits = [];
+    if (m.date_prise) bits.push('📅 ' + m.date_prise);
+    else if (m.date_upload) bits.push('📅 ' + m.date_upload);
+    if (m.latitude != null && m.longitude != null) bits.push('📍 ' + m.latitude + ', ' + m.longitude);
+    if (m.utilisateur) bits.push('👤 ' + m.utilisateur);
+    let html = '';
+    if (bits.length) html += `<div class="g-meta">${bits.map(b => `<span>${b}</span>`).join('')}</div>`;
+    if (m.commentaire) html += `<div class="g-meta" style="border-top:1px dashed var(--border);">💬 ${m.commentaire}</div>`;
+    return html;
+}
+function compteurPhotos(p) {
+    const medias = p.medias || [];
+    const photos = medias.filter(m => m.type === 'photo').length;
+    return (photos ? `📷 ${photos} ${(photos > 1 ? (mukmapT && mukmapT('photos')) || 'photos' : (mukmapT && mukmapT('photo_singulier')) || 'photo')}` : '');
+}
 function gallerieHTML(p, limit) {
     const medias = (p.medias || []).slice(0, limit || 6);
-    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px;">${medias.map(m => {
+    const reste = (p.medias || []).length - medias.length;
+    let html = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px;">${medias.map(m => {
         const url = m.url;
-        if (m.type === 'video') return `<div onclick="ouvrirMedia('${url}','video')" style="aspect-ratio:1;background:#000;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;color:#fff;">🎬</div>`;
+        if (m.type === 'video') return `<div onclick="ouvrirMedia('${url}','video')" style="aspect-ratio:1;background:#000;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;color:#fff;" title="🎬 ${m.date_prise || ''}">🎬</div>`;
         if (m.type === 'pdf') return `<a href="${url}" target="_blank" style="aspect-ratio:1;background:#f97316;display:flex;align-items:center;justify-content:center;border-radius:8px;text-decoration:none;color:#fff;font-size:.65rem;font-weight:700;">PDF</a>`;
         if (m.type === 'audio') return `<div onclick="ouvrirMedia('${url}','audio')" style="aspect-ratio:1;background:#22c55e;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;color:#fff;">🎵</div>`;
-        return `<img src="${url}" style="width:100%;height:100%;object-fit:cover;cursor:pointer;" onclick="ouvrirMedia('${url}','photo')">`;
+        return `<img src="${url}" style="width:100%;height:100%;object-fit:cover;cursor:pointer;border-radius:8px;" onclick="ouvrirMedia('${url}','photo')" title="${(m.date_prise || '') + ' ' + (m.commentaire || '')}">`;
     }).join('')}</div>`;
+    if (reste > 0 && !limit) html += `<div style="font-size:.68rem;color:var(--text-3);margin-top:4px;">${(mukmapT && mukmapT('galerie_voir_via') || 'Galerie complète')} → ${(mukmapT && mukmapT('modifier')) || 'Modifier'}</div>`;
+    return html;
 }
 function ouvrirMedia(url, type) {
     const lb = document.getElementById('lightbox');
@@ -1617,12 +1638,14 @@ function afficherPoint(p, voler) {
 function afficherPanelPoint(p) {
     const panel = document.getElementById('panel-droit');
     const medias = p.medias || [];
-    const galerie = medias.length ? `<div class="galerie">${medias.map(m => {
+    const nbPhotos = medias.filter(m => m.type === 'photo').length;
+    const galerie = medias.length ? `<div style="margin-top:12px;"><div class="titre-section" style="margin-bottom:8px;">🖼️ ${(mukmapT && mukmapT('galerie_multimedia')) || 'Galerie multimédia'} (${medias.length})${nbPhotos ? ` · ${compteurPhotos(p)}` : ''}</div>
+        <div class="galerie">${medias.map(m => {
         if (m.type === 'video') return `<div class="g-item" onclick="ouvrirMedia('${m.url}','video')"><div class="type-badge">🎬</div></div>`;
         if (m.type === 'pdf') return `<a class="g-item" href="${m.url}" target="_blank"><div class="type-badge" style="font-size:.7rem;font-weight:700;">PDF</div></a>`;
         if (m.type === 'audio') return `<div class="g-item" onclick="ouvrirMedia('${m.url}','audio')"><div class="type-badge">🎵</div></div>`;
-        return `<div class="g-item" onclick="ouvrirMedia('${m.url}','photo')"><img src="${m.url}"></div>`;
-    }).join('')}</div>` : '';
+        return `<div class="g-item" onclick="ouvrirMedia('${m.url}','photo')"><img src="${m.url}">${metaPhotoHTML(m)}</div>`;
+    }).join('')}</div></div>` : '';
     const extras = colonnesSupplementaires(p);
     const extrasObj = extraireDonnees(p);
     const sourceHtml = (p.source_fichier ? `<div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('fichier_source')) || 'Fichier source'}</span><span class="val">${echapper(p.source_fichier)}</span></div>` : '') +
