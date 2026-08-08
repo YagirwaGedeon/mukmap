@@ -916,7 +916,7 @@
   <script src="{% static 'js/gps.js' %}?v=29"></script>
 <script src="{% static 'js/analyse-spatiale.js' %}?v=28"></script>
 <script src="{% static 'js/water-supply.js' %}?v=42"></script>
-<script src="{% static 'js/thematic.js' %}?v=1"></script>
+<script src="{% static 'js/thematic.js' %}?v=2"></script>
 <script>
 const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_token }}';
 
@@ -1261,6 +1261,9 @@ map.on('load', () => {
     }
     if (window.MukmapWaterSupply && window.MukmapWaterSupply.demarrer) {
         try { MukmapWaterSupply.demarrer({carte: map}); } catch (e) { console.error('Water Supply :', e); }
+    }
+    if (window.MukmapThematic && window.MukmapThematic.demarrer) {
+        try { MukmapThematic.demarrer({carte: map}); } catch (e) { console.error('Thematique :', e); }
     }
     const chargementPerso = window.BasemapSelector
         ? BasemapSelector.chargerExternes({map, appliquerExterne: appliquerBasemap})

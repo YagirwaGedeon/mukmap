@@ -337,8 +337,17 @@
     }
 
     function carteGlobale() {
-        try { if (typeof map !== 'undefined') return map; } catch (e) {}
-        return global.map || null;
+        // Attention : le <div id="map"> expose `map` comme variable globale (acces
+        // nomme) avant que la carte MapLibre soit creee. On n'accepte qu'un objet
+        // ayant une methode `loaded`.
+        var candidats = [];
+        try { candidats.push(global.map); } catch (e) {}
+        try { if (typeof map !== 'undefined') candidats.push(map); } catch (e) {}
+        for (var i = 0; i < candidats.length; i++) {
+            var c = candidats[i];
+            if (c && typeof c.loaded === 'function') return c;
+        }
+        return null;
     }
 
     function injecterCSS() {
@@ -1065,8 +1074,9 @@
     }
 
     function demarrer(opts) {
-        carte = opts.carte || carteGlobale();
-        if (!carte || typeof carte.loaded !== 'function') return;
+        var c = opts.carte || carteGlobale();
+        if (!c || typeof c.loaded !== 'function') return;
+        carte = c;
         injecterCSS();
         creerInterface();
         initialiserUI();
@@ -1094,10 +1104,11 @@
     });
 
     function attendreCarte(tentatives) {
-        if (typeof carte !== 'undefined' && carte) return;
+        if (carte && typeof carte.loaded === 'function') return;
         if (tentatives <= 0) return;
         setTimeout(function () { demarrer({}); attendreCarte(tentatives - 1); }, 250);
     }
+    global.MukmapThematic = { demarrer: demarrer, CORE: ThematicCore, appliquer: appliquer };
     demarrer({});
-    attendreCarte(40);
+    attendreCarte(120);
 })(typeof window !== 'undefined' ? window : globalThis);
