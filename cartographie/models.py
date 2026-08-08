@@ -867,6 +867,11 @@ class TraceAdduction(models.Model):
     denivelee_m = models.FloatField(default=0, verbose_name="Dénivelé cumulé positif (m)")
     observations = models.TextField(blank=True, verbose_name="Observations")
     date_creation = models.DateTimeField(auto_now_add=True)
+    synchro_id = models.CharField(max_length=64, blank=True, default='', db_index=True,
+                                  verbose_name="Identifiant de synchronisation (client)")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
+    auteur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='traces_adduction', verbose_name="Ajouté par")
 
     class Meta:
         ordering = ['-date_creation']

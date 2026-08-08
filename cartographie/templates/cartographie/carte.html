@@ -549,7 +549,7 @@
 
         <hr class="separateur">
         <div class="titre-section" data-i18n="nouveau_point">Nouveau point</div>
-        <form method="POST" action="{% url 'index_cartographie' %}" enctype="multipart/form-data">{% csrf_token %}
+        <form method="POST" action="{% url 'index_cartographie' %}" enctype="multipart/form-data" id="form-point-rapide">{% csrf_token %}
             <label data-i18n="nom_lieu">Nom du lieu</label>
             <input type="text" name="nom" required placeholder="Ex: Marché central">
             <div class="filtre-row">
@@ -912,10 +912,10 @@
 <script src="{% static 'js/basemap-selector.js' %}?v=27"></script>
 <script src="{% static 'js/imagerie.js' %}?v=27"></script>
 <script src="{% static 'js/couches-wms.js' %}?v=27"></script>
-<script src="{% static 'js/offline.js' %}?v=28"></script>
+<script src="{% static 'js/offline.js' %}?v=31"></script>
 <script src="{% static 'js/gps.js' %}?v=28"></script>
 <script src="{% static 'js/analyse-spatiale.js' %}?v=28"></script>
-<script src="{% static 'js/water-supply.js' %}?v=39"></script>
+<script src="{% static 'js/water-supply.js' %}?v=40"></script>
 <script>
 const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_token }}';
 
@@ -1154,6 +1154,43 @@ conteneurBasemaps.appendChild(btnFondsPro);
 const etatModeInitial = window.ETAT_MODE || {};
 btnFondsPro.style.display = (etatModeInitial.mode === 'avance' && etatModeInitial.acces_avance) ? '' : 'none';
 
+// ─── MODE HORS CONNEXION : formulaire de point ──────────────
+// Sans réseau, la soumission du formulaire « Nouveau point » est
+// détournée vers le stockage local ; les photos sont mises en file,
+// tout sera synchronisé à la reconnexion.
+function brancherFormulaireHorsLigne() {
+    const forme = document.getElementById('form-point-rapide');
+    if (!forme || !window.MukmapOffline || !window.MukmapOffline.instance) return;
+    const inst = window.MukmapOffline.instance;
+    forme.addEventListener('submit', function (ev) {
+        if (!inst.estHorsLigne()) return; // réseau : POST classique
+        ev.preventDefault();
+        ev.stopPropagation();
+        const fd = new FormData(forme);
+        const lat = parseFloat(fd.get('latitude')), lng = parseFloat(fd.get('longitude'));
+        if (!(fd.get('nom') && !isNaN(lat) && !isNaN(lng))) return;
+        const point = {
+            nom: fd.get('nom'), categorie: fd.get('categorie'), statut: fd.get('statut'),
+            province: fd.get('province'), commune: fd.get('commune'), quartier: fd.get('quartier'),
+            description: fd.get('description'), latitude: lat, longitude: lng
+        };
+        const photos = [];
+        forme.querySelectorAll('input[type="file"]').forEach(function (inp) {
+            for (let i = 0; i < inp.files.length; i++) {
+                photos.push({fichier: inp.files[i]});
+            }
+        });
+        inst.enregistrerLocalement(point, null, null, photos).then(function () {
+            forme.reset();
+            const annonce = document.createElement('div');
+            annonce.textContent = '📴 Point enregistré localement — synchronisation à la reconnexion.';
+            Object.assign(annonce.style, {fontSize: '.72rem', color: '#f59e0b', margin: '8px 0 4px'});
+            forme.after(annonce);
+            setTimeout(() => annonce.remove(), 5000);
+        });
+    });
+}
+
 // ─── DONNÉES ──────────────────────────────────────────────────
 const donneesPoints = {{ points_json|safe }};
 const agents = {{ agents_json|safe }};
@@ -1176,7 +1213,14 @@ map.on('load', () => {
     if (window.Imagerie) Imagerie.installer({map});
     if (window.CouchesWMS) CouchesWMS.installer({map});
     if (window.MukmapOffline && window.MukmapOffline.demarrer) {
-        try { MukmapOffline.demarrer({carte: map, urlApi: '/api/table-points/', urlSync: '/api/offline/sync/', csrf: CSRF, creerAncre: true}); } catch (e) { console.error('Offline :', e); }
+        try {
+            MukmapOffline.demarrer({
+                carte: map, urlApi: '/api/table-points/', urlSync: '/api/offline/sync/',
+                urlSyncTraces: '/api/offline/traces/', urlPhotos: '/api/offline/photos/',
+                csrf: CSRF, creerAncre: true, maxTuiles: 3000
+            });
+            brancherFormulaireHorsLigne();
+        } catch (e) { console.error('Offline :', e); }
     }
     if (window.MukmapGps && window.MukmapGps.demarrer) {
         try { MukmapGps.demarrer({carte: map}); } catch (e) { console.error('GPS :', e); }

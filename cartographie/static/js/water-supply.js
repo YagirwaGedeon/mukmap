@@ -1388,6 +1388,31 @@
             }).then(function (r) { return r.json(); });
         }
 
+        // ── Mode hors connexion (tracés) ──
+        function horsLigne() {
+            return window.MukmapOffline && window.MukmapOffline.instance &&
+                window.MukmapOffline.instance.estHorsLigne();
+        }
+        function traceHorsLigne(trace) {
+            var inst = window.MukmapOffline && window.MukmapOffline.instance;
+            if (!inst) return;
+            var t = {
+                id: trace.id,
+                nom: trace.nom || '',
+                description: trace.description || '',
+                coordonnees: trace.coordonnees,
+                observations: trace.observations || '',
+                projet_id: trace.projet_id,
+                synchro_id: trace.synchro_id
+            };
+            var prom = trace.id !== undefined && trace.id !== null
+                ? inst.enregistrerTraceLocalement(t, null, 'modifie')
+                : inst.enregistrerTraceLocalement(t);
+            if (prom && prom.then) prom.then(function () {
+                message('Tracé enregistré hors ligne — synchronisation à la reconnexion.', 'succes');
+            });
+        }
+
         // ── Projets ──
         function chargerProjets() {
             return getJ(apiProjets).then(function (d) {
@@ -1929,12 +1954,21 @@
         function terminerTrace() {
             if (traceCourant.length < 2) { message('Au moins 2 points requis.', 'erreur'); return; }
             if (!projetActif) return;
-            post(apiTraces, {
+            var nouvelleTrace = {
                 projet_id: projetActif.id,
                 nom: parId('mw-nom-trace').value.trim(),
                 coordonnees: traceCourant,
                 observations: ''
-            }).then(function (d) {
+            };
+            if (horsLigne()) {
+                traceHorsLigne(nouvelleTrace);
+                traceCourant = [];
+                enTrace = false;
+                rectraceActions();
+                majTout();
+                return;
+            }
+            post(apiTraces, nouvelleTrace).then(function (d) {
                 if (!d.ok) { message(d.erreur || 'Erreur.', 'erreur'); return; }
                 traces.push(d.trace);
                 traceCourant = [];
@@ -2119,7 +2153,7 @@
             var nom = parId('mw-nom-trace').value.trim() || ('Reconnaissance ' + new Date().toLocaleDateString());
             var coordonnees = gpsTracePoints.map(function (p) { return [p[0], p[1], p[2]]; });
             var duree = a.duree_s;
-            post(apiTraces, {
+            var traceGps = {
                 projet_id: projetActif.id,
                 nom: nom,
                 coordonnees: coordonnees,
@@ -2127,7 +2161,21 @@
                     ' ; points : ' + a.nb_points + ' ; dénivelé +' + Math.round(a.denivele_positif) +
                     '/−' + Math.round(a.denivele_negatif) + ' m ; pente moy. ' +
                     a.pente_moyenne.toFixed(1) + ' %.'
-            }).then(function (d) {
+            };
+            if (horsLigne()) {
+                gpsEnCours = false;
+                gpsEnPause = false;
+                arreterWatchGps();
+                parId('mw-gps-trace').hidden = false;
+                parId('mw-gps-actions').hidden = true;
+                parId('mw-gps-etat').hidden = true;
+                removeCouche('mw-gps-trace-tmp');
+                traceHorsLigne(traceGps);
+                gpsTracePoints = [];
+                majTout();
+                return;
+            }
+            post(apiTraces, traceGps).then(function (d) {
                 gpsEnCours = false;
                 gpsEnPause = false;
                 arreterWatchGps();

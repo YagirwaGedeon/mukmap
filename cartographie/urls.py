@@ -30,6 +30,8 @@ urlpatterns = [
 
     # ── Mode hors connexion / synchronisation ─────────────────
     path('api/offline/sync/', offline.api_sync, name='api_offline_sync'),
+    path('api/offline/traces/', offline.api_traces_sync, name='api_offline_traces'),
+    path('api/offline/photos/', offline.api_photo_upload, name='api_offline_photos'),
     path('export/carte-pdf/', views.export_carte_pdf, name='export_carte_pdf'),
     path('export/<str:format>/', views.export_points, name='export_points'),
 

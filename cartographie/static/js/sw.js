@@ -1,5 +1,5 @@
 /* MUKMAP — Service Worker v1.0 */
-const VERSION = 'mukmap-v1.0.29';
+const VERSION = 'mukmap-v1.0.30';
 const PRECACHE = ['/', '/manifest.webmanifest'];
 /* Cache statique versionné : chaque déploiement crée un nouveau cache,
  * les anciens sont purgés à l'activation → jamais de JS périmé. */
@@ -30,9 +30,11 @@ const staticRequest = (req) => {
 /* Demande de tuile de fond de carte (fichier image raster). */
 const tileRequest = (url) => {
   const h = url.hostname.replace(/^www\./, '');
-  const serveursTuiles = /(^|[.-])(cartocdn|openstreetmap|mapbox|maptiler|mapstyle|raster-tiles|basemaps?)\b/.test(h);
-  const motifTuile = /\b\d{1,3}\/\d{1,3}(\/[a-z0-9@.]*)?\.(png|jpg|jpeg|webp)(\?.*)?$/i.test(url.pathname);
-  return (serveursTuiles || motifTuile) && /\.(png|jpg|jpeg|webp)(\?.*)?$/i.test(url.pathname);
+  const serveursTuiles = /(^|[.-])(cartocdn|openstreetmap|mapbox|maptiler|mapstyle|raster-tiles|basemaps?|arcgisonline|arcgis|esri|opentopomap|eox\.at|earthdata|gibs|mrdata|usgs|brgm|fao)\b/i.test(h);
+  const motifTuile = /\b\d{1,3}\/\d{1,3}(\/[a-z0-9@._-]*)?\.(png|jpg|jpeg|webp)([?#].*)?$/i.test(url.pathname);
+  /* Tuiles ArcGIS/Esri : /tile/{z}/{y}/{x} sans extension (même hôte) */
+  const motifArc = /(^|[.-])(arcgisonline|arcgis|esri)\b/i.test(h) && /\/tile\/\d+\/\d+\/\d+$/.test(url.pathname);
+  return serveursTuiles || motifTuiles || motifArc;
 };
 
 self.addEventListener('install', (event) => {
@@ -50,7 +52,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((k) => k !== STATIC_CACHE && k !== PAGE_CACHE).map((k) => caches.delete(k)));
+    /* Purge uniquement les caches statiques périmés. LIB_CACHE et
+     * TILE_CACHE (hors connexion) sont conservés : la zone téléchargée
+     * et les bibliothèques restent disponibles à chaque mise à jour. */
+    await Promise.all(keys.filter((k) =>
+      /^mukmap-static-/.test(k) && k !== STATIC_CACHE).map((k) => caches.delete(k)));
     await self.clients.claim();
   })());
 });

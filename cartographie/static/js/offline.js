@@ -147,6 +147,89 @@
             var serveur = pullServeur.point.updated_at;
             if (!base || !serveur) return false;
             return String(serveur) > String(base);
+        },
+
+        // ── Tuiles de fond de carte ────────────────────────────────
+        // Liste des tuiles {z,x,y} couvrant une bbox, de zMin à zMax.
+        // `maxTuiles` limite le volume (les zooms les plus détaillés sont
+        // élagués d'abord) — protège le téléchargement de zone.
+        tuilesPourBbox: function (bbox, zMin, zMax, maxTuiles) {
+            if (!bbox || bbox.length < 4) return [];
+            zMin = Math.max(0, parseInt(zMin, 10) || 0);
+            zMax = Math.max(zMin, parseInt(zMax, 10) || zMin);
+            zMax = Math.min(19, zMax);
+            maxTuiles = parseInt(maxTuiles, 10) || 0;
+            var w = bbox[0], s = bbox[1], e = bbox[2], n = bbox[3];
+            for (; zMax >= zMin; zMax--) {
+                var liste = [];
+                for (var z = zMin; z <= zMax; z++) {
+                    var n2 = Math.pow(2, z);
+                    var x1 = Math.max(0, Math.floor((w + 180) / 360 * n2));
+                    var x2 = Math.min(n2 - 1, Math.floor((e + 180) / 360 * n2));
+                    var yNord = Math.floor((1 - Math.log(Math.tan(n * Math.PI / 180) +
+                        1 / Math.cos(n * Math.PI / 180)) / Math.PI) / 2 * n2);
+                    var ySud = Math.floor((1 - Math.log(Math.tan(s * Math.PI / 180) +
+                        1 / Math.cos(s * Math.PI / 180)) / Math.PI) / 2 * n2);
+                    var ya = Math.max(0, Math.min(yNord, ySud));
+                    var yb = Math.min(n2 - 1, Math.max(yNord, ySud));
+                    for (var x = x1; x <= x2; x++) {
+                        for (var y = ya; y <= yb; y++) {
+                            liste.push({z: z, x: x, y: y});
+                        }
+                    }
+                }
+                if (!maxTuiles || liste.length <= maxTuiles) return liste;
+            }
+            return [];
+        },
+
+        // Applique un triplet {z,x,y} à un template XYZ
+        // (supporte {z} {x} {y} {s} {r} {a-c}).
+        urlTuile: function (template, t) {
+            var s = template
+                .replace(/{z}/g, t.z)
+                .replace(/{x}/g, t.x)
+                .replace(/{y}/g, t.y)
+                .replace(/\{a-c\}/g, 'a')
+                .replace('{s}', 'a')
+                .replace(/\{r\}/g, '');
+            return s;
+        },
+
+        // ── Opérations de tracés (module Adduction) ─────────────────
+        fabriquerOpTrace: function (type, trace, baseUpdated) {
+            trace = trace || {};
+            return {
+                uuid: CORE.uuid(),
+                type: type,
+                id: trace.id !== undefined ? trace.id : null,
+                synchro_id: trace.synchro_id || CORE.uuid(),
+                base_updated: baseUpdated || null,
+                trace: trace
+            };
+        },
+
+        // Sérialise une opération de tracé pour l'API.
+        envoyerTrace: function (op) {
+            var trace = CORE.tracePourEnvoi(op.trace || {});
+            if (op.synchro_id) trace.synchro_id = op.synchro_id;
+            return {
+                type: op.type,
+                id: op.id !== undefined ? op.id : null,
+                base_updated: op.base_updated || null,
+                trace: trace
+            };
+        },
+
+        // Champs utiles d'un tracé (sans bruit serveur).
+        tracePourEnvoi: function (t) {
+            var envoyable = {};
+            ['nom', 'description', 'coordonnees', 'longueur_m', 'denivelee_m',
+             'observations', 'projet_id', 'synchro_id']
+                .forEach(function (cle) {
+                    if (t[cle] !== undefined && t[cle] !== null) envoyable[cle] = t[cle];
+                });
+            return envoyable;
         }
     };
 
@@ -155,6 +238,9 @@
         opts = opts || {};
         var URL_SYNC = opts.urlSync || '/api/offline/sync/';
         var URL_API = opts.urlApi || '/api/table-points/';
+        var URL_SYNC_TRACES = opts.urlSyncTraces || '/api/offline/traces/';
+        var URL_PHOTOS = opts.urlPhotos || '/api/offline/photos/';
+        var MAX_TUILES = opts.maxTuiles || 2500;
         var CSRF = opts.csrf || '';
         var PAGE_SIZE = opts.pageSize || 200;
         var carte = opts.carte || null;
@@ -172,7 +258,8 @@
         var etat = {
             enLigne: typeof navigator !== 'undefined' ? navigator.onLine : true,
             pendants: [], conflits: [], derniereErreur: null,
-            derniereSync: null, enCours: false
+            pendantsTraces: [], conflitsTraces: [], photosPendantes: [],
+            derniereSync: null, enCours: false, tuilesEnCours: false
         };
         var elements = {};
         var listeZones = [];
@@ -183,7 +270,7 @@
             return new Promise(function (resoudre, rejeter) {
                 if (db) return resoudre(db);
                 if (typeof indexedDB === 'undefined') return rejeter(new Error('IndexedDB indisponible'));
-                var req = indexedDB.open('mukmap_offline', 1);
+                var req = indexedDB.open('mukmap_offline', 2);
                 req.onupgradeneeded = function (ev) {
                     var bd = ev.target.result;
                     if (!bd.objectStoreNames.contains('points')) {
@@ -194,6 +281,15 @@
                     }
                     if (!bd.objectStoreNames.contains('meta')) {
                         bd.createObjectStore('meta', {keyPath: 'cle'});
+                    }
+                    if (!bd.objectStoreNames.contains('traces')) {
+                        bd.createObjectStore('traces', {keyPath: 'id'});
+                    }
+                    if (!bd.objectStoreNames.contains('ops_traces')) {
+                        bd.createObjectStore('ops_traces', {keyPath: 'uuid'});
+                    }
+                    if (!bd.objectStoreNames.contains('photos')) {
+                        bd.createObjectStore('photos', {keyPath: 'uuid'});
                     }
                 };
                 req.onsuccess = function (ev) {
@@ -255,7 +351,8 @@
 
         function majBadge() {
             if (!elements.libelle) return;
-            var s = CORE.statut(etat.enLigne, etat.pendants.length, etat.conflits.length, etat.derniereErreur);
+            var nbConflits = etat.conflits.length + etat.conflitsTraces.length;
+            var s = CORE.statut(etat.enLigne, etat.pendants.length, nbConflits, etat.derniereErreur);
             elements.badge.classList.toggle('horsligne', s.classe === 'horsligne');
             elements.badge.classList.toggle('attente', s.classe === 'attente');
             elements.badge.classList.toggle('conflit', s.classe === 'conflit');
@@ -277,13 +374,16 @@
             var p = elements.panneau;
             p.innerHTML = '<div class="mukmap-offline-entete">Mode hors connexion</div>' +
                 '<div class="mukmap-offline-actions">' +
-                '<button data-act="telecharger">⬇ Télécharger la zone visible</button>' +
+                '<button data-act="telecharger">⬇ Télécharger la zone (+ fond de carte)</button>' +
                 '<button data-act="synchroniser">⟳ Synchroniser maintenant</button>' +
                 '<button data-act="vider">🗑 Effacer les données locales</button></div>' +
                 '<div class="mukmap-offline-infos">' +
                 '<div>Points locaux : <b id="off-nb-points">0</b></div>' +
+                '<div>Traces en attente : <b id="off-nb-traces">0</b></div>' +
+                '<div>Photos en attente : <b id="off-nb-photos">0</b></div>' +
                 '<div>En attente : <b id="off-nb-pendants">0</b></div>' +
                 '<div>Conflits : <b id="off-nb-conflits">0</b></div>' +
+                '<div id="off-progres-tuiles"></div>' +
                 '<div>Dernière sync : <b id="off-dernier-sync">jamais</b></div></div>' +
                 '<div class="mukmap-offline-conflits"></div>' +
                 '<div class="mukmap-offline-message"></div>';
@@ -306,13 +406,22 @@
             if (pend) pend.textContent = etat.pendants.length;
             var conf = elements.panneau.querySelector('#off-nb-conflits');
             if (conf) conf.textContent = etat.conflits.length;
+            var trc = elements.panneau.querySelector('#off-nb-traces');
+            if (trc) trc.textContent = etat.pendantsTraces.length;
+            var photos = elements.panneau.querySelector('#off-nb-photos');
+            if (photos) photos.textContent = etat.photosPendantes.length;
+            if (elements.panneau.querySelector('#off-progres-tuiles') && etat.progressionTuiles) {
+                elements.panneau.querySelector('#off-progres-tuiles').textContent =
+                    'Fond de carte : ' + etat.progressionTuiles;
+            }
             rendreConflits();
         }
 
         function rendreConflits() {
             var zone = elements.panneau.querySelector('.mukmap-offline-conflits');
             if (!zone) return;
-            if (!etat.conflits.length) {
+            var nbTotal = etat.conflits.length + etat.conflitsTraces.length;
+            if (!nbTotal) {
                 zone.innerHTML = '';
                 return;
             }
@@ -330,6 +439,23 @@
                 });
                 div.querySelector('[data-choix="serveur"]').addEventListener('click', function () {
                     resoudreConflit(c, 'serveur');
+                });
+                zone.appendChild(div);
+            });
+            etat.conflitsTraces.forEach(function (c) {
+                var t = c.version_trace || {};
+                var div = document.createElement('div');
+                div.className = 'mukmap-offline-conflit';
+                div.innerHTML = '<div class="mukmap-offline-conflit-nom">📏 Tracé « ' +
+                    echapper(t.nom || ('#' + c.id)) + ' »</div>' +
+                    '<div class="mukmap-offline-conflit-actions">' +
+                    '<button data-choix="local">Garder ma version</button>' +
+                    '<button data-choix="serveur">Garder la version serveur</button></div>';
+                div.querySelector('[data-choix="local"]').addEventListener('click', function () {
+                    resoudreConflitTrace(c, 'local');
+                });
+                div.querySelector('[data-choix="serveur"]').addEventListener('click', function () {
+                    resoudreConflitTrace(c, 'serveur');
                 });
                 zone.appendChild(div);
             });
@@ -384,8 +510,12 @@
                     });
                 })
                 .then(function () {
+                    return telechargerTuiles(bbox);
+                })
+                .then(function (nbTuiles) {
                     etat.enCours = false;
-                    message('Zone téléchargée : ' + bbox.join(', '), 'succes');
+                    message('Zone téléchargée' + (nbTuiles ? ' — ' + nbTuiles + ' tuile(s) de fond de carte' : '') +
+                            ' : ' + bbox.join(', '), 'succes');
                     rafraichirPanneau();
                     majBadge();
                     surlignerZone(bbox);
@@ -395,6 +525,87 @@
                     console.error(err);
                     message('Échec du téléchargement : ' + err.message, 'erreur');
                 });
+        }
+
+        // Tuile de fond de carte : localise la source raster active dans
+        // le style MapLibre et renvoie son template XYZ (ou null).
+        function templateFondActif() {
+            if (!carte || !carte.getStyle) return null;
+            var style = carte.getStyle();
+            if (!style || !style.sources) return null;
+            var visibles = {};
+            (style.layers || []).forEach(function (l) {
+                if (l.layout && l.layout.visibility === 'visible' && l.source) visibles[l.source] = true;
+            });
+            var noms = Object.keys(style.sources);
+            for (var i = 0; i < noms.length; i++) {
+                var src = style.sources[noms[i]];
+                if (src && src.type === 'raster' && src.tiles && src.tiles.length && visibles[noms[i]]) {
+                    return src.tiles[0];
+                }
+            }
+            for (var j = 0; j < noms.length; j++) {
+                var s2 = style.sources[noms[j]];
+                if (s2 && s2.type === 'raster' && s2.tiles && s2.tiles.length) return s2.tiles[0];
+            }
+            return null;
+        }
+
+        // Télécharge les tuiles visibles de la zone dans la cache du
+        // navigateur (TILE_CACHE du Service Worker) : le fond de carte
+        // devient consultable hors connexion.
+        function telechargerTuiles(bbox) {
+            var template = null;
+            try { template = templateFondActif(); } catch (e) { template = null; }
+            if (!template) return Promise.resolve(0);
+            var zMax = Math.min(16, Math.round((carte && carte.getZoom ? carte.getZoom() : 9)) + 2);
+            var zMin = 7;
+            var tuiles = CORE.tuilesPourBbox(bbox, zMin, zMax, MAX_TUILES);
+            if (!tuiles.length) return Promise.resolve(0);
+            if (typeof caches === 'undefined') {
+                // Pas d'API Cache (HTTP non sécurisé) : simple préchargement navigateur.
+                return Promise.all(tuiles.slice(0, 40).map(function (t) {
+                    return fetch(CORE.urlTuile(template, t), {mode: 'no-cors'}).catch(function () {});
+                })).then(function () { return 0; });
+            }
+            etat.tuilesEnCours = true;
+            var fait = 0, reussies = 0;
+            etat.progressionTuiles = '0/' + tuiles.length;
+            rafraichirPanneau();
+            return caches.open('mukmap-tiles-v1').then(function (cache) {
+                var coroutine = function (index) {
+                    if (index >= tuiles.length) return Promise.resolve();
+                    var t = tuiles[index];
+                    var url = CORE.urlTuile(template, t);
+                    return cache.match(url).then(function (dejaCache) {
+                        var suite = function () {
+                            fait++;
+                            etat.progressionTuiles = fait + '/' + tuiles.length;
+                            if (fait % 16 === 0) rafraichirPanneau();
+                            return coroutine(index + 6);
+                        };
+                        if (dejaCache) return suite();
+                        return fetch(url, {mode: 'cors'}).then(function (r) {
+                            if (r.ok) { cache.put(url, r); reussies++; }
+                            return null;
+                        }).catch(function () { /* tuile indisponible : ignorée */ })
+                        .then(suite);
+                    });
+                };
+                // 6 téléchargements simultanés (le pas de 6 évite les doublons)
+                var vagues = [];
+                for (var i = 0; i < 6; i++) vagues.push(coroutine(i));
+                return Promise.all(vagues).then(function () {
+                    etat.tuilesEnCours = false;
+                    etat.progressionTuiles = reussies + ' tuile(s)';
+                    rafraichirPanneau();
+                    return reussies;
+                }).catch(function (err) {
+                    etat.tuilesEnCours = false;
+                    rafraichirPanneau();
+                    return reussies;
+                });
+            });
         }
 
         function surlignerZone(bbox) {
@@ -426,7 +637,9 @@
         // ── Collecte hors connexion ────────────────────────────────
         // Ajoute (ou met à jour) un point localement ; s'il est en ligne
         // et sans conflit, synchronisation immédiate.
-        function enregistrerLocalement(point, baseUpdated, type) {
+        // `photos` : [{fichier, commentaire, date_prise}] rattachés au point
+        // (envoyés en multipart une fois le point synchronisé).
+        function enregistrerLocalement(point, baseUpdated, type, photos) {
             var estCreation = point.id === undefined || point.id === null;
             // Nouveau point : identifiant local temporaire négatif (remappé
             // par le serveur à la première synchronisation).
@@ -451,11 +664,207 @@
                 }).then(function () {
                     return tx('operations', 'readwrite', function (m) { m.put(op); });
                 }).then(function () {
+                    var photosAJouter = (photos || []).map(function (ph) {
+                        return {
+                            uuid: CORE.uuid(),
+                            point_id: point.id !== undefined ? point.id : null,
+                            point_synchro_id: op.synchro_id,
+                            fichier: ph.fichier,
+                            commentaire: ph.commentaire || '',
+                            date_prise: ph.date_prise || null,
+                            cree_le: new Date().toISOString()
+                        };
+                    });
+                    return Promise.all(photosAJouter.map(function (ph) {
+                        return tx('photos', 'readwrite', function (m) { m.put(ph); });
+                    })).then(function () { return photosAJouter; });
+                }).then(function (photosAjoutees) {
                     etat.pendants.push(op);
+                    photosAjoutees.forEach(function (ph) { etat.photosPendantes.push(ph); });
                     rafraichirPanneau();
                     majBadge();
                     if (etat.enLigne) return synchroniser();
                 });
+            });
+        }
+
+        // Ajoute une photo à un point déjà enregistré localement
+        // (point_id : identifiant serveur, ou point_synchro_id si le point
+        // n'a pas encore été synchronisé).
+        function ajouterPhotoLocalement(pointRef, fichier, commentaire) {
+            pointRef = pointRef || {};
+            var ph = {
+                uuid: CORE.uuid(),
+                point_id: pointRef.id !== undefined ? pointRef.id : (pointRef.id_serveur || null),
+                point_synchro_id: pointRef.synchro_id || null,
+                fichier: fichier,
+                commentaire: commentaire || '',
+                date_prise: null,
+                cree_le: new Date().toISOString()
+            };
+            return tx('photos', 'readwrite', function (m) { m.put(ph); })
+                .then(function () {
+                    etat.photosPendantes.push(ph);
+                    rafraichirPanneau();
+                    majBadge();
+                    if (etat.enLigne) return synchroniser();
+                });
+        }
+
+        // ── Traces de conduite hors connexion ──────────────────────
+        function enregistrerTraceLocalement(trace, baseUpdated, type) {
+            var estCreation = trace.id === undefined || trace.id === null;
+            var traceLocale = JSON.parse(JSON.stringify(trace));
+            if (estCreation) {
+                traceLocale.id = --compteurIdTemp;
+                traceLocale.synchro_id = traceLocale.synchro_id || CORE.uuid();
+                traceLocale.temporaire = true;
+            } else {
+                type = 'modifie';
+            }
+            var op = CORE.fabriquerOpTrace(estCreation ? 'cree' : type,
+                                           CORE.tracePourEnvoi(traceLocale), baseUpdated);
+            return lireTout('traces').then(function (traces) {
+                var parId = {};
+                traces.forEach(function (x) { parId[x.id] = x; });
+                parId[traceLocale.id] = traceLocale;
+                var fusion = Object.keys(parId).map(function (k) { return parId[k]; });
+                return tx('traces', 'readwrite', function (m) {
+                    fusion.forEach(function (x) { m.put(x); });
+                }).then(function () {
+                    return tx('ops_traces', 'readwrite', function (m) { m.put(op); });
+                }).then(function () {
+                    etat.pendantsTraces.push(op);
+                    rafraichirPanneau();
+                    majBadge();
+                    if (etat.enLigne) return synchroniser();
+                });
+            });
+        }
+
+        // Remplace les traces temporaires par leur version serveur.
+        function remapperTracesLocales(mapping) {
+            if (!mapping || !Object.keys(mapping).length) return Promise.resolve();
+            return lireTout('traces').then(function (traces) {
+                var restants = traces.filter(function (x) {
+                    return !(x.temporaire && mapping[x.synchro_id]);
+                });
+                return tx('traces', 'readwrite', function (m) {
+                    traces.forEach(function (x) {
+                        if (x.temporaire && mapping[x.synchro_id]) m.delete(x.id);
+                    });
+                    restants.forEach(function (x) { m.put(x); });
+                });
+            });
+        }
+
+        // Synchronise les tracés locaux via l'API dédiée.
+        function synchroniserTraces() {
+            return lireTout('ops_traces').then(function (ops) {
+                if (!ops.length) return Promise.resolve({});
+                var corps = {operations: ops.map(function (o) { return CORE.envoyerTrace(o); })};
+                return lireMeta('derniere_sync', null).then(function (v) {
+                    corps.dernier_sync = v;
+                    return fetch(URL_SYNC_TRACES, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+                        body: JSON.stringify(corps)
+                    });
+                }).then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                }).then(function (data) {
+                    var okIds = {};
+                    (data.ok || []).forEach(function (res) {
+                        if (res.type === 'cree' && res.synchro_id) okIds[res.synchro_id] = res.id;
+                    });
+                    return lireTout('ops_traces').then(function (opsActuelles) {
+                        var reste = opsActuelles.filter(function (o) {
+                            if (o.type === 'cree' && okIds[o.synchro_id]) return false;
+                            return !(data.ok || []).some(function (res) {
+                                return res.type === o.type && res.id === o.id;
+                            });
+                        });
+                        return tx('ops_traces', 'readwrite', function (m) {
+                            opsActuelles.forEach(function (o) { m.delete(o.uuid); });
+                            reste.forEach(function (o) { m.put(o); });
+                        }).then(function () { return reste; });
+                    }).then(function (reste) {
+                        return remapperTracesLocales(okIds).then(function () { return reste; });
+                    }).then(function (reste) {
+                        etat.pendantsTraces = reste;
+                        var conflitsTrace = (data.conflits || []).map(function (c) {
+                            return {id: c.id, type: c.type, raison: c.raison,
+                                    version_trace: c.version_trace || {}};
+                        });
+                        etat.conflitsTraces = conflitsTrace;
+                        if (data.pulls && data.pulls.length) {
+                            return lireTout('traces').then(function (locaux) {
+                                var parId = {};
+                                locaux.forEach(function (x) { parId[x.id] = x; });
+                                (data.pulls || []).forEach(function (pul) {
+                                    var t = pul.trace;
+                                    if (t && t.id !== undefined && pul.type !== 'supprime') parId[t.id] = t;
+                                    else if (t && t.id !== undefined) delete parId[t.id];
+                                });
+                                var fusion = Object.keys(parId).map(function (k) { return parId[k]; });
+                                return tx('traces', 'readwrite', function (m) {
+                                    fusion.forEach(function (x) { m.put(x); });
+                                });
+                            });
+                        }
+                    });
+                });
+            });
+        }
+
+        // Transfère les photos en attente (multipart) sur le serveur.
+        function envoyerPhotosPendantes() {
+            if (!etat.photosPendantes.length) return Promise.resolve({envoyees: 0});
+            return lireTout('points').then(function (points) {
+                var parId = {}, parSynchro = {};
+                points.forEach(function (p) {
+                    parId[p.id] = p;
+                    if (p.synchro_id) parSynchro[p.synchro_id] = p;
+                });
+                var envoyees = 0;
+                var serie = etat.photosPendantes.reduce(function (promesse, ph) {
+                    return promesse.then(function () {
+                        var pointId = ph.point_id;
+                        var cible = pointId !== null && pointId !== undefined ? parId[pointId] : null;
+                        if ((!cible || cible.temporaire) && ph.point_synchro_id && parSynchro[ph.point_synchro_id]) {
+                            cible = parSynchro[ph.point_synchro_id];
+                            pointId = cible.id;
+                        }
+                        if (!cible || cible.temporaire || !pointId || pointId < 0) {
+                            return null; // point pas encore synchronisé : on réessaiera
+                        }
+                        var fd = new FormData();
+                        fd.append('point_id', String(pointId));
+                        fd.append('fichier', ph.fichier, ph.fichier.name || 'photo.jpg');
+                        if (ph.commentaire) fd.append('commentaire', ph.commentaire);
+                        if (ph.date_prise) fd.append('date_prise', ph.date_prise);
+                        return fetch(URL_PHOTOS, {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': CSRF},
+                            body: fd
+                        }).then(function (r) {
+                            if (r.ok) {
+                                envoyees++;
+                                etat.photosPendantes = etat.photosPendantes
+                                    .filter(function (x) { return x.uuid !== ph.uuid; });
+                                return tx('photos', 'readwrite', function (m) {
+                                    m.delete(ph.uuid);
+                                });
+                            }
+                            throw new Error('HTTP ' + r.status);
+                        }).catch(function (err) {
+                            ph.erreur = err.message;
+                            return null;
+                        });
+                    });
+                }, Promise.resolve());
+                return serie.then(function () { return envoyees; });
             });
         }
 
@@ -538,11 +947,20 @@
                 }).then(function () {
                     return ecrireMeta('derniere_sync', data.horloge || new Date().toISOString());
                 }).then(function () {
+                    // Synchronise aussi les tracés puis les photos en attente.
+                    return synchroniserTraces().then(function () {
+                        return envoyerPhotosPendantes();
+                    });
+                }).then(function () {
                     etat.enCours = false;
                     rafraichirPanneau();
                     majBadge();
-                    if (etat.conflits.length) {
-                        message(etat.conflits.length + ' conflit(s) détecté(s) : résolvez-les ci-dessous.', 'conflit');
+                    var pendantsTotal = etat.pendants.length + etat.pendantsTraces.length;
+                    if (etat.conflits.length || etat.conflitsTraces.length) {
+                        message((etat.conflits.length + etat.conflitsTraces.length) +
+                                ' conflit(s) détecté(s) : résolvez-les ci-dessous.', 'conflit');
+                    } else if (pendantsTotal) {
+                        message(pendantsTotal + ' opération(s) en attente.', 'info');
                     } else {
                         message('Synchronisation réussie.', 'succes');
                     }
@@ -604,12 +1022,72 @@
             });
         }
 
+        // Résout un conflit de tracé puis réessaie la synchro.
+        function resoudreConflitTrace(conflit, choix) {
+            var version = conflit.version_trace || {};
+            lireTout('traces').then(function (traces) {
+                var local = traces.find(function (t) { return t.id === conflit.id; }) || null;
+                etat.conflitsTraces = etat.conflitsTraces.filter(function (c) { return c.id !== conflit.id; });
+                if (choix === 'serveur') {
+                    // Conserver la version serveur : retirer les opérations locales concernées
+                    return lireTout('ops_traces').then(function (ops) {
+                        var reste = ops.filter(function (o) {
+                            return !(o.id === conflit.id && o.type === conflit.type);
+                        });
+                        return tx('ops_traces', 'readwrite', function (m) {
+                            reste.forEach(function (o) { m.put(o); });
+                        }).then(function () {
+                            etat.pendantsTraces = reste;
+                            // Met à jour la copie locale avec la version serveur
+                            return lireTout('traces').then(function (trc) {
+                                var parId = {};
+                                trc.forEach(function (x) { parId[x.id] = x; });
+                                if (version.id !== undefined) parId[version.id] = version;
+                                var fusion = Object.keys(parId).map(function (k) { return parId[k]; });
+                                return tx('traces', 'readwrite', function (m) {
+                                    fusion.forEach(function (x) { m.put(x); });
+                                });
+                            });
+                        });
+                    });
+                }
+                // Conserver la version locale : nouvelle opération forcée
+                var nouvelleOp;
+                if (conflit.type === 'supprime' || (conflit.type === 'modifie' && !local)) {
+                    nouvelleOp = {
+                        uuid: CORE.uuid(), type: 'supprime', id: conflit.id, synchro_id: '',
+                        base_updated: version.updated_at, trace: {}
+                    };
+                } else {
+                    nouvelleOp = CORE.fabriquerOpTrace('modifie', local || {id: conflit.id},
+                                                       version.updated_at);
+                }
+                return tx('ops_traces', 'readwrite', function (m) {
+                    m.put(nouvelleOp);
+                }).then(function () {
+                    etat.pendantsTraces.push(nouvelleOp);
+                });
+            }).then(function () {
+                rafraichirPanneau();
+                majBadge();
+                return synchroniser();
+            }).catch(function (err) {
+                console.error(err);
+                message(err.message, 'erreur');
+            });
+        }
+
         // ── Nettoyage ──────────────────────────────────────────────
         function viderLocal() {
-            Promise.all([toutEffacer('points'), toutEffacer('operations')])
+            Promise.all([toutEffacer('points'), toutEffacer('operations'),
+                         toutEffacer('traces'), toutEffacer('ops_traces'),
+                         toutEffacer('photos')])
                 .then(function () {
                     etat.pendants = [];
                     etat.conflits = [];
+                    etat.pendantsTraces = [];
+                    etat.conflitsTraces = [];
+                    etat.photosPendantes = [];
                     etat.derniereSync = null;
                     rafraichirPanneau();
                     majBadge();
@@ -657,12 +1135,16 @@
                 .then(function () {
                     return Promise.all([
                         lireTout('operations'),
+                        lireTout('ops_traces'),
+                        lireTout('photos'),
                         lireMeta('derniere_sync', null)
                     ]);
                 })
                 .then(function (results) {
                     etat.pendants = results[0];
-                    etat.derniereSync = results[1];
+                    etat.pendantsTraces = results[1];
+                    etat.photosPendantes = results[2];
+                    etat.derniereSync = results[3];
                     majBadge();
                 })
                 .catch(function (err) {
@@ -707,17 +1189,23 @@
         }
 
         init();
-        return {
+        var instance = {
             api: CORE,
             etat: etat,
+            estHorsLigne: function () { return !etat.enLigne; },
             telechargerZoneVisible: telechargerZoneVisible,
             synchroniser: synchroniser,
             enregistrerLocalement: enregistrerLocalement,
+            enregistrerTraceLocalement: enregistrerTraceLocalement,
+            ajouterPhotoLocalement: ajouterPhotoLocalement,
             detruire: function () {
                 if (elements.panneau) elements.panneau.remove();
                 effacerCouche();
             }
         };
+        global.MukmapOffline = global.MukmapOffline || {};
+        global.MukmapOffline.instance = instance;
+        return instance;
     }
 
     global.MukmapOffline = {CORE: CORE, demarrer: demarrer};
