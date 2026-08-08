@@ -44,6 +44,17 @@ class TestsPages(BaseCartographieTest):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(contenu.count('class="chevron"'), 2)
 
+    def test_points_liste_compteur_photos(self):
+        from cartographie.models import MediaPoint
+        from cartographie.tests.test_medias_points import jpeg_brut
+        fichier = jpeg_brut()
+        MediaPoint.objects.create(point=self.p1, type='photo', fichier=fichier)
+        MediaPoint.objects.create(point=self.p1, type='photo', fichier=jpeg_brut('b2.jpg'))
+        contenu = self.client.get('/points/').content.decode('utf-8', errors='replace')
+        self.assertIn('Photos', contenu, 'colonne Photos du tableau')
+        self.assertIn('class="badge">📷 2</span>', contenu, 'compteur 2 photos')
+        self.assertIn('Photos géoréférencées', contenu, 'détail de la ligne')
+
     def test_carte_contient_donnees_et_fonctions(self):
         contenu = self.page_carte()
         for marqueur in ('donneesPoints', 'extraireDonnees', 'htmlSectionsDonnees',

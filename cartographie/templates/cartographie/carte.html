@@ -1602,12 +1602,14 @@ document.getElementById('lightbox').addEventListener('click', () => document.get
 function popupPoint(p) {
     const extrasObj = extraireDonnees(p);
     const extras = extrasObj ? Object.entries(extrasObj) : [];
+    const nbPhotos = (p.medias || []).filter(m => m.type === 'photo').length;
     return `<div style="min-width:230px;max-height:420px;overflow-y:auto;font-family:'Inter',sans-serif;">
         ${p.photo ? `<img src="${p.photo}" style="width:100%;height:150px;object-fit:cover;border-radius:10px;margin-bottom:10px;">` : ''}
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <b style="font-size:.95rem;">${p.nom}</b>
             <span class="badge badge-cat" style="background:${CATS[p.categorie]?.couleur}">${CATS[p.categorie]?.emoji} ${(mukmapT && mukmapT('cat_' + p.categorie)) || CATS[p.categorie]?.nom || p.categorie}</span>
             <span class="badge">${(mukmapT && mukmapT('statut_' + p.statut)) || p.statut}</span>
+            ${nbPhotos ? `<span class="badge" title="${(mukmapT && mukmapT('photos')) || 'Photos'}">📷 ${nbPhotos}</span>` : ''}
         </div>
         ${p.projet ? `<div style="font-size:.72rem;color:var(--accent);margin-top:4px;">📁 ${p.projet}</div>` : ''}
         ${p.province ? `<div style="font-size:.75rem;color:var(--text-2);margin-top:4px;">📍 ${[p.province, p.commune, p.quartier].filter(Boolean).join(' · ')}</div>` : ''}
@@ -1663,6 +1665,7 @@ function afficherPanelPoint(p) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
             <span class="badge badge-cat" style="background:${CATS[p.categorie]?.couleur}">${CATS[p.categorie]?.emoji} ${(mukmapT && mukmapT('cat_' + p.categorie)) || CATS[p.categorie]?.nom || p.categorie}</span>
             <span class="badge">${(mukmapT && mukmapT('statut_' + p.statut)) || p.statut}</span>
+            ${nbPhotos ? `<span class="badge" title="${(mukmapT && mukmapT('photos')) || 'Photos'}">📷 ${nbPhotos}</span>` : ''}
         </div>
         <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('province')) || 'Province'}</span><span class="val">${p.province || '—'}</span></div>
         <div class="ligne-info"><span class="lib">${(mukmapT && mukmapT('commune')) || 'Commune'}</span><span class="val">${p.commune || '—'}</span></div>

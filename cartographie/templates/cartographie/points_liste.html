@@ -148,6 +148,7 @@
                         <th>Coordonnées</th>
                         <th data-i18n="agent_role">Agent</th>
                         <th data-i18n="date_heure">Date</th>
+                        <th style="width:70px;">📷 <span data-i18n="photos">Photos</span></th>
                         <th style="width:150px;">Actions</th>
                     </tr>
                 </thead>
@@ -164,6 +165,7 @@
                         <td class="coords">{{ p.latitude|floatformat:6 }}, {{ p.longitude|floatformat:6 }}</td>
                         <td>{% if p.auteur %}{{ p.auteur.get_full_name|default:p.auteur.username }}{% else %}—{% endif %}</td>
                         <td style="white-space:nowrap;">{{ p.date_creation|date:'d/m/Y H:i' }}</td>
+                        <td>{% if p.nb_photos %}<span class="badge">📷 {{ p.nb_photos }}</span>{% else %}—{% endif %}</td>
                         <td><div class="actions">
                             <a class="btn btn-sm btn-vert" href="{% url 'index_cartographie' %}?point={{ p.pk }}" data-i18n="voir_sur_carte">Voir sur la carte</a>
                             <a class="btn btn-sm" href="{% url 'point_edit' p.pk %}" data-i18n="modifier">Modifier</a>
@@ -171,7 +173,7 @@
                         </div></td>
                     </tr>
                     <tr class="ligne-detail" style="display:none;">
-                        <td colspan="11">
+                        <td colspan="12">
                             <div class="grille-details">
                                 <div class="ligne"><span class="cle">Catégorie</span><span class="val">{{ p.get_categorie_display }}</span></div>
                                 <div class="ligne"><span class="cle">État</span><span class="val">{{ p.get_statut_display }}</span></div>
@@ -183,6 +185,7 @@
                                 <div class="ligne"><span class="cle">Longitude</span><span class="val">{{ p.longitude }}</span></div>
                                 <div class="ligne"><span class="cle">Agent</span><span class="val">{% if p.auteur %}{{ p.auteur.get_full_name|default:p.auteur.username }}{% else %}—{% endif %}</span></div>
                                 <div class="ligne"><span class="cle">Date</span><span class="val">{{ p.date_creation|date:'d/m/Y H:i' }}</span></div>
+                                <div class="ligne"><span class="cle">Photos géoréférencées</span><span class="val">{% if p.nb_photos %}📷 {{ p.nb_photos }}{% else %}—{% endif %}</span></div>
                                 {% if p.description %}<div class="ligne" style="grid-column:1/-1;"><span class="cle">Description</span><span class="val">{{ p.description }}</span></div>{% endif %}
                                 {% if p.donnees %}
                                 <div style="grid-column:1/-1;margin-top:8px;">
@@ -197,7 +200,7 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="11">
+                    <tr><td colspan="12">
                         <div class="aucun"><div class="grand">🔍</div><div data-i18n="aucun_point_trouve">Aucun point ne correspond à votre recherche.</div></div>
                     </td></tr>
                 {% endfor %}

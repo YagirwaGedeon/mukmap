@@ -2965,7 +2965,10 @@ def importer_excel_v2(request):
 @login_required
 def points_liste(request):
     """Tableau de tous les points géographiques, tous projets confondus."""
-    qs = PointGeographique.objects.select_related('projet', 'auteur', 'activite')
+    qs = PointGeographique.objects.select_related('projet', 'auteur', 'activite').annotate(
+        nb_photos=db_models.Count('medias', filter=db_models.Q(medias__type='photo')),
+        nb_medias=db_models.Count('medias'),
+    )
 
     q = (request.GET.get('q') or '').strip()
     if q:
