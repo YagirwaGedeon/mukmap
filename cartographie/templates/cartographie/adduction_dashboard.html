@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projet d'adduction d'eau — MUKMAP v1.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #0e7490; --accent-2: #155e75;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+
+        #topbar {
+            position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px;
+            padding: 12px 22px; background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+            backdrop-filter: blur(14px); border-bottom: 1px solid var(--border);
+        }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .pastille { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(14,116,144,.4); }
+        .titre { font-weight: 800; font-size: 1rem; }
+        .sous-titre { font-size: .7rem; color: var(--text-3); }
+        nav { display: flex; gap: 6px; margin-left: 24px; flex-wrap: wrap; }
+        nav a {
+            text-decoration: none; color: var(--text-2); font-size: .8rem; font-weight: 600;
+            padding: 8px 14px; border-radius: 10px; transition: all .18s; display: flex; align-items: center; gap: 7px;
+        }
+        nav a:hover { background: var(--bg-3); color: var(--text); }
+        nav a.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; box-shadow: 0 4px 14px rgba(14,116,144,.35); }
+        .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+        .horloge { font-size: .75rem; font-weight: 600; color: var(--text-2); background: var(--bg-3); border: 1px solid var(--border); padding: 7px 12px; border-radius: 10px; letter-spacing: .5px; }
+
+        #bandeau-session { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; padding: 14px 22px; background: var(--bg-2); border-bottom: 1px solid var(--border); }
+        .bse { display: flex; align-items: center; gap: 10px; }
+        .bse-icone { width: 36px; height: 36px; border-radius: 10px; background: rgba(14,116,144,.15); color: var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .bse-icone.violet { background: rgba(109,93,246,.15); color: #6d5df6; }
+        .bse-icone.vert { background: rgba(34,197,94,.15); color: var(--green); }
+        .bse-icone.orange { background: rgba(245,158,11,.15); color: var(--orange); }
+        .bse-lib { font-size: .64rem; color: var(--text-3); text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+        .bse-val { font-size: .85rem; font-weight: 700; }
+        .bse-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+        button { font-family: 'Inter', Arial, sans-serif; cursor: pointer; border: none; background: none; color: var(--text); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: .83rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(14,116,144,.4); }
+        .btn-icon { width: 38px; height: 38px; padding: 0; border-radius: 10px; }
+
+        .conteneur { padding: 22px; max-width: 1500px; margin: 0 auto; }
+        .titre-page { font-size: 1.15rem; font-weight: 800; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+        .sous-titre-page { font-size: .8rem; color: var(--text-3); margin-bottom: 18px; }
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; display: flex; align-items: center; gap: 14px; transition: transform .2s; }
+        .kpi:hover { transform: translateY(-3px); }
+        .kpi .ico { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
+        .kpi .valeur { font-size: 1.5rem; font-weight: 800; }
+        .kpi .libelle { font-size: .72rem; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .6px; }
+        .kpi .ico.violet { background: rgba(109,93,246,.15); }
+        .kpi .ico.bleu { background: rgba(59,130,246,.15); }
+        .kpi .ico.vert { background: rgba(34,197,94,.15); }
+        .kpi .ico.rouge { background: rgba(239,68,68,.15); }
+        .kpi .ico.orange { background: rgba(245,158,11,.15); }
+        .kpi .ico.cyan { background: rgba(14,116,144,.15); }
+
+        .filtres { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 20px; box-shadow: var(--shadow); }
+        .filtres label { font-size: .7rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; display: block; }
+        .filtres select { min-width: 280px; padding: 9px 12px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .83rem; }
+
+        .grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+        .carte-chart { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; }
+        .carte-chart h3 { font-size: .85rem; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .chart { height: 300px; }
+        .chart-petit { height: 260px; }
+
+        .vide { text-align: center; color: var(--text-3); padding: 60px 20px; font-size: .95rem; }
+        .vide .grand { font-size: 2.4rem; margin-bottom: 12px; }
+
+        @media (max-width: 900px) { nav { display: none; } .grille { grid-template-columns: 1fr; } }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<header id="topbar">
+    <div class="logo">
+        <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+        <div>
+            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
+            <div class="sous-titre" data-i18n="adduction_dashboard_sous_titre">Projet d'adduction d'eau — Suivi & indicateurs</div>
+        </div>
+    </div>
+    <nav>
+        <a href="{% url 'adduction_dashboard' %}" class="actif"><i data-lucide="droplets"></i> <span data-i18n="adduction_dashboard">Adduction d'eau</span></a>
+        <a href="{% url 'dashboard' %}"><i data-lucide="layout-dashboard"></i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'points_liste' %}"><i data-lucide="map-pin"></i> <span data-i18n="tous_points">Tous les points</span></a>
+        <a href="{% url 'qualite_tableau' %}"><i data-lucide="badge-check"></i> <span data-i18n="qualite_donnees">Qualité des données</span></a>
+        <a href="{% url 'rapport_generer' %}"><i data-lucide="file-text"></i> <span data-i18n="rapports">Rapports</span></a>
+    </nav>
+    <div class="droite">
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <div class="horloge" id="horloge" title="Date et heure" data-i18n-title="date_heure">--/--/---- --:--:--</div>
+        <button class="btn btn-icon" id="btn-theme" title="Thème" data-i18n-title="theme"><i data-lucide="moon"></i></button>
+        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+    </div>
+</header>
+
+<section id="bandeau-session">
+    <div class="bse">
+        <div class="bse-icone"><i data-lucide="user"></i></div>
+        <div><div class="bse-lib" data-i18n="utilisateur">Utilisateur</div><div class="bse-val">{{ user.get_full_name|default:user.username }}</div></div>
+    </div>
+    <div class="bse">
+        <div class="bse-icone violet"><i data-lucide="droplets"></i></div>
+        <div><div class="bse-lib" data-i18n="adduction_projet_titre">Projet d'adduction d'eau</div><div class="bse-val">{{ projet.nom|default:'—' }}</div></div>
+    </div>
+    {% if projet and projet.zone_nom %}
+    <div class="bse">
+        <div class="bse-icone vert"><i data-lucide="map-pin"></i></div>
+        <div><div class="bse-lib" data-i18n="zone_intervention">Zone d'intervention</div><div class="bse-val">{{ projet.zone_nom }}</div></div>
+    </div>
+    {% endif %}
+    <div class="bse">
+        <div class="bse-icone orange"><i data-lucide="calendar-clock"></i></div>
+        <div><div class="bse-lib" data-i18n="date_heure">Date & heure</div><div class="bse-val" id="date-heure">{{ maintenant|default:'' }}</div></div>
+    </div>
+    <div class="bse-actions">
+        <a class="btn" href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="ouvrir_carte">Ouvrir la carte</span></a>
+        <a class="btn" href="{% url 'qualite_tableau' %}"><i data-lucide="badge-check"></i> <span data-i18n="qualite_donnees">Qualité des données</span></a>
+    </div>
+</section>
+
+<main class="conteneur">
+    <div class="titre-page"><i data-lucide="droplets" style="color:var(--accent);"></i> <span data-i18n="admission_dashboard_titre">Projet d'adduction d'eau</span></div>
+    <div class="sous-titre" data-i18n="admission_dashboard_hint">Indicateurs clés du projet, du réseau et de l'état des données collectées.</div>
+
+    <form class="filtres" method="GET" action="{% url 'adduction_dashboard' %}">
+        <div>
+            <label data-i18n="adduction_projet_titre">Projet d'adduction d'eau</label>
+            <select name="projet" onchange="this.form.submit()">
+                {% for p in projets %}<option value="{{ p.pk }}" {% if projet_selectionne == p.pk %}selected{% endif %}>{{ p.nom }}{% if p.zone_nom %} — {{ p.zone_nom }}{% endif %}</option>{% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary" data-i18n="filtrer">Filtrer</button>
+    </form>
+
+    {% if aucun_projet %}
+    <div class="carte-chart vide">
+        <div class="grand">💧</div>
+        <p data-i18n="admission_aucun_projet">Aucun projet d'adduction d'eau n'a encore été créé. Créez d'abord un projet depuis le module Adduction (💧 sur la carte).</p>
+    </div>
+    {% else %}
+    <div class="kpis">
+        <div class="kpi"><div class="ico cyan">💧</div><div><div class="valeur" id="kpi-sources">{{ kpis.sources }}</div><div class="libelle" data-i18n="kpi_sources">Sources</div></div></div>
+        <div class="kpi"><div class="ico vert">🏡</div><div><div class="valeur" id="kpi-villages">{{ kpis.villages }}</div><div class="libelle" data-i18n="kpi_villages">Villages</div></div></div>
+        <div class="kpi"><div class="ico violet">👥</div><div><div class="valeur" id="kpi-beneficiaires">{{ kpis.beneficiaires }}</div><div class="libelle" data-i18n="kpi_benef">Bénéficiaires</div></div></div>
+        <div class="kpi"><div class="ico bleu">🚰</div><div><div class="valeur" id="kpi-bornes">{{ kpis.bornes }}</div><div class="libelle" data-i18n="kpi_bornes">Bornes-fontaines</div></div></div>
+        <div class="kpi"><div class="ico orange">🛢️</div><div><div class="valeur" id="kpi-reservoirs">{{ kpis.reservoirs }}</div><div class="libelle" data-i18n="kpi_reservoirs">Réservoirs</div></div></div>
+        <div class="kpi"><div class="ico violet">🔗</div><div><div class="valeur" id="kpi-conduites">{{ kpis.conduites }}</div><div class="libelle" data-i18n="kpi_conduites">Conduites</div></div></div>
+        <div class="kpi"><div class="ico cyan">📏</div><div><div class="valeur" id="kpi-longueur">{{ kpis.longueur }} <small style="font-size:.65rem;color:var(--text-3);">km</small></div><div class="libelle" data-i18n="kpi_longueur">Longueur réseau</div></div></div>
+        <div class="kpi"><div class="ico vert">↔️</div><div><div class="valeur" id="kpi-distance">{{ kpis.distance_moyenne|default:'—' }} <small style="font-size:.65rem;color:var(--text-3);">{% if kpis.distance_moyenne %}m{% endif %}</small></div><div class="libelle" data-i18n="kpi_distance">Dist. moy. source-village</div></div></div>
+        <div class="kpi"><div class="ico violet">📍</div><div><div class="valeur" id="kpi-points">{{ kpis.points }}</div><div class="libelle" data-i18n="kpi_points_releves">Points relevés</div></div></div>
+        <div class="kpi"><div class="ico orange">📷</div><div><div class="valeur" id="kpi-photos">{{ kpis.photos }}</div><div class="libelle" data-i18n="kpi_photos">Photos</div></div></div>
+        <div class="kpi"><div class="ico rouge">🔍</div><div><div class="valeur" id="kpi-verifier">{{ kpis.verifier }}</div><div class="libelle" data-i18n="kpi_verifier">À vérifier</div></div></div>
+    </div>
+
+    <div class="grille">
+        <div class="carte-chart">
+            <h3><span>🏗️</span> <span data-i18n="repart_types">Répartition par type d'ouvrage</span></h3>
+            <div class="chart" id="chart-types"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>🧑‍🤝‍🧑</span> <span data-i18n="benef_villages">Bénéficiaires par village</span></h3>
+            <div class="chart" id="chart-villages"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>🔗</span> <span data-i18n="longueurs_conduites">Longueur des conduites (m)</span></h3>
+            <div class="chart" id="chart-conduites"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>🛠️</span> <span data-i18n="statuts_ouvrages">Ouvrages par état</span></h3>
+            <div class="chart" id="chart-statuts"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>📅</span> <span data-i18n="ouvrages_mois">Ouvrages par mois</span></h3>
+            <div class="chart chart-petit" id="chart-mois"></div>
+        </div>
+        <div class="carte-chart">
+            <h3><span>✔️</span> <span data-i18n="qualite_donnees">Qualité des données</span></h3>
+            <div class="chart chart-petit" id="chart-qualite"></div>
+        </div>
+    </div>
+    {% endif %}
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+const theme = localStorage.getItem('theme') || 'dark';
+document.documentElement.dataset.theme = theme;
+const ETHEME = theme === 'dark' ? {bg:'#171a2e', text:'#a3a9d0', titre:'#eef0ff', bord:'#2a2f52'} : {bg:'#ffffff', text:'#4b5278', titre:'#1a1f36', bord:'#e3e5f2'};
+document.getElementById('btn-theme').addEventListener('click', () => {
+    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+    location.reload();
+});
+
+const typesChart = {{ types_chart_json|safe }};
+const villagesChart = {{ villages_chart_json|safe }};
+const conduitesChart = {{ conduites_chart_json|safe }};
+const statutsChart = {{ statuts_chart_json|safe }};
+const moisChart = {{ mois_chart_json|safe }};
+const qualiteChart = {{ qualite_chart_json|safe }};
+
+const baseText = {color: ETHEME.text, fontFamily:'Inter'};
+const tooltip = {backgroundColor: ETHEME.bg, borderColor: ETHEME.bord, textStyle: {color: ETHEME.titre}};
+const couleursType = {source:'#0ea5e9', captage:'#22d3ee', borne:'#3b82f6', consommation:'#6366f1', reservoir:'#f59e0b', reseau:'#64748b', ouvrage:'#10b981', repere:'#84cc16', intermediaire:'#a3a9d0', village:'#22c55e'};
+
+if (typesChart.length) {
+    echarts.init(document.getElementById('chart-types'), null, {renderer:'canvas'}).setOption({
+        tooltip, legend:{textStyle:baseText, bottom:0},
+        series:[{type:'pie', radius:['42%','68%'], itemStyle:{borderRadius:8, borderColor:ETHEME.bg, borderWidth:3},
+            data: typesChart.map(t => ({name:t.nom, value:t.valeur, itemStyle:{color:couleursType[t.nom] || '#0e7490'}})),
+            label:{color:ETHEME.titre, fontFamily:'Inter', fontSize:11}}]
+    });
+}
+if (villagesChart.length) {
+    echarts.init(document.getElementById('chart-villages'), null, {renderer:'canvas'}).setOption({
+        tooltip, grid:{left:40, right:16, top:24, bottom:28},
+        xAxis:{type:'category', data: villagesChart.map(v => v.nom), axisLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10, rotate:25}},
+        yAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+        series:[{type:'bar', data: villagesChart.map(v => v.valeur), itemStyle:{color:'#22c55e', borderRadius:[6,6,0,0]}, barWidth:'50%'}]
+    });
+}
+if (conduitesChart.length) {
+    echarts.init(document.getElementById('chart-conduites'), null, {renderer:'canvas'}).setOption({
+        tooltip, grid:{left:40, right:16, top:24, bottom:60},
+        xAxis:{type:'category', data: conduitesChart.map(c => c.nom), axisLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:9, rotate:25}},
+        yAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+        series:[{type:'bar', data: conduitesChart.map(c => c.valeur), itemStyle:{color:'#0ea5e9', borderRadius:[6,6,0,0]}, barWidth:'45%'}]
+    });
+}
+if (statutsChart.length) {
+    echarts.init(document.getElementById('chart-statuts'), null, {renderer:'canvas'}).setOption({
+        tooltip, grid:{left:40, right:16, top:24, bottom:28},
+        xAxis:{type:'category', data: statutsChart.map(s => s.nom), axisLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10, rotate:20}},
+        yAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+        series:[{type:'bar', data: statutsChart.map(s => s.valeur), itemStyle:{color:'#f59e0b', borderRadius:[6,6,0,0]}, barWidth:'45%'}]
+    });
+}
+if (moisChart.length) {
+    echarts.init(document.getElementById('chart-mois'), null, {renderer:'canvas'}).setOption({
+        tooltip, grid:{left:40, right:16, top:24, bottom:28},
+        xAxis:{type:'category', data: moisChart.map(m => m.mois), axisLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+        yAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+        series:[{type:'line', smooth:true, data: moisChart.map(m => m.valeur), symbolSize:7,
+            lineStyle:{color:'#0e7490', width:3}, itemStyle:{color:'#0e7490'},
+            areaStyle:{color:'rgba(14,116,144,.18)'}}]
+    });
+}
+if (qualiteChart.some(q => q.valeur > 0)) {
+    echarts.init(document.getElementById('chart-qualite'), null, {renderer:'canvas'}).setOption({
+        tooltip, legend:{textStyle:baseText, bottom:0},
+        series:[{type:'pie', radius:'68%', itemStyle:{borderRadius:8, borderColor:ETHEME.bg, borderWidth:3},
+            data: qualiteChart.filter(q => q.valeur > 0), label:{color:ETHEME.titre, fontFamily:'Inter', fontSize:11}}]
+    });
+}
+
+function majHorloge() {
+    const n = new Date();
+    const p2 = v => String(v).padStart(2, '0');
+    const d = `${p2(n.getDate())}/${p2(n.getMonth() + 1)}/${n.getFullYear()} ${p2(n.getHours())}:${p2(n.getMinutes())}:${p2(n.getSeconds())}`;
+    const h = document.getElementById('horloge');
+    const dh = document.getElementById('date-heure');
+    if (h) h.textContent = d;
+    if (dh) dh.textContent = d;
+}
+majHorloge();
+setInterval(majHorloge, 1000);
+
+if (window.lucide) lucide.createIcons();
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>

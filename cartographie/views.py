@@ -723,6 +723,183 @@ def tableau_qualite(request):
     return render(request, 'cartographie/qualite_tableau.html', ctx)
 
 
+# ─── TABLEAU DE BORD DU PROJET D'ADDUCTION D'EAU ──────────────
+
+
+@login_required
+def adduction_dashboard(request):
+    """Tableau de bord du projet d'adduction d'eau : indicateurs clés
+    (sources, villages, bénéficiaires, bornes-fontaines, réservoirs,
+    conduites, longueurs, distances, photos, vérifications) + graphiques."""
+    from .models import (OuvrageHydraulique, TraceAdduction, ProjetAdduction,
+                         ReleveSource, ReleveVillage, ReleveConsommation,
+                         ReleveRepere, ReleveReservoir)
+    from . import qualite
+
+    projets = list(ProjetAdduction.objects.all().order_by('nom'))
+    pid = (request.GET.get('projet') or '').strip()
+    projet = None
+    if pid:
+        projet = next((p for p in projets if str(p.pk) == pid), None)
+    if projet is None and projets:
+        projet = projets[0]
+
+    # Stub si aucun projet : page vide mais accessible
+    if projet is None:
+        ctx = {
+            'projets': projets, 'projet': None,
+            'projet_selectionne': None,
+            'aucun_projet': True,
+            'kpis': {}, 'chart_types': '[]', 'chart_villages': '[]',
+            'chart_conduites': '[]', 'chart_statuts': '[]',
+            'chart_mois': '[]', 'chart_qualite': '[]',
+        }
+        _audit(request, "Consultation du tableau de bord adduction (aucun projet)")
+        return render(request, 'cartographie/adduction_dashboard.html', ctx)
+
+    ouvrages = list(projet.ouvrages.all())
+    traces = list(projet.tracs.all())
+
+    # ── Indicateurs clés ───────────────────────────────────────
+    nb_sources = sum(1 for o in ouvrages if o.type == 'source')
+    nb_villages = sum(1 for o in ouvrages if o.type == 'village')
+    nb_bornes = sum(1 for o in ouvrages if o.type == 'borne')
+    nb_reservoirs = sum(1 for o in ouvrages if o.type == 'reservoir')
+    nb_conduites = len(traces)
+    nb_points = len(ouvrages)
+
+    longueur_m = sum((t.longueur_m or 0) for t in traces)
+    longueur_totale = round(longueur_m / 1000.0, 2)
+
+    releve_villages = {rv.ouvrage_id: rv for rv in ReleveVillage.objects.filter(ouvrage__projet=projet)}
+    nb_beneficiaires = 0
+    for o in ouvrages:
+        rv = releve_villages.get(o.pk)
+        if o.type == 'village' and rv and rv.beneficiaires_estimes:
+            nb_beneficiaires += rv.beneficiaires_estimes
+        else:
+            nb_beneficiaires += o.beneficiaires or 0
+
+    # Photos : photo principale + photos des formulaires spécialisés
+    nb_photos = sum(1 for o in ouvrages if o.photo)
+    for rc in ReleveConsommation.objects.filter(ouvrage__projet=projet):
+        nb_photos += len(rc.photos or [])
+    for rrv in ReleveReservoir.objects.filter(ouvrage__projet=projet):
+        nb_photos += len(rrv.photos or [])
+    for rr in ReleveRepere.objects.filter(ouvrage__projet=projet):
+        if rr.photo:
+            nb_photos += 1
+
+    # Distance moyenne source → village (mesurée ou haversine au plus proche)
+    releve_sources = {rs.ouvrage_id: rs for rs in ReleveSource.objects.filter(ouvrage__projet=projet)}
+    sources = [o for o in ouvrages if o.type in ('source', 'captage')]
+    villages = [o for o in ouvrages if o.type == 'village']
+    distances = []
+    for s in sources:
+        rs = releve_sources.get(s.pk)
+        d = None
+        if rs and rs.distance_village_m:
+            d = rs.distance_village_m
+        elif villages:
+            distances_v = []
+            for v in villages:
+                if not qualite._coordonnees_valides(v.latitude, v.longitude):
+                    continue
+                dv = qualite._distance_m(s.latitude, s.longitude, v.latitude, v.longitude)
+                if dv is not None:
+                    distances_v.append(dv)
+            if distances_v:
+                d = min(distances_v)
+        if d is not None and d > 0:
+            distances.append(d)
+    distance_moyenne = round(sum(distances) / len(distances), 0) if distances else None
+
+    # Points nécessitant une vérification (module qualité)
+    releve_debits = set()
+    for reg_id in ReleveSource.objects.exclude(debit_mesure=None).values_list('ouvrage_id', flat=True):
+        releve_debits.add(reg_id)
+    for reg_id in ReleveConsommation.objects.exclude(debit_estime=None).values_list('ouvrage_id', flat=True):
+        releve_debits.add(reg_id)
+    res_ouv = qualite.evaluer_ouvrages(ouvrages, {i: True for i in releve_debits})
+    nb_verifier = sum(1 for _o, codes, _g in res_ouv
+                      if qualite.gravite_statut(codes) != qualite.GRAVITE_OK)
+    res_traces = qualite.evaluer_traces(traces, {projet.pk: ouvrages})
+    nb_verifier += sum(1 for _t, codes, _g in res_traces
+                       if qualite.gravite_statut(codes) != qualite.GRAVITE_OK)
+
+    kpis = {
+        'sources': nb_sources, 'villages': nb_villages,
+        'beneficiaires': nb_beneficiaires, 'bornes': nb_bornes,
+        'reservoirs': nb_reservoirs, 'conduites': nb_conduites,
+        'longueur': longueur_totale, 'distance_moyenne': distance_moyenne,
+        'points': nb_points, 'photos': nb_photos, 'verifier': nb_verifier,
+    }
+
+    # ── Données des graphiques ──────────────────────────────────
+    type_labels = dict(OuvrageHydraulique.TYPE_CHOICES) if OuvrageHydraulique else {}
+    par_type = {}
+    for o in ouvrages:
+        par_type[o.type] = par_type.get(o.type, 0) + 1
+    types_chart = [{'nom': type_labels.get(k, k), 'valeur': v}
+                   for k, v in sorted(par_type.items(), key=lambda x: -x[1])]
+
+    statut_labels = dict(OuvrageHydraulique.STATUT_CHOICES) if OuvrageHydraulique else {}
+    par_statut = {}
+    for o in ouvrages:
+        par_statut[o.statut] = par_statut.get(o.statut, 0) + 1
+    statuts_chart = [{'nom': statut_labels.get(k, k or '—'), 'valeur': v}
+                     for k, v in sorted(par_statut.items(), key=lambda x: -x[1])]
+
+    villages_chart = []
+    for o in sorted(ouvrages, key=lambda x: -(x.beneficiaires or 0))[:10]:
+        if o.type != 'village':
+            continue
+        rv = releve_villages.get(o.pk)
+        benef = (rv.beneficiaires_estimes if rv and rv.beneficiaires_estimes
+                 else o.beneficiaires or 0)
+        villages_chart.append({'nom': o.nom, 'valeur': benef})
+    if len(villages_chart) < 1:
+        villages_chart = [{'nom': o.nom, 'valeur': o.beneficiaires or 0}
+                          for o in sorted([x for x in ouvrages if x.type == 'village'],
+                                          key=lambda x: -(x.beneficiaires or 0))[:10]]
+
+    conduites_chart = [{'nom': (t.nom or 'Tracé #' + str(t.pk)),
+                        'valeur': round(t.longueur_m or 0, 1)}
+                       for t in sorted(traces, key=lambda x: -(x.longueur_m or 0))[:10]]
+
+    mois_chart = []
+    for m in reversed(list(projet.ouvrages.annotate(mois=TruncMonth('date_releve'))
+                           .values('mois').annotate(total=db_models.Count('id'))
+                           .order_by('-mois')[:12])):
+        mois_chart.append({'mois': m['mois'].strftime('%m/%Y'), 'valeur': m['total']})
+
+    nb_ok = sum(1 for _o, codes, _g in res_ouv if qualite.gravite_statut(codes) == qualite.GRAVITE_OK)
+    nb_av = sum(1 for _o, codes, _g in res_ouv if qualite.gravite_statut(codes) == qualite.GRAVITE_A_VERIFIER)
+    nb_err = sum(1 for _o, codes, _g in res_ouv if qualite.gravite_statut(codes) == qualite.GRAVITE_ERREUR)
+    qualite_chart = [
+        {'nom': 'Conforme', 'valeur': nb_ok, 'couleur': '#22c55e'},
+        {'nom': 'À vérifier', 'valeur': nb_av, 'couleur': '#f59e0b'},
+        {'nom': 'Erreur', 'valeur': nb_err, 'couleur': '#ef4444'},
+    ]
+
+    ctx = {
+        'projets': projets, 'projet': projet,
+        'projet_selectionne': projet.pk,
+        'aucun_projet': False,
+        'maintenant': timezone.now(),
+        'kpis': kpis,
+        'types_chart_json': json.dumps(types_chart, ensure_ascii=False),
+        'villages_chart_json': json.dumps(villages_chart, ensure_ascii=False),
+        'conduites_chart_json': json.dumps(conduites_chart, ensure_ascii=False),
+        'statuts_chart_json': json.dumps(statuts_chart, ensure_ascii=False),
+        'mois_chart_json': json.dumps(mois_chart, ensure_ascii=False),
+        'qualite_chart_json': json.dumps(qualite_chart, ensure_ascii=False),
+    }
+    _audit(request, "Consultation du tableau de bord adduction",
+           f"Projet #{projet.pk} - {projet.nom}")
+    return render(request, 'cartographie/adduction_dashboard.html', ctx)
+
+
 # ─── ACTIVITÉS ─────────────────────────────────────────────────
 
 

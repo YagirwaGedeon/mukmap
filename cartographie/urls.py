@@ -37,6 +37,7 @@ urlpatterns = [
 
     path('dashboard/', views.dashboard, name='dashboard'),
     path('qualite/', views.tableau_qualite, name='qualite_tableau'),
+    path('adduction/dashboard/', views.adduction_dashboard, name='adduction_dashboard'),
 
     path('point/<int:pk>/edit/', views.point_edit, name='point_edit'),
     path('point/<int:pk>/supprimer/', views.point_delete, name='point_delete'),
