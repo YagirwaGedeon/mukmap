@@ -3,6 +3,7 @@ from . import views
 from . import api_points
 from . import offline
 from . import water_supply
+from . import api_audit
 
 urlpatterns = [
     path('', views.index_cartographie, name='index_cartographie'),
@@ -116,4 +117,7 @@ urlpatterns = [
     path('api/adduction/traces/', water_supply.liste_traces, name='api_adduction_traces'),
     path('api/adduction/traces/<int:pk>/', water_supply.detail_trace, name='api_adduction_trace'),
     path('api/adduction/traces/<int:pk>/profil.pdf', water_supply.export_profil_pdf, name='api_adduction_profil_pdf'),
+
+    # ── Fiche détaillée d'un élément (historique d'audit) ─────
+    path('api/audit/objet/', api_audit.historique_objet, name='api_audit_objet'),
 ]

@@ -359,6 +359,7 @@ def index_cartographie(request):
             "id": p.pk, "nom": p.nom, "description": p.description,
             "latitude": p.latitude, "longitude": p.longitude,
             "photo": p.photo.url if p.photo else '',
+            "precision_gps_m": p.precision_gps_m,
             "categorie": p.categorie, "statut": p.statut,
             "province": p.province, "commune": p.commune, "quartier": p.quartier,
             "projet": p.projet.nom if p.projet else '',

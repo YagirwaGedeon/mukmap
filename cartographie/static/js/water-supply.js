@@ -3288,9 +3288,36 @@ function majVillagesCarte() {
         });
         panneau.style.display = 'none';
 
+        // ── Fiche detaillee : edition directe d'un ouvrage ──
+        function afficherEdition(o) {
+            panneau.style.display = 'flex';
+            choisirOnglet('collecte');
+            editerOuvrage(o);
+        }
+        ouvrirEdition = function (id) {
+            id = Number(id);
+            for (var i = 0; i < ouvrages.length; i++) {
+                if (Number(ouvrages[i].id) === id) { afficherEdition(ouvrages[i]); return; }
+            }
+            getJ(apiOuvrages + id + '/').then(function (o) {
+                ouvrages.push(o);
+                afficherEdition(o);
+            }).catch(function () { message('Ouvrage indisponible.', 'erreur'); });
+        };
+        enInteraction = function () {
+            return !!(enDessinGeom || enTrace || mesureClicActif || reseauRelierActif);
+        };
+
         chargerProjets();
         return panneau;
     }
 
-    global.MukmapWaterSupply = { CORE: CORE, demarrer: demarrer, TYPES: TYPES, STATUTS: STATUTS };
+    var ouvrirEdition = null;
+    var enInteraction = null;
+
+    global.MukmapWaterSupply = {
+        CORE: CORE, demarrer: demarrer, TYPES: TYPES, STATUTS: STATUTS,
+        get ouvrirEdition() { return ouvrirEdition; },
+        get enInteraction() { return enInteraction; }
+    };
 })(typeof window !== 'undefined' ? window : globalThis);
