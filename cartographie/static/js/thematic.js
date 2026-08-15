@@ -976,6 +976,11 @@
             panneau.style.display = 'none';
         });
         panneau.style.display = 'none';
+
+        if (window.MukmapDeplacer && window.MukmapDeplacer.deplacer) {
+            window.MukmapDeplacer.deplacer(bouton);
+            window.MukmapDeplacer.deplacer(panneau, panneau.querySelector('.th-tete'));
+        }
         return panneau;
     }
 

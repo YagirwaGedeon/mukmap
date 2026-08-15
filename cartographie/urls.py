@@ -82,6 +82,7 @@ urlpatterns = [
     path('import/choix-colonnes/', views.import_choix_colonnes, name='import_choix_colonnes'),
     path('geometrie/couche/<int:pk>/supprimer/', views.couche_delete, name='couche_delete'),
     path('geometrie/donnees/', views.geometrie_donnees, name='geometrie_donnees'),
+    path('points/donnees/', views.points_donnees, name='points_donnees'),
     path('dessin/sauvegarder/', views.dessin_save, name='dessin_save'),
     path('geometrie/<int:pk>/supprimer/', views.geometrie_delete, name='geometrie_delete'),
 

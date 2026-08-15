@@ -314,6 +314,43 @@ def _creer_medias_point(point, fichiers, utilisateur=None, commentaire='', date_
         )
 
 
+def _serialiser_points_carte(points):
+    """Sérialise une queryset de PointGeographique au format attendu par la carte."""
+    return [
+        {
+            "id": p.pk, "nom": p.nom, "description": p.description,
+            "latitude": p.latitude, "longitude": p.longitude,
+            "photo": p.photo.url if p.photo else '',
+            "precision_gps_m": p.precision_gps_m,
+            "categorie": p.categorie, "statut": p.statut,
+            "province": p.province, "commune": p.commune, "quartier": p.quartier,
+            "projet": p.projet.nom if p.projet else '',
+            "projet_id": p.projet_id,
+            "donnees": p.donnees or {},
+            "source_fichier": p.source_fichier,
+            "source_format": p.source_format,
+            "medias": [{"url": m.fichier.url, "type": m.type,
+                        "date_prise": m.date_prise.strftime('%d/%m/%Y %H:%M') if m.date_prise else '',
+                        "date_upload": m.date_upload.strftime('%d/%m/%Y %H:%M'),
+                        "latitude": m.latitude, "longitude": m.longitude,
+                        "utilisateur": (m.utilisateur.get_full_name() or m.utilisateur.username) if m.utilisateur else '',
+                        "commentaire": m.commentaire} for m in p.medias.all()],
+            "auteur": p.auteur.get_full_name() or p.auteur.username if p.auteur else 'Anonyme',
+            "date": p.date_creation.strftime('%d/%m/%Y %H:%M'),
+        }
+        for p in points
+    ]
+
+
+def points_donnees(request):
+    """JSON des points pour recharger la carte après un import AJAX."""
+    qs = PointGeographique.objects.select_related('auteur', 'projet').prefetch_related('medias')
+    projet_actif = _projet_actif(request)
+    if projet_actif is not None:
+        qs = qs.filter(projet=projet_actif)
+    return JsonResponse(_serialiser_points_carte(qs), safe=False)
+
+
 def index_cartographie(request):
     est_invite = not request.user.is_authenticated
     projet_actif = _projet_actif(request)
@@ -377,30 +414,7 @@ def index_cartographie(request):
         couches_qs = couches_qs.none()
 
     points = points_qs.all()
-    points_liste = [
-        {
-            "id": p.pk, "nom": p.nom, "description": p.description,
-            "latitude": p.latitude, "longitude": p.longitude,
-            "photo": p.photo.url if p.photo else '',
-            "precision_gps_m": p.precision_gps_m,
-            "categorie": p.categorie, "statut": p.statut,
-            "province": p.province, "commune": p.commune, "quartier": p.quartier,
-            "projet": p.projet.nom if p.projet else '',
-            "projet_id": p.projet_id,
-            "donnees": p.donnees or {},
-            "source_fichier": p.source_fichier,
-            "source_format": p.source_format,
-            "medias": [{"url": m.fichier.url, "type": m.type,
-                        "date_prise": m.date_prise.strftime('%d/%m/%Y %H:%M') if m.date_prise else '',
-                        "date_upload": m.date_upload.strftime('%d/%m/%Y %H:%M'),
-                        "latitude": m.latitude, "longitude": m.longitude,
-                        "utilisateur": (m.utilisateur.get_full_name() or m.utilisateur.username) if m.utilisateur else '',
-                        "commentaire": m.commentaire} for m in p.medias.all()],
-            "auteur": p.auteur.get_full_name() or p.auteur.username if p.auteur else 'Anonyme',
-            "date": p.date_creation.strftime('%d/%m/%Y %H:%M'),
-        }
-        for p in points
-    ]
+    points_liste = _serialiser_points_carte(points)
 
     activites = activites_qs.all()
     activites_json = [
@@ -1209,8 +1223,11 @@ def api_activites_suggestions(request):
 def importer_fichier(request):
     if request.method != "POST":
         return redirect('index_cartographie')
+    est_ajax = request.POST.get('ajax') == '1' or request.GET.get('ajax') == '1'
     fichier = request.FILES.get('fichier_import')
     if not fichier:
+        if est_ajax:
+            return JsonResponse({'ok': False, 'erreur': "Aucun fichier sélectionné."}, status=400)
         messages.error(request, "Aucun fichier sélectionné.")
         return redirect('index_cartographie')
 
@@ -1223,13 +1240,19 @@ def importer_fichier(request):
         elif nom_fichier.endswith('.kml'):
             points = _parser_kml(contenu)
         else:
+            if est_ajax:
+                return JsonResponse({'ok': False, 'erreur': "Format non supporté. Utilisez .geojson ou .kml."}, status=400)
             messages.error(request, "Format non supporté. Utilisez .geojson ou .kml.")
             return redirect('index_cartographie')
     except Exception:
+        if est_ajax:
+            return JsonResponse({'ok': False, 'erreur': "Fichier invalide ou corrompu."}, status=400)
         messages.error(request, "Fichier invalide ou corrompu.")
         return redirect('index_cartographie')
 
     if not points:
+        if est_ajax:
+            return JsonResponse({'ok': False, 'erreur': "Aucun point valide trouvé dans le fichier."}, status=400)
         messages.warning(request, "Aucun point valide trouvé.")
         return redirect('index_cartographie')
 
@@ -1253,6 +1276,8 @@ def importer_fichier(request):
             continue
 
     _audit(request, "Import fichier", f"{inserer} points depuis {nom_fichier}")
+    if est_ajax:
+        return JsonResponse({'ok': True, 'importes': inserer, 'fichier': fichier.name})
     messages.success(request, f"{inserer} point(s) importé(s) avec succès.")
     return redirect('index_cartographie')
 

@@ -13,6 +13,14 @@ class PointGeographique(models.Model):
         ('pont', 'Pont'), ('route', 'Route'), ('entreprise', 'Entreprise'),
         ('zone_rouge', 'Zone rouge'), ('zone_verte', 'Zone verte'),
         ('zone_orange', 'Zone orange'), ('autre', 'Autre'),
+        ('batiment', 'Bâtiment'), ('centre_sante', 'Centre de santé'),
+        ('poteau', 'Poteau'), ('arbre', 'Arbre'), ('parcelle', 'Parcelle'),
+        ('repere_geodesique', 'Repère géodésique'), ('point_altitude', "Point d'altitude"),
+        ('courbe_niveau', 'Courbe de niveau'), ('zone_leve', 'Zone de levé'),
+        ('station', 'Station topographique'), ('point_gps', 'Point GPS/GNSS'),
+        ('point_topo', 'Point topographique'), ('reseau_eau', 'Ouvrage réseau eau'),
+        ('borne_fontaine', 'Borne-fontaine'), ('reservoir_eau', 'Réservoir d’eau'),
+        ('captage_eau', 'Captage / source'),
     ]
     STATUT_CHOICES = [
         ('actif', 'Actif'), ('inactif', 'Inactif'),

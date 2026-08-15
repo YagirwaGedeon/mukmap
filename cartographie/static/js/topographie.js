@@ -340,13 +340,13 @@
         p.querySelectorAll('[data-mesure]').forEach(function (b) {
             b.addEventListener('click', function () { activerMode(b.getAttribute('data-mesure')); });
         });
-        document.getElementById('btn-topo-fermer').addEventListener('click', function () {
+        p.querySelector('#btn-topo-fermer').addEventListener('click', function () {
             p.classList.remove('ouvert');
             activerMode(null);
             if (window.lucide) window.lucide.createIcons();
         });
-        document.getElementById('btn-topo-terminer').addEventListener('click', terminerMesure);
-        document.getElementById('btn-topo-effacer').addEventListener('click', effacerMesure);
+        p.querySelector('#btn-topo-terminer').addEventListener('click', terminerMesure);
+        p.querySelector('#btn-topo-effacer').addEventListener('click', effacerMesure);
         return p;
     }
 
@@ -715,7 +715,7 @@
                     if (ev.key === 'Escape' && ModeActif) activerMode(null);
                 });
                 if (window.lucide) window.lucide.createIcons();
-            } catch (e) {}
+            } catch (e) { console.error('[topographie] erreur installation:', e); }
         };
         if (map.loaded()) { poser(); } else { map.on('load', poser); }
     }

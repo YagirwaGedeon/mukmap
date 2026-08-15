@@ -142,7 +142,51 @@
         .bm-btn.btn-fonds-pro:hover { color: var(--accent); border-color: var(--accent); }
         .bm-btn.btn-fonds-pro [data-lucide] { width: 14px; height: 14px; }
 
-        #outils-dessin { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        #outils-dessin { display: flex; flex-direction: column; gap: 6px; }
+        #outils-dessin .btn-tool { width: 100%; height: auto; justify-content: flex-start; gap: 8px; padding: 7px 9px; border-radius: 8px; font-size: .72rem; font-weight: 600; text-align: left; }
+        #outils-dessin .btn-tool.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; box-shadow: 0 4px 16px rgba(79,70,229,.4); }
+        #outils-dessin .btn-tool.active .p-sous { color: rgba(255,255,255,.85); }
+        #outils-dessin .btn-tool .p-nom { flex: 1; }
+        #outils-dessin .btn-tool .p-sous { font-size: .64rem; opacity: .7; display: block; font-weight: 500; }
+
+        /* ── MUKMAP : groupes d'outils (dropdowns) ── */
+        .groupe-outils { border: 1px solid var(--border); border-radius: 11px; margin-bottom: 8px; background: var(--bg-3); overflow: hidden; }
+        .groupe-outils summary {
+            display: flex; align-items: center; gap: 8px; padding: 9px 11px; cursor: pointer;
+            font-size: .76rem; font-weight: 700; color: var(--text); list-style: none; user-select: none;
+            background: color-mix(in srgb, var(--bg-2) 55%, transparent);
+        }
+        .groupe-outils summary::-webkit-details-marker { display: none; }
+        .groupe-outils summary::after { content: '▸'; margin-left: auto; color: var(--text-3); transition: transform .2s; }
+        .groupe-outils[open] summary::after { transform: rotate(90deg); }
+        .groupe-outils summary [data-lucide] { width: 14px; height: 14px; color: var(--accent); }
+        .groupe-outils .g-corps { padding: 8px; border-top: 1px solid var(--border); }
+        .grille-outils { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .liste-outils { display: flex; flex-direction: column; gap: 6px; }
+        .btn-poser {
+            display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--bg-2); color: var(--text-2);
+            font-size: .72rem; font-weight: 600; cursor: pointer; text-align: left; transition: all .15s;
+        }
+        .btn-poser:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-poser.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
+        .btn-poser .p-icone { font-size: .95rem; width: 18px; text-align: center; flex-shrink: 0; }
+        .btn-poser .p-nom { flex: 1; }
+        .btn-poser .p-sous { font-size: .64rem; opacity: .7; display: block; font-weight: 500; }
+        .btn-export {
+            display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--bg-2); color: var(--text-2);
+            font-size: .72rem; font-weight: 600; cursor: pointer; text-align: left; transition: all .15s;
+        }
+        .btn-export:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-export [data-lucide] { width: 13px; height: 13px; }
+        .btn-export .p-nom { flex: 1; }
+
+        #menu-pose { position: absolute; z-index: 2000; display: none; width: 250px; padding: 12px; }
+        #menu-pose.ouvert { display: block; }
+        #menu-pose input[type=text], #menu-pose textarea { width: 100%; margin-bottom: 6px; }
+        #menu-pose .mp-actions { display: flex; gap: 6px; }
+        #menu-pose .mp-actions .btn { flex: 1; justify-content: center; font-size: .7rem; padding: 7px; }
         #mesure-barre {
             position: absolute; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 1002;
             display: none; align-items: center; gap: 12px; padding: 10px 18px;
@@ -513,17 +557,22 @@
         </style>
 
         <hr class="separateur">
-        <div class="titre-section"><span data-i18n="filtres">Filtres dynamiques</span> <button class="btn btn-sm btn-ghost" onclick="reinitialiserFiltres()" style="color:var(--accent);font-size:.72rem;" data-i18n="reinitialiser">Réinitialiser</button></div>
-        <div id="filtres">
-            <select id="f-categorie"><option value="" data-i18n="toutes_categories">Toutes les catégories</option></select>
-            <select id="f-statut"><option value="" data-i18n="tous_etats">Tous les états</option></select>
-            <select id="f-province"><option value="" data-i18n="toutes_provinces">Toutes les provinces</option></select>
-            <select id="f-agent"><option value="" data-i18n="tous_agents">Tous les agents</option></select>
-            <div class="filtre-row">
-                <input type="date" id="f-debut" title="Du" data-i18n-title="du">
-                <input type="date" id="f-fin" title="Au" data-i18n-title="au">
+        <details class="groupe-outils" open>
+            <summary><span data-lucide="sliders-horizontal"></span> <span data-i18n="filtres">Filtres dynamiques</span></summary>
+            <div class="g-corps">
+                <div style="text-align:right;margin-bottom:4px;"><button class="btn btn-sm btn-ghost" onclick="reinitialiserFiltres()" style="color:var(--accent);font-size:.72rem;" data-i18n="reinitialiser">Réinitialiser</button></div>
+                <div id="filtres">
+                    <select id="f-categorie"><option value="" data-i18n="toutes_categories">Toutes les catégories</option></select>
+                    <select id="f-statut"><option value="" data-i18n="tous_etats">Tous les états</option></select>
+                    <select id="f-province"><option value="" data-i18n="toutes_provinces">Toutes les provinces</option></select>
+                    <select id="f-agent"><option value="" data-i18n="tous_agents">Tous les agents</option></select>
+                    <div class="filtre-row">
+                        <input type="date" id="f-debut" title="Du" data-i18n-title="du">
+                        <input type="date" id="f-fin" title="Au" data-i18n-title="au">
+                    </div>
+                </div>
             </div>
-        </div>
+        </details>
 
         <hr class="separateur">
         {% if est_invite %}
@@ -534,18 +583,78 @@
             <a class="btn btn-primary btn-sm" href="{% url 'connexion' %}" style="margin-top:10px;width:100%;"><span data-lucide="log-in"></span> <span data-i18n="se_connecter">Se connecter</span></a>
         </div>
         {% else %}
-        <div class="titre-section" data-i18n="dessiner_mesurer">Dessiner & mesurer</div>
+        <details class="groupe-outils" open>
+            <summary><span data-lucide="pen-tool"></span> <span data-i18n="outils_terrain">Outils de terrain</span></summary>
+            <div class="g-corps" style="padding:6px;">
         <div id="outils-dessin">
-            <button class="btn-tool" data-mode="point" title="Point" data-i18n-title="point"><span data-lucide="map-pin"></span></button>
-            <button class="btn-tool" data-mode="line" title="Ligne" data-i18n-title="ligne"><span data-lucide="route"></span></button>
-            <button class="btn-tool" data-mode="polygon" title="Polygone" data-i18n-title="polygone"><span data-lucide="hexagon"></span></button>
-            <button class="btn-tool" data-mode="circle" title="Cercle" data-i18n-title="cercle"><span data-lucide="circle"></span></button>
-            <button class="btn-tool" data-mode="rectangle" title="Rectangle" data-i18n-title="rectangle"><span data-lucide="square"></span></button>
-            <button class="btn-tool" data-mode="distance" title="Mesurer une distance" data-i18n-title="mesurer_distance"><span data-lucide="ruler"></span></button>
-            <button class="btn-tool" data-mode="area" title="Mesurer une surface" data-i18n-title="mesurer_surface"><span data-lucide="scan-line"></span></button>
-            <button class="btn-tool" data-mode="erase" title="Supprimer un dessin" data-i18n-title="supprimer_dessin"><span data-lucide="eraser"></span></button>
+            <details class="groupe-outils" open>
+                <summary><span data-lucide="pen-tool"></span> <span data-i18n="dessin">Dessin</span></summary>
+                <div class="g-corps liste-outils">
+                    <button class="btn-tool" data-mode="point" title="Point" data-i18n-title="point"><span data-lucide="map-pin" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="point">Point</span><span class="p-sous" data-i18n="dessin_msg_point">Cliquez pour placer le point.</span></span></button>
+                    <button class="btn-tool" data-mode="line" title="Ligne" data-i18n-title="ligne"><span data-lucide="route" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="ligne">Ligne</span><span class="p-sous" data-i18n="dessin_msg_ligne">Cliquez pour tracer la ligne. Double-clic pour terminer.</span></span></button>
+                    <button class="btn-tool" data-mode="polyline" title="Polyligne" data-i18n-title="polyligne"><span data-lucide="git-branch" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span>Polyligne</span><span class="p-sous" data-i18n="dessin_msg_polyligne">Cliquez pour tracer la polyligne. Double-clic pour terminer.</span></span></button>
+                    <button class="btn-tool" data-mode="polygon" title="Polygone" data-i18n-title="polygone"><span data-lucide="hexagon" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="polygone">Polygone</span><span class="p-sous" data-i18n="dessin_msg_polygone">Cliquez pour tracer le polygone. Double-clic pour terminer.</span></span></button>
+                    <button class="btn-tool" data-mode="circle" title="Cercle" data-i18n-title="cercle"><span data-lucide="circle" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="cercle">Cercle</span><span class="p-sous" data-i18n="dessin_msg_cercle">Cliquez pour le centre, puis un 2ᵉ clic pour le rayon.</span></span></button>
+                    <button class="btn-tool" data-mode="rectangle" title="Rectangle" data-i18n-title="rectangle"><span data-lucide="square" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="rectangle">Rectangle</span><span class="p-sous" data-i18n="dessin_msg_rectangle">Cliquez pour un coin, puis un 2ᵉ clic pour le coin opposé.</span></span></button>
+                </div>
+            </details>
+            <details class="groupe-outils">
+                <summary><span data-lucide="ruler"></span> <span data-i18n="mesures">Mesures</span></summary>
+                <div class="g-corps liste-outils">
+                    <button class="btn-tool" data-mode="distance" title="Distance" data-i18n-title="mesurer_distance"><span data-lucide="ruler" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="distance">Distance</span><span class="p-sous" data-i18n="dessin_msg_distance">Cliquez pour mesurer. Double-clic pour terminer.</span></span></button>
+                    <button class="btn-tool" data-mode="area" title="Surface" data-i18n-title="mesurer_surface"><span data-lucide="scan-line" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="surface">Surface</span><span class="p-sous" data-i18n="dessin_msg_surface">Cliquez pour mesurer la surface. Double-clic pour terminer.</span></span></button>
+                    <button class="btn-tool" data-mode="rayon" title="Rayon" data-i18n-title="mesurer_rayon"><span data-lucide="radar" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="mesurer_rayon">Rayon</span><span class="p-sous" data-i18n="mesure_msg_rayon">Cliquez le centre puis un 2ᵉ point pour le rayon. Double-clic pour terminer.</span></span></button>
+                    <button class="btn-tool" data-mode="angle" title="Angle" data-i18n-title="mesurer_angle"><span data-lucide="rotate-cw" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="mesurer_angle">Angle</span><span class="p-sous" data-i18n="mesure_msg_angle">Cliquez 3 points (sommet au 2ᵉ). Double-clic pour terminer.</span></span></button>
+                    <button class="btn-tool" data-mode="azimut" title="Azimut" data-i18n-title="mesurer_azimut"><span data-lucide="navigation" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="mesurer_azimut">Azimut</span><span class="p-sous" data-i18n="mesure_msg_azimut">Cliquez le départ puis la direction. Double-clic pour terminer.</span></span></button>
+                    <button class="btn-tool" data-mode="perimetre" title="Périmètre" data-i18n-title="mesurer_perimetre"><span data-lucide="refresh-ccw" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="perimetre">Périmètre</span><span class="p-sous" data-i18n="mesure_msg_perimetre">Cliquez pour mesurer le périmètre. Double-clic pour terminer.</span></span></button>
+                </div>
+            </details>
+            <details class="groupe-outils">
+                <summary><span data-lucide="triangle"></span> <span data-i18n="topographie">Topographie</span></summary>
+                <div class="g-corps liste-outils">
+                    <button type="button" class="btn-poser" data-poser="point_topo"><span class="p-icone">📍</span><span class="p-nom">Point topographique<span class="p-sous" data-i18n="poser_point">Poser un point sur la carte</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="repere_geodesique"><span class="p-icone">📐</span><span class="p-nom">Repère géodésique<span class="p-sous" data-i18n="poser_repere">Repère de référence</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="point_altitude"><span class="p-icone">⛰️</span><span class="p-nom">Point d'altitude<span class="p-sous" data-i18n="poser_altitude">Altitude au point</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="courbe_niveau"><span class="p-icone">〰️</span><span class="p-nom">Courbe de niveau<span class="p-sous" data-i18n="poser_courbe">Courbe iso-altitude</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="profil"><span class="p-icone">📈</span><span class="p-nom">Profil en long / travers<span class="p-sous" data-i18n="poser_profil">Profil altimétrique</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="zone_leve"><span class="p-icone">🔲</span><span class="p-nom">Zone de levé<span class="p-sous" data-i18n="poser_zone_leve">Emprise de levé topo</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="station"><span class="p-icone">📡</span><span class="p-nom">Station topographique<span class="p-sous" data-i18n="poser_station">Station de mesure</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="point_gps"><span class="p-icone">🛰️</span><span class="p-nom">Point GPS/GNSS<span class="p-sous" data-i18n="poser_gps">Relevé GPS différentiel</span></span></button>
+                </div>
+            </details>
+            <details class="groupe-outils">
+                <summary><span data-lucide="building-2"></span> <span data-i18n="infrastructures">Infrastructures</span></summary>
+                <div class="g-corps liste-outils">
+                    <button type="button" class="btn-poser" data-poser="route"><span class="p-icone">🛣️</span><span class="p-nom">Route<span class="p-sous" data-i18n="poser_route">Axe routier</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="pont"><span class="p-icone">🌉</span><span class="p-nom">Pont<span class="p-sous" data-i18n="poser_pont">Ouvrage d'art</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="batiment"><span class="p-icone">🏢</span><span class="p-nom">Bâtiment<span class="p-sous" data-i18n="poser_batiment">Construction</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="ecole"><span class="p-icone">🏫</span><span class="p-nom">École<span class="p-sous" data-i18n="poser_ecole">Établissement scolaire</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="centre_sante"><span class="p-icone">🏥</span><span class="p-nom">Centre de santé<span class="p-sous" data-i18n="poser_sante">Établissement sanitaire</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="poteau"><span class="p-icone">⚡</span><span class="p-nom">Poteau<span class="p-sous" data-i18n="poser_poteau">Poteau électrique / réseau</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="arbre"><span class="p-icone">🌳</span><span class="p-nom">Arbre<span class="p-sous" data-i18n="poser_arbre">Arbre remarquable</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="parcelle"><span class="p-icone">🗺️</span><span class="p-nom">Parcelle<span class="p-sous" data-i18n="poser_parcelle">Parcelle cadastrale</span></span></button>
+                </div>
+            </details>
+            <details class="groupe-outils">
+                <summary><span data-lucide="droplets"></span> <span data-i18n="reseau_eau">Réseau eau</span></summary>
+                <div class="g-corps liste-outils">
+                    <button type="button" class="btn-poser" data-poser="captage_eau"><span class="p-icone">💧</span><span class="p-nom">Captage / source<span class="p-sous" data-i18n="poser_captage">Source, forage, puits</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="borne_fontaine"><span class="p-icone">🚰</span><span class="p-nom">Borne-fontaine<span class="p-sous" data-i18n="poser_borne">Point d'eau public</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="reservoir_eau"><span class="p-icone">🏗️</span><span class="p-nom">Réservoir / château<span class="p-sous" data-i18n="poser_reservoir">Réservoir d'eau</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="reseau_eau"><span class="p-icone">🔧</span><span class="p-nom">Ouvrage réseau<span class="p-sous" data-i18n="poser_ouvrage">Station, chambre de vanne</span></span></button>
+                    <button type="button" class="btn-poser" data-poser="village"><span class="p-icone">🏘️</span><span class="p-nom">Village desservi<span class="p-sous" data-i18n="poser_village">Point desservi</span></span></button>
+                </div>
+            </details>
+            <details class="groupe-outils">
+                <summary><span data-lucide="eraser"></span> <span data-i18n="effacer_dessin">Effacer un dessin</span></summary>
+                <div class="g-corps liste-outils">
+                    <button class="btn-tool" data-mode="erase" title="Supprimer un dessin" data-i18n-title="supprimer_dessin"><span data-lucide="eraser" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="supprimer_dessin">Supprimer un dessin</span></span></button>
+                </div>
+            </details>
         </div>
         <div class="hint" id="hint-dessin" data-i18n="hint_dessin">Sélectionnez un outil. Double-clic pour terminer un tracé.</div>
+            </div>
+        </details>
 
         <hr class="separateur">
         <div class="titre-section" data-i18n="nouveau_point">Nouveau point</div>
@@ -564,6 +673,14 @@
                         <option value="pont" data-i18n="cat_pont">Pont</option><option value="route" data-i18n="cat_route">Route</option>
                         <option value="entreprise" data-i18n="cat_entreprise">Entreprise</option><option value="zone_rouge" data-i18n="cat_zone_rouge">Zone rouge</option>
                         <option value="zone_verte" data-i18n="cat_zone_verte">Zone verte</option><option value="zone_orange" data-i18n="cat_zone_orange">Zone orange</option>
+                        <option value="batiment" data-i18n="cat_batiment">Bâtiment</option><option value="centre_sante" data-i18n="cat_centre_sante">Centre de santé</option>
+                        <option value="poteau" data-i18n="cat_poteau">Poteau</option><option value="arbre" data-i18n="cat_arbre">Arbre</option><option value="parcelle" data-i18n="cat_parcelle">Parcelle</option>
+                        <option value="repere_geodesique" data-i18n="cat_repere_geodesique">Repère géodésique</option><option value="point_altitude" data-i18n="cat_point_altitude">Point d'altitude</option>
+                        <option value="courbe_niveau" data-i18n="cat_courbe_niveau">Courbe de niveau</option><option value="zone_leve" data-i18n="cat_zone_leve">Zone de levé</option>
+                        <option value="station" data-i18n="cat_station">Station topographique</option><option value="point_gps" data-i18n="cat_point_gps">Point GPS/GNSS</option>
+                        <option value="point_topo" data-i18n="cat_point_topo">Point topographique</option><option value="reseau_eau" data-i18n="cat_reseau_eau">Ouvrage réseau eau</option>
+                        <option value="borne_fontaine" data-i18n="cat_borne_fontaine">Borne-fontaine</option><option value="reservoir_eau" data-i18n="cat_reservoir_eau">Réservoir d'eau</option>
+                        <option value="captage_eau" data-i18n="cat_captage_eau">Captage / source</option>
                     </select>
                 </div>
                 <div>
@@ -598,36 +715,49 @@
         </form>
 
         <hr class="separateur">
-        <div class="titre-section" data-i18n="imports">Imports</div>
-        <div style="display:grid;gap:8px;">
-            <a class="btn" href="{% url 'import_page' %}"><span data-lucide="file-spreadsheet"></span> <span data-i18n="import_donnees">Import de données</span></a>
-            <form method="POST" action="{% url 'importer_fichier' %}" enctype="multipart/form-data">{% csrf_token %}
-                <input type="file" name="fichier_import" accept=".geojson,.kml" class="input-fichier">
-                <button type="submit" class="btn btn-sm" style="width:100%;margin-top:6px;"><span data-i18n="importer_geojson_kml">Importer GeoJSON/KML</span></button>
-            </form>
-            <form method="POST" action="{% url 'importer_geometrie' %}" enctype="multipart/form-data">{% csrf_token %}
-                <input type="text" name="nom_couche" placeholder="Nom de la couche SIG" style="margin-bottom:6px;" data-i18n-ph="nom_couche_sig">
-                <input type="file" name="fichier_geom" accept=".zip,.kml,.kmz,.gpx,.geojson,.json,.csv" class="input-fichier">
-                <button type="submit" class="btn btn-sm" style="width:100%;margin-top:6px;">Importer couche SIG</button>
-            </form>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-                <a class="btn btn-sm" href="{% url 'export_points' 'geojson' %}" title="Exporter GeoJSON">GeoJSON</a>
-                <a class="btn btn-sm" href="{% url 'export_points' 'kml' %}" title="Exporter KML">KML</a>
-                <a class="btn btn-sm" href="{% url 'export_points' 'gpx' %}" title="Exporter GPX">GPX</a>
+        <div class="titre-section" data-i18n="imports_exports">Imports & exports</div>
+        <details class="groupe-outils" open>
+            <summary><span data-lucide="download"></span> <span data-i18n="exporter">Exporter</span></summary>
+            <div class="g-corps liste-outils" id="exports-outils">
+                <button type="button" class="btn-export" data-export="geojson"><span data-lucide="file-code"></span><span class="p-nom">GeoJSON</span></button>
+                <button type="button" class="btn-export" data-export="kml"><span data-lucide="map"></span><span class="p-nom">KML</span></button>
+                <button type="button" class="btn-export" data-export="kmz"><span data-lucide="archive"></span><span class="p-nom">KMZ (KML compressé)</span></button>
+                <button type="button" class="btn-export" data-export="shapefile"><span data-lucide="file-stack"></span><span class="p-nom">Shapefile (SHP)</span></button>
+                <button type="button" class="btn-export" data-export="gpx"><span data-lucide="navigation"></span><span class="p-nom">GPX</span></button>
+                <button type="button" class="btn-export" data-export="dxf"><span data-lucide="file-text"></span><span class="p-nom">DXF (AutoCAD)</span></button>
+                <button type="button" class="btn-export" data-export="png"><span data-lucide="image"></span><span class="p-nom">PNG (capture carte)</span></button>
+                <button type="button" class="btn-export" data-export="pdf"><span data-lucide="file-down"></span><span class="p-nom">PDF</span></button>
             </div>
-        </div>
+        </details>
+        <details class="groupe-outils">
+            <summary><span data-lucide="upload"></span> <span data-i18n="importer">Importer</span></summary>
+            <div class="g-corps liste-outils">
+                <a class="btn btn-sm" href="{% url 'import_page' %}"><span data-lucide="file-spreadsheet"></span> <span data-i18n="import_donnees">Import de données</span></a>
+                <form method="POST" action="{% url 'importer_fichier' %}" enctype="multipart/form-data">{% csrf_token %}
+                    <input type="file" name="fichier_import" accept=".geojson,.kml" class="input-fichier">
+                    <button type="submit" class="btn btn-sm" style="width:100%;margin-top:6px;"><span data-i18n="importer_geojson_kml">Importer GeoJSON/KML</span></button>
+                </form>
+                <form method="POST" action="{% url 'importer_geometrie' %}" enctype="multipart/form-data">{% csrf_token %}
+                    <input type="text" name="nom_couche" placeholder="Nom de la couche SIG" style="margin-bottom:6px;" data-i18n-ph="nom_couche_sig">
+                    <input type="file" name="fichier_geom" accept=".zip,.kml,.kmz,.gpx,.geojson,.json,.csv" class="input-fichier">
+                    <button type="submit" class="btn btn-sm" style="width:100%;margin-top:6px;">Importer couche SIG</button>
+                </form>
+            </div>
+        </details>
 
         {% if user.is_superuser %}
         <hr class="separateur">
-        <div class="titre-section" data-i18n="administration">Administration</div>
-        <div style="display:grid;gap:8px;">
-            <a class="btn" href="{% url 'dashboard' %}"><span data-lucide="layout-dashboard"></span> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
-            <a class="btn" href="{% url 'zone_list' %}"><span data-lucide="shield-alert"></span> <span data-i18n="zones_securite">Zones de sécurité</span></a>
-            <a class="btn" href="{% url 'rapport_generer' %}"><span data-lucide="file-text"></span> <span data-i18n="rapports">Rapports</span></a>
-            <a class="btn" href="{% url 'itineraire_list' %}"><span data-lucide="route"></span> <span data-i18n="itineraires">Itinéraires</span></a>
-            <a class="btn" href="{% url 'audit_list' %}"><span data-lucide="history"></span> <span data-i18n="historique">Historique</span></a>
-            <a class="btn" href="{% url 'agent_list' %}"><span data-lucide="users"></span> <span data-i18n="agents">Agents</span></a>
-        </div>
+        <details class="groupe-outils">
+            <summary><span data-lucide="settings"></span> <span data-i18n="administration">Administration</span></summary>
+            <div class="g-corps" style="display:grid;gap:8px;">
+                <a class="btn" href="{% url 'dashboard' %}"><span data-lucide="layout-dashboard"></span> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+                <a class="btn" href="{% url 'zone_list' %}"><span data-lucide="shield-alert"></span> <span data-i18n="zones_securite">Zones de sécurité</span></a>
+                <a class="btn" href="{% url 'rapport_generer' %}"><span data-lucide="file-text"></span> <span data-i18n="rapports">Rapports</span></a>
+                <a class="btn" href="{% url 'itineraire_list' %}"><span data-lucide="route"></span> <span data-i18n="itineraires">Itinéraires</span></a>
+                <a class="btn" href="{% url 'audit_list' %}"><span data-lucide="history"></span> <span data-i18n="historique">Historique</span></a>
+                <a class="btn" href="{% url 'agent_list' %}"><span data-lucide="users"></span> <span data-i18n="agents">Agents</span></a>
+            </div>
+        </details>
         {% endif %}
 
         {% if couches %}
@@ -645,8 +775,10 @@
         {% endif %}
 
         <hr class="separateur">
-        <div class="titre-section" data-i18n="legende_categories">Légende des catégories</div>
-        <div id="legende"></div>
+        <details class="groupe-outils">
+            <summary><span data-lucide="palette"></span> <span data-i18n="legende_categories">Légende des catégories</span></summary>
+            <div class="g-corps"><div id="legende"></div></div>
+        </details>
         {% endif %}
     </aside>
 
@@ -929,16 +1061,17 @@
 <script src="{% static 'js/export-carte.js' %}?v=27"></script>
 <script src="{% static 'js/mode-avance.js' %}?v=27"></script>
 <script src="{% static 'js/mode-3d.js' %}?v=27"></script>
-<script src="{% static 'js/topographie.js' %}?v=27"></script>
+<script src="{% static 'js/topographie.js' %}?v=28"></script>
 <script src="{% static 'js/basemap-selector.js' %}?v=27"></script>
 <script src="{% static 'js/imagerie.js' %}?v=27"></script>
 <script src="{% static 'js/couches-wms.js' %}?v=27"></script>
 <script src="{% static 'js/offline.js' %}?v=33"></script>
   <script src="{% static 'js/gps.js' %}?v=29"></script>
 <script src="{% static 'js/ui-deplacer.js' %}?v=1"></script>
-<script src="{% static 'js/analyse-spatiale.js' %}?v=29"></script>
+<script src="{% static 'js/ui-panneaux.js' %}?v=1"></script>
+<script src="{% static 'js/analyse-spatiale.js' %}?v=30"></script>
 <script src="{% static 'js/water-supply.js' %}?v=44"></script>
-<script src="{% static 'js/thematic.js' %}?v=2"></script>
+<script src="{% static 'js/thematic.js' %}?v=3"></script>
 <script src="{% static 'js/fiche-point.js' %}?v=3"></script>
 <script>
 const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_token }}';
@@ -1101,7 +1234,15 @@ const CATS = {
     incident:{emoji:'⚠️',couleur:'#dc2626'}, village:{emoji:'🏘️',couleur:'#84cc16'}, ville:{emoji:'🏙️',couleur:'#0ea5e9'},
     pont:{emoji:'🌉',couleur:'#64748b'}, route:{emoji:'🛣️',couleur:'#a16207'}, entreprise:{emoji:'🏢',couleur:'#6366f1'},
     zone_rouge:{emoji:'🔴',couleur:'#b91c1c'}, zone_verte:{emoji:'🟢',couleur:'#16a34a'}, zone_orange:{emoji:'🟠',couleur:'#ea580c'},
-    autre:{emoji:'📍',couleur:'#78716c'}
+    autre:{emoji:'📍',couleur:'#78716c'},
+    batiment:{emoji:'🏢',couleur:'#4f46e5'}, centre_sante:{emoji:'🏥',couleur:'#e11d48'},
+    poteau:{emoji:'⚡',couleur:'#facc15'}, arbre:{emoji:'🌳',couleur:'#15803d'}, parcelle:{emoji:'🗺️',couleur:'#a855f7'},
+    repere_geodesique:{emoji:'📐',couleur:'#f43f5e'}, point_altitude:{emoji:'⛰️',couleur:'#0891b2'},
+    courbe_niveau:{emoji:'〰️',couleur:'#65a30d'}, zone_leve:{emoji:'🔲',couleur:'#d97706'},
+    station:{emoji:'📡',couleur:'#0d9488'}, point_gps:{emoji:'🛰️',couleur:'#2563eb'},
+    point_topo:{emoji:'📍',couleur:'#7c3aed'}, reseau_eau:{emoji:'🔧',couleur:'#0284c7'},
+    borne_fontaine:{emoji:'🚰',couleur:'#06b6d4'}, reservoir_eau:{emoji:'🏗️',couleur:'#0e7490'},
+    captage_eau:{emoji:'💧',couleur:'#22d3ee'}
 };
 const ZONE_STATUTS = {
     dangereuse:{couleur:'#ef4444', lib:'Dangereuse'}, securisee:{couleur:'#22c55e', lib:'Sécurisée'},
@@ -1112,13 +1253,22 @@ const matchCategorie = (champ) => ['match', ['get', champ],
     'hopital','#ef4444','ecole','#3b82f6','eglise','#8b5cf6','police','#1d4ed8','marche','#f59e0b',
     'projet','#10b981','incident','#dc2626','village','#84cc16','ville','#0ea5e9','pont','#64748b',
     'route','#a16207','entreprise','#6366f1','zone_rouge','#b91c1c','zone_verte','#16a34a',
-    'zone_orange','#ea580c','#78716c'];
+    'zone_orange','#ea580c','batiment','#4f46e5','centre_sante','#e11d48','poteau','#facc15',
+    'arbre','#15803d','parcelle','#a855f7','repere_geodesique','#f43f5e','point_altitude','#0891b2',
+    'courbe_niveau','#65a30d','zone_leve','#d97706','station','#0d9488','point_gps','#2563eb',
+    'point_topo','#7c3aed','reseau_eau','#0284c7','borne_fontaine','#06b6d4','reservoir_eau','#0e7490',
+    'captage_eau','#22d3ee','#78716c'];
 const matchEmoji = (champ) => ['match', ['get', champ],
     'hopital','emoji-hopital','ecole','emoji-ecole','eglise','emoji-eglise','police','emoji-police',
     'marche','emoji-marche','projet','emoji-projet','incident','emoji-incident','village','emoji-village',
     'ville','emoji-ville','pont','emoji-pont','route','emoji-route','entreprise','emoji-entreprise',
     'zone_rouge','emoji-zone_rouge','zone_verte','emoji-zone_verte','zone_orange','emoji-zone_orange',
-    'emoji-autre'];
+    'batiment','emoji-batiment','centre_sante','emoji-centre_sante','poteau','emoji-poteau',
+    'arbre','emoji-arbre','parcelle','emoji-parcelle','repere_geodesique','emoji-repere_geodesique',
+    'point_altitude','emoji-point_altitude','courbe_niveau','emoji-courbe_niveau','zone_leve','emoji-zone_leve',
+    'station','emoji-station','point_gps','emoji-point_gps','point_topo','emoji-point_topo',
+    'reseau_eau','emoji-reseau_eau','borne_fontaine','emoji-borne_fontaine','reservoir_eau','emoji-reservoir_eau',
+    'captage_eau','emoji-captage_eau','emoji-autre'];
 
 // ─── CHARGEMENT DES ICÔNES (Twemoji) ─────────────────────────
 function cpEmoji(e) {
@@ -1263,7 +1413,7 @@ function brancherFormulaireHorsLigne() {
 }
 
 // ─── DONNÉES ──────────────────────────────────────────────────
-const donneesPoints = {{ points_json|safe }};
+let donneesPoints = {{ points_json|safe }};
 const agents = {{ agents_json|safe }};
 const activites = {{ activites_json|safe }};
 const zones = {{ zones_json|safe }};
@@ -1490,6 +1640,94 @@ function remonterHighlight() {
         if (map.getLayer(id)) map.moveLayer(id);
     });
 }
+
+// ─── IMPORT AJAX : redessine les points/couches sans recharger la page ──
+async function rechargerPoints({zoomer} = {}) {
+    try {
+        const data = await fetch('{% url "points_donnees" %}').then(r => r.json());
+        donneesPoints = Array.isArray(data) ? data : [];
+        majSourcePoints();
+        const filtresCibles = ['f-categorie','f-province','f-agent'];
+        filtresCibles.forEach(id => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const val = sel.value;
+            sel.innerHTML = '<option value=""></option>';
+            const provSet = new Set();
+            donneesPoints.forEach(p => {
+                if (id === 'f-categorie' && !sel.querySelector('option[value="'+p.categorie+'"]')) {
+                    const o = document.createElement('option'); o.value = p.categorie; o.textContent = (CATS[p.categorie]?.emoji || '📍') + ' ' + (mukmapT ? mukmapT('cat_' + p.categorie) || (CATS[p.categorie]?.nom || p.categorie) : (CATS[p.categorie]?.nom || p.categorie)); sel.appendChild(o);
+                }
+                if (id === 'f-province' && p.province) provSet.add(p.province);
+                if (id === 'f-agent' && p.auteur) provSet.add(p.auteur);
+            });
+            if (id === 'f-province' || id === 'f-agent') {
+                provSet.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
+            }
+            sel.value = val;
+        });
+        if (zoomer && donneesPoints.length) {
+            const coords = donneesPoints.map(p => [p.longitude, p.latitude]);
+            if (coords.length === 1) map.flyTo({center: coords[0], zoom: 16, duration: 900});
+            else { try { map.fitBounds(turf.bbox(turf.multiPoint(coords)), {padding: 70, maxZoom: 16, duration: 900}); } catch (e) {} }
+        }
+    } catch (e) {}
+}
+function importerFichierAjax(fichier, nomCouche) {
+    const fd = new FormData();
+    fd.append('fichier_import', fichier);
+    fd.append('ajax', '1');
+    const action = '{% url "importer_fichier" %}';
+    return fetch(action, {method:'POST', body:fd, headers:{'X-CSRFToken':(document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || CSRF}})
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) throw new Error(d.erreur || 'Erreur import');
+            toast(((mukmapT && mukmapT('points_importes')) || '{n} point(s) importé(s) et dessiné(s) sur la carte.').replace('{n}', d.importes), 'succes');
+            return rechargerPoints({zoomer: d.importes > 0});
+        });
+}
+function importerCoucheAjax(fichier, nomCouche) {
+    const fd = new FormData();
+    fd.append('fichier_geom', fichier);
+    fd.append('nom_couche', nomCouche || 'Couche importée');
+    fd.append('ajax', '1');
+    const action = '{% url "importer_geometrie" %}';
+    return fetch(action, {method:'POST', body:fd, headers:{'X-CSRFToken':(document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || CSRF}})
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) throw new Error(d.erreur || 'Erreur import');
+            toast(((mukmapT && mukmapT('couche_importee')) || 'Couche « {n} » importée ({c} géométrie(s)) et dessinée sur la carte.').replace('{n}', d.nom).replace('{c}', d.importes), 'succes');
+            return rechargerCouches().then(() => {
+                coucheImporteeCible = d.couche_id;
+                zoomerApresImport();
+            });
+        });
+}
+(function brancherImportsAjax() {
+    document.querySelectorAll('form[action$="/importer/"]').forEach(form => {
+        form.addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            const f = form.querySelector('input[type="file"]');
+            if (!f || !f.files || !f.files.length) { toast((mukmapT && mukmapT('choisir_fichier')) || 'Choisissez d\'abord un fichier.', 'warning'); return; }
+            const btn = form.querySelector('button[type="submit"]');
+            if (btn) { btn.disabled = true; }
+            importerFichierAjax(f.files[0]).catch(err => toast(err.message, 'error')).finally(() => { if (btn) btn.disabled = false; });
+        });
+    });
+    document.querySelectorAll('form[action$="/geometrie/importer/"]').forEach(form => {
+        form.addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            const f = form.querySelector('input[type="file"]');
+            const nom = form.querySelector('input[name="nom_couche"]');
+            if (!f || !f.files || !f.files.length) { toast((mukmapT && mukmapT('choisir_fichier')) || 'Choisissez d\'abord un fichier.', 'warning'); return; }
+            const btn = form.querySelector('button[type="submit"]');
+            if (btn) btn.disabled = true;
+            importerCoucheAjax(f.files[0], nom ? nom.value : '')
+                .catch(err => toast(err.message, 'error'))
+                .finally(() => { if (btn) btn.disabled = false; });
+        });
+    });
+})();
 
 // ─── GÉOCODAGE INVERSÉ (Pays / Région) ────────────────────────
 const geoCache = {};
@@ -2750,6 +2988,7 @@ Object.defineProperty(window, 'basemapActif', { get: function () { return basema
 
 if (window.lucide) lucide.createIcons();
 </script>
+<script src="{% static 'js/outils-terrain.js' %}?v=1"></script>
 {% include 'cartographie/_i18n.html' %}
 {% include 'cartographie/_pwa_body.html' %}
 </body>

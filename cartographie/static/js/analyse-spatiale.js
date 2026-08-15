@@ -371,22 +371,28 @@
             if (fn) carte.on('click', fn);
         }
 
+        function panneauOuvert() { return panneau.style.display !== 'none'; }
+
         function clicMesure(e) {
+            if (!panneauOuvert()) return;
             pointsMesure.push({ lat: e.lngLat.lat, lng: e.lngLat.lng });
             majMesure();
         }
 
         function clicBuffer(e) {
+            if (!panneauOuvert()) return;
             centreBuffer = { lat: e.lngLat.lat, lng: e.lngLat.lng };
             message('Centre posé (' + e.lngLat.lat.toFixed(5) + ', ' + e.lngLat.lng.toFixed(5) + '). Définissez le rayon puis tracez.', 'info');
         }
 
         function clicProximite(e) {
+            if (!panneauOuvert()) return;
             pointProximite = { lat: e.lngLat.lat, lng: e.lngLat.lng };
             message('Point de référence posé (' + e.lngLat.lat.toFixed(5) + ', ' + e.lngLat.lng.toFixed(5) + ').', 'info');
         }
 
         function clicPolygone(e) {
+            if (!panneauOuvert()) return;
             polygone.push({ lat: e.lngLat.lat, lng: e.lngLat.lng });
             ajouterCouche('ana-poly-c', [enLigne(polygone)], 'line');
             majSelection();
@@ -499,6 +505,7 @@
 
         panneau.querySelector('.mukmap-analyse-fermer').addEventListener('click', function () {
             panneau.style.display = 'none';
+            activerClic(null);
         });
 
         // ---- Bouton d'ouverture ----
@@ -513,6 +520,7 @@
         bouton.addEventListener('click', function () {
             panneau.style.display = panneau.style.display === 'none' ? 'flex' : 'none';
             if (panneau.style.display === 'flex') choisirOnglet(mode);
+            else activerClic(null);
         });
         panneau.style.display = 'none';
 
@@ -521,7 +529,8 @@
             window.MukmapDeplacer.deplacer(panneau, panneau.querySelector('.mukmap-analyse-tete'));
         }
 
-        choisirOnglet('mesure');
+        mode = 'mesure';
+        activerClic(null);
         return panneau;
     }
 
