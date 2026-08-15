@@ -59,5 +59,7 @@ class TestsGuideUtilisation(BaseCartographieTest):
         with mock.patch('django.core.management.call_command') as cmd:
             r = self.client.post('/guide-utilisation/', {}, follow=True)
         self.assertEqual(r.status_code, 200)
-        cmd.assert_called_once_with('generer_guide')
-        self.assertIn('régénéré avec succès', r.content.decode('utf-8', errors='replace'))
+        self.assertEqual(cmd.call_count, 2)
+        cmd.assert_any_call('generer_guide')
+        cmd.assert_any_call('generer_presentation')
+        self.assertIn('régénérés avec succès', r.content.decode('utf-8', errors='replace'))

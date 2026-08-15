@@ -75,8 +75,21 @@ class Command(BaseCommand):
             fld.set(qn('w:instr'), 'PAGE')
             p._p.append(fld)
 
-        # Page de couverture
-        for _ in range(6):
+        # Page de couverture (logos MUKESHABA + MUKMAP)
+        logo_editeur = os.path.join(settings.BASE_DIR, 'cartographie', 'static',
+                                    'logo', 'MUKESHABA_2x.png')
+        logo_app = os.path.join(settings.BASE_DIR, 'cartographie', 'static',
+                                'logo', 'MUKMAP.png')
+        p1 = doc.add_paragraph()
+        p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_logo1 = p1.add_run()
+        run_logo1.add_picture(logo_editeur, width=Cm(2.2))
+        doc.add_paragraph()
+        p2 = doc.add_paragraph()
+        p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_logo2 = p2.add_run()
+        run_logo2.add_picture(logo_app, width=Cm(4.6))
+        for _ in range(2):
             doc.add_paragraph()
         t = doc.add_paragraph()
         t.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -106,6 +119,11 @@ class Command(BaseCommand):
         t5.alignment = WD_ALIGN_PARAGRAPH.CENTER
         r5 = t5.add_run("Édition %s — Version %s" % (META['date_guide'], META['app_version']))
         r5.font.size = Pt(12)
+        t6 = doc.add_paragraph()
+        t6.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r6 = t6.add_run(META['contact'])
+        r6.font.size = Pt(10.5)
+        r6.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
         doc.add_page_break()
 
         # Table des matières (champ Word mis à jour à l'ouverture)
@@ -221,6 +239,12 @@ class Command(BaseCommand):
         ROUGE = HexColor('#C0504D')
         GRIS = HexColor('#666666')
         FOND_TAB = HexColor('#EAF1F8')
+        BANDE = HexColor('#0F3554')
+
+        logo_editeur = os.path.join(settings.BASE_DIR, 'cartographie', 'static',
+                                    'logo', 'MUKESHABA_2x.png')
+        logo_app = os.path.join(settings.BASE_DIR, 'cartographie', 'static',
+                                'logo', 'MUKMAP.png')
 
         styles = {
             'Chapitre': ParagraphStyle('Chapitre', fontName='Helvetica-Bold', fontSize=15,
@@ -272,24 +296,59 @@ class Command(BaseCommand):
                          author=META['societe'])
         story = []
 
-        # Couverture
-        story.append(Spacer(1, 4.2 * cm))
+        # ── Couverture professionnelle ─────────────────────────────
+        from reportlab.platypus import Image as RLImage
+
+        def couverture(canvas, doc):
+            canvas.saveState()
+            # Bande supérieure bleu nuit
+            canvas.setFillColor(BANDE)
+            canvas.rect(0, A4[1] - 3.6 * cm, A4[0], 3.6 * cm, stroke=0, fill=1)
+            canvas.setFillColor(HexColor('#DCE6F1'))
+            canvas.setFont('Helvetica', 8.5)
+            canvas.drawCentredString(A4[0] / 2.0, A4[1] - 2.9 * cm,
+                                     "PROPRIÉTÉ DE MUKESHABA")
+            canvas.drawCentredString(A4[0] / 2.0, A4[1] - 2.55 * cm,
+                                     META['societe'].upper() + " — SOCIÉTÉ D'INGÉNIERIE & DE CARTOGRAPHIE")
+            # Bande inférieure bleu nuit
+            canvas.setFillColor(BANDE)
+            canvas.rect(0, 0, A4[0], 3.2 * cm, stroke=0, fill=1)
+            canvas.setFillColor(HexColor('#DCE6F1'))
+            canvas.setFont('Helvetica-Bold', 10)
+            canvas.drawCentredString(A4[0] / 2.0, 2.1 * cm,
+                                     META['contact'])
+            canvas.setFont('Helvetica', 8.5)
+            canvas.drawCentredString(A4[0] / 2.0, 1.55 * cm,
+                                     FOOTER)
+            canvas.restoreState()
+
+        # Logo éditeur (haut, au-dessus de la bande)
+        im_editeur = RLImage(logo_editeur, width=2.4 * cm, height=2.42 * cm)
+        im_editeur.hAlign = 'CENTER'
+        story.append(Spacer(1, 0.35 * cm))
+        story.append(im_editeur)
+        story.append(Spacer(1, 0.7 * cm))
+        # Logo application (grand)
+        im_app = RLImage(logo_app, width=6.2 * cm, height=6.2 * cm)
+        im_app.hAlign = 'CENTER'
+        story.append(im_app)
+        story.append(Spacer(1, 0.9 * cm))
         story.append(Paragraph("GUIDE COMPLET D'UTILISATION",
-                               ParagraphStyle('Cov1', fontName='Helvetica-Bold', fontSize=32,
-                                              leading=38, textColor=BLEU, alignment=TA_CENTER)))
-        story.append(Spacer(1, 0.8 * cm))
+                               ParagraphStyle('Cov1', fontName='Helvetica-Bold', fontSize=30,
+                                              leading=36, textColor=BLEU, alignment=TA_CENTER)))
+        story.append(Spacer(1, 0.5 * cm))
         story.append(Paragraph("%s %s" % (META['app_nom'], META['app_version']),
-                               ParagraphStyle('Cov2', fontName='Helvetica-Bold', fontSize=44,
-                                              leading=52, textColor=ROUGE, alignment=TA_CENTER)))
-        story.append(Spacer(1, 0.6 * cm))
-        story.append(Paragraph("Manuel officiel — Propriété de " + META['societe'],
-                               ParagraphStyle('Cov3', fontName='Helvetica', fontSize=16,
-                                              leading=22, alignment=TA_CENTER)))
+                               ParagraphStyle('Cov2', fontName='Helvetica-Bold', fontSize=40,
+                                              leading=48, textColor=ROUGE, alignment=TA_CENTER)))
         story.append(Spacer(1, 0.4 * cm))
+        story.append(Paragraph("Manuel officiel — Propriété de " + META['societe'],
+                               ParagraphStyle('Cov3', fontName='Helvetica', fontSize=15,
+                                              leading=20, alignment=TA_CENTER)))
+        story.append(Spacer(1, 0.3 * cm))
         story.append(Paragraph(META['slogan'],
                                ParagraphStyle('Cov4', fontName='Helvetica-Oblique', fontSize=12,
                                               leading=16, textColor=GRIS, alignment=TA_CENTER)))
-        story.append(Spacer(1, 3.2 * cm))
+        story.append(Spacer(1, 1.6 * cm))
         story.append(Paragraph("Édition %s — Version %s" % (META['date_guide'], META['app_version']),
                                ParagraphStyle('Cov5', fontName='Helvetica', fontSize=12,
                                               leading=16, alignment=TA_CENTER)))
@@ -356,5 +415,5 @@ class Command(BaseCommand):
         for bloc in APROPOS["blocs"]:
             ajouter_bloc(story, bloc)
 
-        doc.multiBuild(story, onFirstPage=pied_page, onLaterPages=pied_page)
+        doc.multiBuild(story, onFirstPage=couverture, onLaterPages=pied_page)
         return chemin

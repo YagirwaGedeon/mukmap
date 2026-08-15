@@ -4752,15 +4752,17 @@ def guide_utilisation(request):
             return redirect('guide_utilisation')
         try:
             call_command('generer_guide')
-            _audit(request, "Régénération du guide d'utilisation", "PDF + Word")
-            messages.success(request, "Le guide d'utilisation a été régénéré avec succès.")
+            call_command('generer_presentation')
+            _audit(request, "Régénération du guide d'utilisation", "PDF + Word + PowerPoint")
+            messages.success(request, "Le guide d'utilisation et la présentation ont été régénérés avec succès.")
         except Exception as exc:
             messages.error(request, "Erreur lors de la régénération du guide : %s" % exc)
         return redirect('guide_utilisation')
 
     fichiers = {}
     for ext, nom in (('pdf', 'MUKMAP_Guide_Complet_Utilisateur.pdf'),
-                     ('docx', 'MUKMAP_Guide_Complet_Utilisateur.docx')):
+                     ('docx', 'MUKMAP_Guide_Complet_Utilisateur.docx'),
+                     ('pptx', 'MUKMAP_Presentation_MUKESHABA.pptx')):
         chemin = os.path.join(dossier, nom)
         if os.path.exists(chemin):
             fichiers[ext] = {

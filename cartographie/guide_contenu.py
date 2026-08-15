@@ -10,6 +10,7 @@ META = {
     "date_guide": "Août 2026",
     "developpeur": "Ir. Yagirwa Gedeon",
     "slogan": "Plateforme SIG professionnelle — collecte, suivi et sécurité",
+    "contact": "+243 971460415 | chroniquedejamesmukeshaba@gmail.com",
 }
 
 FOOTER = "© MUKESHABA — Tous droits réservés | +243 971460415 | chroniquedejamesmukeshaba@gmail.com"
