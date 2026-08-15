@@ -52,6 +52,7 @@
         .btn:hover { border-color: var(--accent); color: var(--accent); }
         .msg { display: flex; align-items: center; gap: 10px; background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.35); color: var(--orange); padding: 12px 16px; border-radius: 10px; font-size: .85rem; margin-bottom: 18px; }
     </style>
+    {% include 'cartographie/_pwa_head.html' %}
 </head>
 <body>
     <div id="topbar">
@@ -133,5 +134,6 @@
         </div>
     </div>
     {% include 'cartographie/_i18n.html' %}
+    {% include 'cartographie/_pwa_body.html' %}
 </body>
 </html>

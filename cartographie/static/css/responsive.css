@@ -1,0 +1,201 @@
+/* ══════════════════════════════════════════════════════════════════
+   MUKMAP · responsive.css · v1
+   Adaptation responsive + adaptive pour téléphone / tablette / laptop / desktop.
+   Chargé dans _pwa_head.html (présent dans toutes les pages MUKMAP).
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Base tactile & affichage ─────────────────────────────────────── */
+html { -webkit-text-size-adjust: 100%; }
+body { overscroll-behavior-y: none; }
+button, a, select, input[type="submit"], input[type="button"], input[type="file"], [role="button"] {
+    touch-action: manipulation;
+}
+* { -webkit-tap-highlight-color: transparent; }
+
+/* Éléments mobiles : masqués par défaut (affichés dans les media queries) */
+#muk-hamburger, #muk-fab-collecte, #btn-recherche-mobile { display: none; }
+#sidebar .selecteur-langue { display: none; }
+
+/* Appareils tactiles : cibles tactiles plus grandes */
+@media (hover: none) and (pointer: coarse) {
+    .btn { min-height: 44px; }
+    .btn-icon { width: 40px; height: 40px; }
+    .btn-tool, .btn-poser, .btn-export, .bm-btn { min-height: 44px; }
+    select, input, textarea { font-size: 16px; }
+}
+
+/* ── Desktop large (≥1440px) : un peu plus de surface ────────────── */
+@media (min-width: 1440px) {
+    #sidebar { width: 360px; }
+    #sidebar.fermee { margin-left: -360px; }
+    #btn-sidebar.actif { left: 374px; }
+    #panel-droit { width: 400px; }
+}
+
+/* ── Tablet / laptop petit (≤1024px) ──────────────────────────────── */
+@media (max-width: 1024px) {
+    .logo { min-width: 200px; }
+    #panel-droit { width: 330px; }
+}
+
+/* ── Mobile & tablette portrait (≤768px) ──────────────────────────── */
+@media (max-width: 768px) {
+
+    /* --- Topbar : compacte --- */
+    #topbar, .topbar { padding: 0 10px; gap: 8px; }
+    .logo { min-width: 0; }
+    .logo .sous-titre { display: none; }
+    .logo .badge-v { display: none; }
+    .logo .pastille { width: 30px; height: 30px; }
+    #recherche-wrap { display: none; }
+    .notif-wrap, #btn-plein-ecran, #btn-apropos, .selecteur-langue { display: none; }
+
+    /* Contrôles carte plus compacts */
+    .maplibregl-ctrl button.maplibregl-ctrl-icon { width: 34px; height: 34px; }
+    .maplibregl-ctrl-group { border-radius: 10px; }
+
+    /* --- Sidebar carte → tiroir plein écran --- */
+    #sidebar {
+        position: fixed; top: 62px; bottom: 0; left: 0; width: 100%;
+        max-width: 100%; margin-left: 0; z-index: 2000;
+        transform: translateX(-100%); transition: transform .25s ease;
+        padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    }
+    #sidebar.fermee { transform: translateX(-100%); }
+    #sidebar:not(.fermee) { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.45); }
+    #btn-sidebar.actif { left: auto; right: 14px; }
+
+    /* Arrière-plan sombre derrière le tiroir (créé par device-adapt.js) */
+    #muk-sidebar-backdrop {
+        position: fixed; inset: 62px 0 0 0; z-index: 1999;
+        background: rgba(0,0,0,.45); opacity: 0; pointer-events: none;
+        transition: opacity .25s ease;
+    }
+    #muk-sidebar-backdrop.visible { opacity: 1; pointer-events: auto; }
+
+    /* --- Recherche mobile (basculée par le bouton) --- */
+    #muk-recherche-barre {
+        position: fixed; top: 62px; left: 0; right: 0; z-index: 1500;
+        display: none; padding: 8px 10px;
+        background: color-mix(in srgb, var(--bg-2, #16182b) 96%, transparent);
+        backdrop-filter: blur(14px); border-bottom: 1px solid var(--border, #333);
+    }
+    #muk-recherche-barre.visible { display: block; }
+    #muk-recherche-barre #recherche-wrap { display: flex; }
+
+    /* --- Panneaux flottants → feuilles en bas d'écran --- */
+    #panel-droit, #identify-panel, #coords-popover, #fiche-panel,
+    .mukmap-water, .mukmap-thema, .mukmap-analyse, .mukmap-gps,
+    .mukmap-offline, .mukmap-offline-conflit, #panneau-topo,
+    #panneau-3d-cadre {
+        left: 8px !important; right: 8px !important; top: auto !important;
+        bottom: 8px !important; width: auto !important; max-width: 100%;
+        max-height: 74vh !important; overflow-y: auto;
+        border-radius: 16px;
+    }
+
+    /* Boutons d'ouverture des modules : empilés à gauche sous la topbar */
+    #mukmap-water-bouton { top: 118px !important; left: 12px !important; }
+    #mukmap-thema-bouton { top: 168px !important; left: 12px !important; }
+    #mukmap-analyse-bouton { left: 12px !important; bottom: 20px !important; }
+    #mukmap-gps-bouton { bottom: 86px !important; right: 14px !important; }
+    #mukmap-offline-ancre { bottom: 86px !important; right: 74px !important; }
+
+    /* --- Barres basses --- */
+    #mesure-barre {
+        left: 10px; right: 10px; width: auto; justify-content: center;
+        bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 10px 12px;
+    }
+    #coords-barre {
+        bottom: calc(64px + env(safe-area-inset-bottom, 0px)); left: 10px;
+        max-width: calc(100vw - 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #toasts { top: 70px; right: 10px; max-width: calc(100vw - 20px); }
+
+    /* --- Modales → feuilles en bas --- */
+    .overlay { align-items: flex-end; padding: 8px; }
+    .overlay .modale, .overlay .modale-projet {
+        width: 100% !important; max-width: 100% !important;
+        max-height: 92vh; overflow-y: auto;
+        border-radius: 18px 18px 0 0;
+    }
+
+    /* --- Formulaires : une colonne --- */
+    .filtre-row, .export-2col, .grille-2 { grid-template-columns: 1fr !important; }
+
+    /* --- Tableaux : scroll horizontal --- */
+    table { display: block; width: 100%; overflow-x: auto; white-space: nowrap; }
+    th, td { white-space: nowrap; }
+
+    /* --- Pages formulaires « sidebar + carte » (sans #conteneur) --- */
+    body:not(:has(#conteneur)) {
+        flex-direction: column !important; overflow-y: auto;
+    }
+    body:not(:has(#conteneur)) #map {
+        width: 100% !important; height: 55vh !important; order: 1; flex: none;
+    }
+    body:not(:has(#conteneur)) .sidebar {
+        width: 100% !important; height: auto !important; max-height: none;
+        order: 2; overflow-y: auto; padding: 16px;
+    }
+    body:not(:has(#conteneur)) .content { width: 100%; max-width: none; }
+
+    /* --- Menu de navigation hamburger (topbar nav) --- */
+    #topbar nav, .topbar nav, header nav {
+        position: fixed; top: 62px; left: 0; right: 0; z-index: 1200;
+        flex-direction: column !important; align-items: stretch !important;
+        padding: 10px; gap: 6px; margin: 0;
+        background: var(--bg-2, #16182b); border-bottom: 1px solid var(--border, #333);
+        box-shadow: 0 12px 30px rgba(0,0,0,.35);
+        transform: translateY(-130%); transition: transform .22s ease;
+        display: flex !important;
+    }
+    #topbar.muk-nav-ouverte nav, .topbar.muk-nav-ouverte nav, header.muk-nav-ouverte nav {
+        transform: translateY(0);
+    }
+    #muk-hamburger {
+        display: flex; align-items: center; justify-content: center;
+        width: 38px; height: 38px; border-radius: 10px; flex: none;
+        background: var(--bg-3, #1e2038); border: 1px solid var(--border, #333);
+        color: var(--text-2, #a0a3c2); cursor: pointer; font-size: 1.05rem;
+    }
+    #muk-hamburger:hover { color: var(--accent, #60a5fa); border-color: var(--accent, #60a5fa); }
+
+    /* --- Bouton d'action rapide « collecte » (mobile) --- */
+    #muk-fab-collecte {
+        position: fixed; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+        z-index: 1500; width: 56px; height: 56px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, var(--accent, #4F46E5), var(--accent-2, #7c3aed));
+        color: #fff; border: none; box-shadow: 0 8px 24px rgba(79,70,229,.45);
+        cursor: pointer; font-size: 1.6rem; transition: transform .15s ease;
+    }
+    #muk-fab-collecte:active { transform: scale(.92); }
+}
+
+/* ── Téléphone portrait (≤480px) : on resserre encore ────────────── */
+@media (max-width: 480px) {
+    #topbar, .topbar { gap: 6px; }
+    .logo .titre { font-size: .95rem; }
+    #btn-mode { display: none; }
+    .droite { gap: 6px; }
+    #btn-exporter-carte { width: 34px; height: 34px; }
+    #btn-deconnexion span:last-child { display: none; }
+    #btn-deconnexion { width: 38px; height: 38px; padding: 0; justify-content: center; }
+    #minimap { display: none; }
+    #sidebar .selecteur-langue { display: flex; }
+    #panel-droit, #identify-panel, #coords-popover, #fiche-panel,
+    .mukmap-water, .mukmap-thema, .mukmap-analyse, .mukmap-gps,
+    .mukmap-offline, .mukmap-offline-conflit, #panneau-topo,
+    #panneau-3d-cadre { max-height: 68vh !important; }
+    .grille-outils { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── Orientation paysage téléphone : garder la carte lisible ─────── */
+@media (max-width: 820px) and (orientation: landscape) {
+    #sidebar { top: 62px; }
+    #panel-droit, #identify-panel, #coords-popover, #fiche-panel,
+    .mukmap-water, .mukmap-thema, .mukmap-analyse, .mukmap-gps,
+    .mukmap-offline, .mukmap-offline-conflit, #panneau-topo,
+    #panneau-3d-cadre { max-height: 60vh !important; }
+}
