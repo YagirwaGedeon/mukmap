@@ -1938,7 +1938,16 @@ def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_tota
         ]
         fam = 'YaHei'
     elif not all(os.path.exists(c) for _, _, c in POLICES):
-        fam = 'Helvetica'
+        DEJAVU = [
+            ('DejaVu', '', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
+            ('DejaVu', 'B', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+            ('DejaVu', 'I', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf'),
+        ]
+        if all(os.path.exists(c) for _, _, c in DEJAVU):
+            POLICES = DEJAVU
+            fam = 'DejaVu'
+        else:
+            fam = 'Helvetica'
 
     ACCENT = (77, 67, 246)
     VERT = (34, 197, 94)
@@ -1958,7 +1967,35 @@ def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_tota
     logo_chemin = chemin_logo()
     logo_dispo = os.path.exists(logo_chemin)
 
+    def pdf_propre(s):
+        if s is None:
+            return ''
+        return str(s).translate(str.maketrans({
+            '—': '-', '–': '-', '…': '...',
+            '‘': "'", '’': "'", '“': '"', '”': '"',
+            '€': 'EUR', '•': '*', '·': '*',
+        }))
+
     class RapportPDF(FPDF):
+        def _propre(self, txt):
+            return pdf_propre(txt) if isinstance(txt, str) else txt
+
+        def cell(self, *args, **kwargs):
+            args = list(args)
+            if len(args) >= 3:
+                args[2] = self._propre(args[2])
+            elif 'txt' in kwargs:
+                kwargs['txt'] = self._propre(kwargs['txt'])
+            return super().cell(*args, **kwargs)
+
+        def multi_cell(self, *args, **kwargs):
+            args = list(args)
+            if len(args) >= 3:
+                args[2] = self._propre(args[2])
+            elif 'txt' in kwargs:
+                kwargs['txt'] = self._propre(kwargs['txt'])
+            return super().multi_cell(*args, **kwargs)
+
         def header(self):
             if self.page_no() == 1:
                 return  # page de couverture, dessinée manuellement
