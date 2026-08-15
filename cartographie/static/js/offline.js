@@ -1168,7 +1168,7 @@
                 '.' + css + '-badge.conflit .mukmap-offline-point { background: #ef4444; box-shadow: 0 0 6px #ef4444; }',
                 '.' + css + '-badge.erreur .mukmap-offline-point { background: #ef4444; }',
                 '.' + css + '-badge.horsligne .mukmap-offline-point { background: #6b7280; }',
-                '.' + css + '-panneau { position: absolute; top: calc(100% + 8px); right: 0; width: 330px; background: var(--bg-2, #171a2e); border: 1px solid var(--border-2, #343a63); border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.45); padding: 14px; display: none; z-index: 1200; max-height: 70vh; overflow: auto; color: var(--text, #eef0ff); font-size: .78rem; }',
+                '.' + css + '-panneau { position: absolute; bottom: calc(100% + 8px); right: 0; width: 330px; background: var(--bg-2, #171a2e); border: 1px solid var(--border-2, #343a63); border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.45); padding: 14px; display: none; z-index: 1200; max-height: 70vh; overflow: auto; color: var(--text, #eef0ff); font-size: .78rem; }',
                 '.' + css + '-panneau.ouvert { display: block; }',
                 '.' + css + '-entete { font-weight: 800; font-size: .85rem; margin-bottom: 10px; }',
                 '.' + css + '-actions { display: grid; gap: 6px; margin-bottom: 10px; }',

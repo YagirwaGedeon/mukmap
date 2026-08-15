@@ -3288,6 +3288,11 @@ function majVillagesCarte() {
         });
         panneau.style.display = 'none';
 
+        if (window.MukmapDeplacer && window.MukmapDeplacer.deplacer) {
+            window.MukmapDeplacer.deplacer(bouton);
+            window.MukmapDeplacer.deplacer(panneau, panneau.querySelector('.mw-tete'));
+        }
+
         // ── Fiche detaillee : edition directe d'un ouvrage ──
         function afficherEdition(o) {
             panneau.style.display = 'flex';

@@ -516,6 +516,11 @@
         });
         panneau.style.display = 'none';
 
+        if (window.MukmapDeplacer && window.MukmapDeplacer.deplacer) {
+            window.MukmapDeplacer.deplacer(bouton);
+            window.MukmapDeplacer.deplacer(panneau, panneau.querySelector('.mukmap-analyse-tete'));
+        }
+
         choisirOnglet('mesure');
         return panneau;
     }
