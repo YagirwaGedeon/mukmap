@@ -445,9 +445,9 @@
         {% include 'cartographie/_selecteur_langue.html' %}
         <button class="btn btn-icon" id="btn-theme" title="Changer de thème" data-i18n-title="theme"><span data-lucide="moon"></span></button>
         <button class="btn btn-icon" id="btn-plein-ecran" title="Plein écran" data-i18n-title="plein_ecran"><span data-lucide="maximize"></span></button>
-        <a class="btn btn-primary btn-sm" href="{% url 'deconnexion' %}">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-deconnexion" title="Déconnexion" data-i18n-title="deconnexion">
             <span data-lucide="log-out"></span> {{ user.username|default:'Déconnexion' }}
-        </a>
+        </button>
     </div>
 </header>
 
@@ -720,6 +720,27 @@
             <button type="button" class="btn btn-primary" id="btn-valider-selection"><span data-lucide="check"></span> <span data-i18n="valider_continuer">Valider et continuer</span></button>
         </div>
         <div id="erreur-selection" style="color:var(--red);font-size:.8rem;margin-top:8px;display:none;"></div>
+    </div>
+</div>
+
+<div id="overlay-fin-activite" class="overlay" style="display:none;">
+    <div class="modale modale-projet">
+        <div class="modale-tete">
+            <div class="modale-titre">
+                <span data-lucide="log-out"></span>
+                <span data-i18n="titre_fin_activite">Fin de l'activité</span>
+            </div>
+            <div class="modale-version">MUKMAP v1.0</div>
+        </div>
+        <p class="modale-desc" data-i18n="texte_fin_activite">Votre session de travail va se terminer. Vous pouvez laisser une observation (facultatif).</p>
+        <label class="modale-label" data-i18n="observations_optionnel">Observations (optionnel)</label>
+        <textarea id="input-observations-fin" class="modale-select" rows="4"
+                  placeholder="Ex : Mission terminée, toutes les données collectées..."
+                  data-i18n-ph="ex_observations_fin" style="resize:vertical;"></textarea>
+        <div class="modale-actions">
+            <button type="button" class="btn" id="btn-annuler-fin"><span data-i18n="annuler">Annuler</span></button>
+            <button type="button" class="btn btn-primary" id="btn-valider-fin"><span data-lucide="log-out"></span> <span data-i18n="deconnexion">Déconnexion</span></button>
+        </div>
     </div>
 </div>
 
@@ -1028,6 +1049,22 @@ document.getElementById('btn-apropos').addEventListener('click', () => {
 });
 document.getElementById('btn-fermer-apropos').addEventListener('click', () => {
     document.getElementById('overlay-apropos').style.display = 'none';
+});
+document.getElementById('btn-deconnexion').addEventListener('click', () => {
+    document.getElementById('overlay-fin-activite').style.display = 'flex';
+});
+document.getElementById('btn-annuler-fin').addEventListener('click', () => {
+    document.getElementById('overlay-fin-activite').style.display = 'none';
+});
+document.getElementById('btn-valider-fin').addEventListener('click', () => {
+    const observations = document.getElementById('input-observations-fin').value.trim();
+    fetch('{% url "deconnexion" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF },
+        body: 'observations=' + encodeURIComponent(observations)
+    })
+        .then(r => { if (r.redirected) location.href = r.url; else location.reload(); })
+        .catch(() => location.reload());
 });
 ['overlay-modale', 'overlay-apropos'].forEach(id => {
     document.getElementById(id).addEventListener('click', e => {

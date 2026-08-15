@@ -1188,4 +1188,9 @@ TRADUCTIONS = {
     'statut_hors_service': {'fr': 'Hors service', 'en': 'Out of service', 'sw': 'Haifanyi kazi', 'ln': 'Ezali na mosala te', 'pt': 'Fora de serviço', 'zh': '停用'},
     'statut_projet': {'fr': 'À construire', 'en': 'To be built', 'sw': 'Itakayojengwa', 'ln': 'Etonga na koonga', 'pt': 'A construir', 'zh': '待建设'},
     'precision_gps': {'fr': 'Précision GPS', 'en': 'GPS accuracy', 'sw': 'Usahihi wa GPS', 'ln': 'Bosémbi ya GPS', 'pt': 'Precisão GPS', 'zh': 'GPS 精度'},
+    'titre_fin_activite': {'fr': 'Fin de l’activité', 'en': 'End of activity', 'sw': 'Mwisho wa shughuli', 'ln': 'Nsuka ya mosala', 'pt': 'Fim da atividade', 'zh': '活动结束'},
+    'texte_fin_activite': {'fr': 'Votre session de travail va se terminer. Vous pouvez laisser une observation (facultatif).', 'en': 'Your work session is about to end. You may leave an observation (optional).', 'sw': 'Kikao chako cha kazi kitakwisha. Unaweza kuacha maoni (si lazima).', 'ln': 'Likambo na kosila. Okoki kótisa makanisi (epayi te).', 'pt': 'Sua sessão de trabalho vai terminar. Pode deixar uma observação (opcional).', 'zh': '您的工作会话即将结束。您可以留下备注（可选）。'},
+    'observations_optionnel': {'fr': 'Observations (optionnel)', 'en': 'Observations (optional)', 'sw': 'Maoni (si lazima)', 'ln': 'Makanisi (epayi te)', 'pt': 'Observações (opcional)', 'zh': '备注（可选）'},
+    'annuler': {'fr': 'Annuler', 'en': 'Cancel', 'sw': 'Ghairi', 'ln': 'Kolongola', 'pt': 'Cancelar', 'zh': '取消'},
+    'ex_observations_fin': {'fr': 'Ex : Mission terminée, toutes les données collectées...', 'en': 'Ex: Mission complete, all data collected...', 'sw': 'Mf: Kazi imekamilika, data zote zimekusanywa...', 'ln': 'Mf: Mosala esili, ba données nionso ebongisami...', 'pt': 'Ex: Missão concluída, todos os dados coletados...', 'zh': '例如：任务完成，所有数据已收集...'},
 }

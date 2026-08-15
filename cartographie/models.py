@@ -924,3 +924,30 @@ class ImageAerienne(models.Model):
 
     def __str__(self):
         return self.nom
+
+class SessionTravail(models.Model):
+    """Session de travail d'un agent : debut = connexion, fin = deconnexion.
+
+    Les observations saisies au moment de la deconnexion sont optionnelles.
+    Le projet et le nom de l'activite en cours sont attaches lorsqu'ils
+    sont connus (mise a jour via la selection projet/activite).
+    """
+    utilisateur = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions_travail', verbose_name="Utilisateur")
+    debut = models.DateTimeField(verbose_name="Debut de l'activite")
+    fin = models.DateTimeField(null=True, blank=True, verbose_name="Fin de l'activite")
+    observations = models.TextField(blank=True, default='', verbose_name="Observations")
+    projet = models.ForeignKey('Projet', on_delete=models.SET_NULL, null=True, blank=True, related_name='sessions_travail', verbose_name="Projet")
+    activite_nom = models.CharField(max_length=255, blank=True, default='', verbose_name="Activite en cours")
+
+    class Meta:
+        ordering = ['-debut']
+        verbose_name = "Session de travail"
+        verbose_name_plural = "Sessions de travail"
+
+    def __str__(self):
+        return f"{self.utilisateur} - {self.debut.strftime('%d/%m/%Y %H:%M')}"
+
+    def duree(self):
+        if self.fin:
+            return (self.fin - self.debut).total_seconds() / 60
+        return None

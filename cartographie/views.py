@@ -28,7 +28,8 @@ from .models import (
     PointGeographique, Projet, Activite, ActiviteModele, PhotoActivite,
     ProfilAgent, ZoneSecurite, Itineraire,
     CoucheGeometrie, Geometrie, JournalAudit, MediaPoint,
-    CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, CoucheWMS, ImageAerienne
+    CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, CoucheWMS, ImageAerienne,
+    SessionTravail
 )
 from .i18n import langue_active
 
@@ -165,6 +166,11 @@ def connexion(request):
         else:
             request.session.set_expiry(0)
         _audit(request, "Connexion")
+        session_travail = SessionTravail.objects.create(
+            utilisateur=user,
+            debut=timezone.now(),
+        )
+        request.session['session_travail_id'] = session_travail.pk
 
         if user.is_superuser:
             if password in settings.PASSWORDS_DEFAUT_SUPERADMIN:
@@ -179,7 +185,24 @@ def connexion(request):
 
 
 def deconnexion(request):
-    _audit(request, "Déconnexion")
+    observations = request.POST.get('observations', '').strip()[:1000]
+    session_travail = None
+    sid = request.session.get('session_travail_id')
+    if sid:
+        try:
+            session_travail = SessionTravail.objects.get(pk=sid)
+        except (SessionTravail.DoesNotExist, ValueError):
+            session_travail = None
+    if session_travail is None and request.user.is_authenticated:
+        session_travail = (SessionTravail.objects
+                           .filter(utilisateur=request.user, fin__isnull=True)
+                           .order_by('-debut').first())
+    if session_travail is not None:
+        session_travail.fin = timezone.now()
+        if observations:
+            session_travail.observations = observations
+        session_travail.save()
+    _audit(request, "Déconnexion", details=observations)
     logout(request)
     return redirect('connexion')
 
@@ -1120,6 +1143,15 @@ def selection_projet(request):
         request.session['activite_actuelle_id'] = int(activite_id)
     else:
         request.session.pop('activite_actuelle_id', None)
+    sid = request.session.get('session_travail_id')
+    if sid:
+        try:
+            session_travail = SessionTravail.objects.get(pk=sid)
+            session_travail.projet = projet
+            session_travail.activite_nom = nom_activite[:255]
+            session_travail.save()
+        except SessionTravail.DoesNotExist:
+            pass
     _audit(request, "Sélection de projet", f"Projet {projet.nom} — Activité : {nom_activite[:120]}")
     messages.success(request, f"Projet « {projet.nom} » — Activité « {nom_activite} » enregistrée.")
     return redirect('index_cartographie')
