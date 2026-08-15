@@ -943,10 +943,11 @@ function lucideIcon(id, nom) {
 // ─── MUKMAP : SPLASH / PROJET / INVITÉ ────────────────────────
 const SESSION_PROJET_ID = {{ session_projet_id|default:0 }};
 const EST_INVITE = {{ est_invite|yesno:'true,false' }};
+const EST_ADMIN = {{ est_admin|yesno:'true,false' }};
 
 window.addEventListener('load', () => {
     setTimeout(() => { const s = document.getElementById('splash'); if (s) s.classList.add('fini'); }, 900);
-    if (!EST_INVITE && !SESSION_PROJET_ID) ouvrirSelectionProjet();
+    if (!EST_INVITE && !SESSION_PROJET_ID && !EST_ADMIN) ouvrirSelectionProjet();
     if (EST_INVITE && window.lucide) lucide.createIcons();
 });
 
