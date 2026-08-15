@@ -632,6 +632,39 @@
     </div>
     {% endif %}
 
+    {% if 'conditions_meteo' in sections %}
+    <div class="section">
+        <h3><i data-lucide="cloud-sun" style="color:var(--bleu);"></i> <span data-i18n="conditions_meteo_activite">Conditions météorologiques au moment de l'activité</span></h3>
+        {% for a in activites %}{% with m=a.meteo %}{% if m %}
+        <div class="activite">
+            <div class="tete">
+                <span class="badge badge-bleu">{{ a.projet.nom }}</span>
+                <span class="badge"><i data-lucide="user" style="width:11px;height:11px;"></i> {{ a.agent.get_full_name|default:a.agent.username }}</span>
+                <span class="badge"><i data-lucide="clock" style="width:11px;height:11px;"></i> {{ a.date_creation|date:"d/m/Y H:i" }}</span>
+                {% if m.donnees_disponibles %}<span class="badge {% if m.source == 'temps_reel' %}badge-vert{% elif m.source == 'synchronise' %}badge-bleu{% else %}badge-jaune{% endif %}"><i data-lucide="radio" style="width:11px;height:11px;"></i> <span data-i18n="source_{{ m.source }}">{% if m.source == 'temps_reel' %}Temps réel{% elif m.source == 'synchronise' %}Synchronisé{% else %}Cache local{% endif %}</span></span>{% endif %}
+            </div>
+            {% if m.donnees_disponibles and m.temperature_c is not None %}
+            <div class="infos" style="flex-wrap:wrap;">
+                <span><b style="font-size:1.15rem;">{{ m.temperature_c|floatformat:1 }} °C</b>{% if m.conditions %} — {{ m.conditions }}{% endif %}</span>
+                {% if m.localisation %}<span><i data-lucide="map-pin" style="width:12px;height:12px;color:var(--text-3);"></i> {{ m.localisation }}</span>{% endif %}
+                {% if m.humidite is not None %}<span><i data-lucide="droplets" style="width:12px;height:12px;color:var(--text-3);"></i> <span data-i18n="humidite">Humidité</span> : {{ m.humidite }} %</span>{% endif %}
+                {% if m.vent_kmh is not None %}<span><i data-lucide="wind" style="width:12px;height:12px;color:var(--text-3);"></i> <span data-i18n="vent">Vent</span> : {{ m.vent_kmh|floatformat:0 }} km/h {{ m.vent_direction }}</span>{% endif %}
+                {% if m.proba_pluie is not None %}<span><i data-lucide="umbrella" style="width:12px;height:12px;color:var(--text-3);"></i> <span data-i18n="proba_pluie">Pluie</span> : {{ m.proba_pluie }} %</span>{% endif %}
+                {% if m.lever_soleil and m.coucher_soleil %}<span><i data-lucide="sunrise" style="width:12px;height:12px;color:var(--text-3);"></i> {{ m.lever_soleil|date:"H:i" }} — <i data-lucide="sunset" style="width:12px;height:12px;color:var(--text-3);"></i> {{ m.coucher_soleil|date:"H:i" }}</span>{% endif %}
+            </div>
+            {% else %}
+            <div class="texte"><span data-i18n="meteo_indisponible">Données météo indisponibles au moment de l'activité.</span></div>
+            {% endif %}
+            <div class="texte" style="margin-top:6px;color:var(--text-3);font-size:.8rem;">
+                <span data-i18n="meteo_releve_le">Relevé le</span> {{ m.horodatage_meteo|date:"d/m/Y H:i"|default:"—" }}
+            </div>
+        </div>
+        {% endif %}{% endwith %}{% empty %}
+        <div class="vide"><i data-lucide="cloud-off"></i><span data-i18n="aucune_meteo_periode">Aucune donnée météo sur cette période.</span></div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {% if 'activites' in sections %}
     <div class="section">
         <h3><i data-lucide="activity" style="color:var(--green);"></i> <span data-i18n="activites_agents">Activités des agents</span> <span class="compte">{{ total }}</span></h3>

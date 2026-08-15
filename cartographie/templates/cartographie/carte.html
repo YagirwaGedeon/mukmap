@@ -442,6 +442,7 @@
         .spin { width: 26px; height: 26px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
+    <link rel="stylesheet" href="{% static 'css/meteo.css' %}?v=3">
 {% include 'cartographie/_pwa_head.html' %}
 </head>
 <body>
@@ -1073,6 +1074,7 @@
 <script src="{% static 'js/water-supply.js' %}?v=44"></script>
 <script src="{% static 'js/thematic.js' %}?v=3"></script>
 <script src="{% static 'js/fiche-point.js' %}?v=3"></script>
+<script src="{% static 'js/weather-widget.js' %}?v=3"></script>
 <script>
 const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_token }}';
 

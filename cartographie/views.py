@@ -29,7 +29,7 @@ from .models import (
     ProfilAgent, ZoneSecurite, Itineraire,
     CoucheGeometrie, Geometrie, JournalAudit, MediaPoint,
     CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, CoucheWMS, ImageAerienne,
-    SessionTravail
+    SessionTravail, MeteoActivite
 )
 from .i18n import langue_active
 
@@ -941,6 +941,82 @@ def adduction_dashboard(request):
 # ─── ACTIVITÉS ─────────────────────────────────────────────────
 
 
+def _extraire_meteo_post(request):
+    """Lit les champs météo cachés du formulaire d'activité (remplis par le widget).
+    Retourne un dict normalisé (mêmes clés que meteo.recuperer_meteo) ou None."""
+    nom_champs = ('meteo_latitude', 'meteo_longitude', 'meteo_temperature',
+                  'meteo_conditions', 'meteo_code', 'meteo_humidite', 'meteo_vent_kmh',
+                  'meteo_vent_direction', 'meteo_vent_direction_deg', 'meteo_proba_pluie',
+                  'meteo_lever', 'meteo_coucher', 'meteo_localisation', 'meteo_source',
+                  'meteo_horodatage')
+    if not any(request.POST.get(c) for c in nom_champs):
+        return None
+
+    def _f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    def _i(v):
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return None
+
+    from .meteo import _valider_coordonnees
+    lat, lon = _valider_coordonnees(
+        request.POST.get('meteo_latitude'), request.POST.get('meteo_longitude'))
+    source = (request.POST.get('meteo_source') or 'temps_reel')[:20]
+    if source not in ('temps_reel', 'cache', 'synchronise'):
+        source = 'temps_reel'
+    return {
+        'lat': lat, 'lon': lon,
+        'temperature': _f(request.POST.get('meteo_temperature')),
+        'conditions': (request.POST.get('meteo_conditions') or '')[:120],
+        'code': _i(request.POST.get('meteo_code')),
+        'humidite': _i(request.POST.get('meteo_humidite')),
+        'vent_kmh': _f(request.POST.get('meteo_vent_kmh')),
+        'vent_direction': (request.POST.get('meteo_vent_direction') or '')[:40],
+        'vent_direction_deg': _i(request.POST.get('meteo_vent_direction_deg')),
+        'proba_pluie': _i(request.POST.get('meteo_proba_pluie')),
+        'lever_soleil': request.POST.get('meteo_lever') or None,
+        'coucher_soleil': request.POST.get('meteo_coucher') or None,
+        'localisation': (request.POST.get('meteo_localisation') or '')[:200],
+        'source': source,
+        'horodatage': request.POST.get('meteo_horodatage') or None,
+    }
+
+
+def _enregistrer_meteo_activite(activite, donnees):
+    """Persiste le snapshot météo d'une activité (OneToOne + update_or_create
+    = protection anti-doublons ; ne lève jamais d'exception métier)."""
+    from django.utils.dateparse import parse_datetime
+    lever = parse_datetime(donnees.get('lever_soleil') or '')
+    coucher = parse_datetime(donnees.get('coucher_soleil') or '')
+    horo = parse_datetime(donnees.get('horodatage') or '')
+    MeteoActivite.objects.update_or_create(
+        activite=activite,
+        defaults={
+            'latitude': donnees.get('lat'),
+            'longitude': donnees.get('lon'),
+            'localisation': (donnees.get('localisation') or '')[:200],
+            'temperature_c': donnees.get('temperature'),
+            'conditions': (donnees.get('conditions') or '')[:120],
+            'code_conditions': donnees.get('code'),
+            'humidite': donnees.get('humidite'),
+            'vent_kmh': donnees.get('vent_kmh'),
+            'vent_direction': (donnees.get('vent_direction') or '')[:40],
+            'vent_direction_deg': donnees.get('vent_direction_deg'),
+            'proba_pluie': donnees.get('proba_pluie'),
+            'lever_soleil': lever,
+            'coucher_soleil': coucher,
+            'donnees_disponibles': donnees.get('temperature') is not None,
+            'source': donnees.get('source', 'temps_reel'),
+            'horodatage_meteo': horo or timezone.now(),
+        })
+
+
 @login_required
 def activite_create(request):
     if request.method == "POST":
@@ -1020,6 +1096,17 @@ def activite_create(request):
         photos = request.FILES.getlist('photos')
         for photo in photos:
             PhotoActivite.objects.create(activite=activite, image=photo)
+
+        # ── Snapshot météo (historisation ; ne bloque jamais la création) ──
+        try:
+            meteo_donnees = _extraire_meteo_post(request)
+            if meteo_donnees is None:
+                from .meteo import recuperer_meteo
+                meteo_donnees = recuperer_meteo(activite.latitude, activite.longitude)
+            if meteo_donnees:
+                _enregistrer_meteo_activite(activite, meteo_donnees)
+        except Exception:
+            pass
 
         _audit(request, "Création d'activité", f"Activité #{activite.pk} assignée à {agent.username if agent else 'N/A'}")
         messages.success(request, "Activité encodée avec succès.")
@@ -1701,6 +1788,7 @@ TOUTES_SECTIONS_RAPPORT = (
     'infos', 'stats', 'activites', 'beneficiaires', 'agents',
     'terrain', 'itineraire', 'points', 'zones', 'dangers',
     'photos', 'observations', 'recommandations', 'audits',
+    'conditions_meteo',
 )
 
 
@@ -1878,6 +1966,12 @@ def _donnees_rapport_v2(f):
 
     nb_photos = sum(a.photos.count() for a in activites)
 
+    meteo_par_activite = {}
+    if 'conditions_meteo' in sections and activites:
+        for m in MeteoActivite.objects.select_related('activite').filter(
+                activite_id__in=[a.pk for a in activites]):
+            meteo_par_activite[m.activite_id] = m
+
     graph_activites = {'labels': [x['projet'].nom for x in par_projet], 'values': [x['count'] for x in par_projet]}
     graph_benef = {'labels': [x['projet'].nom for x in par_projet], 'values': [x['benef'] for x in par_projet]}
     graph_zones = {'labels': ['dangereuse', 'securisee', 'indisponible'], 'values': [zd, zs, zi]}
@@ -1904,6 +1998,7 @@ def _donnees_rapport_v2(f):
         'audits': audits,
         'par_projet': par_projet, 'par_categorie': par_categorie,
         'nb_photos': nb_photos,
+        'meteo_par_activite': meteo_par_activite,
         'graph_activites': json.dumps(graph_activites),
         'graph_benef': json.dumps(graph_benef),
         'graph_zones': json.dumps(graph_zones),
@@ -2036,6 +2131,8 @@ def _generer_docx(ctx, nom_fichier, lang='fr'):
 
     def nom_agent(u):
         return (u.get_full_name() or u.username) if u else 'N/A'
+
+    meteo_par_activite = ctx.get('meteo_par_activite', {})
 
     style = doc.styles['Normal']
     style.font.name = 'Calibri'
@@ -2281,6 +2378,52 @@ def _generer_docx(ctx, nom_fichier, lang='fr'):
         if nb == 0:
             doc.add_paragraph(t('aucun_obs_rec'))
 
+    if 'conditions_meteo' in sections:
+        doc.add_heading(t('conditions_meteo_activite'), level=2)
+        nb_meteo = 0
+        for a in activites:
+            m = meteo_par_activite.get(a.pk)
+            if not m:
+                continue
+            nb_meteo += 1
+            doc.add_heading(f"{nom_agent(a.agent)} — {a.projet.nom} ({a.date_creation.strftime('%d/%m/%Y')})", level=3)
+            if m.donnees_disponibles and m.temperature_c is not None:
+                if m.localisation:
+                    p = doc.add_paragraph()
+                    p.add_run(f"{t('meteo_localisation')} : ").bold = True
+                    p.add_run(m.localisation)
+                p = doc.add_paragraph()
+                p.add_run(f"{t('temperature')} : ").bold = True
+                p.add_run(f"{m.temperature_c:.1f} °C")
+                if m.conditions:
+                    p = doc.add_paragraph()
+                    p.add_run(f"{t('conditions_meteo')} : ").bold = True
+                    p.add_run(m.conditions)
+                if m.humidite is not None:
+                    p = doc.add_paragraph()
+                    p.add_run(f"{t('humidite')} : ").bold = True
+                    p.add_run(f"{m.humidite} %")
+                if m.vent_kmh is not None:
+                    p = doc.add_paragraph()
+                    p.add_run(f"{t('vent')} : ").bold = True
+                    p.add_run(f"{m.vent_kmh:.0f} km/h {m.vent_direction or ''}".strip())
+                if m.proba_pluie is not None:
+                    p = doc.add_paragraph()
+                    p.add_run(f"{t('proba_pluie')} : ").bold = True
+                    p.add_run(f"{m.proba_pluie} %")
+                if m.lever_soleil and m.coucher_soleil:
+                    p = doc.add_paragraph()
+                    p.add_run(f"{t('soleil')} : ").bold = True
+                    p.add_run(f"{m.lever_soleil.strftime('%H:%M')} — {m.coucher_soleil.strftime('%H:%M')}")
+            else:
+                doc.add_paragraph(t('meteo_indisponible'))
+            p = doc.add_paragraph()
+            p.add_run(f"{t('meteo_source')} : ").bold = True
+            p.add_run(t('source_' + (m.source if m.source in ('temps_reel', 'cache', 'synchronise') else 'temps_reel')))
+            p.add_run(f" — {t('meteo_releve_le')} " + (m.horodatage_meteo.strftime('%d/%m/%Y %H:%M') if m.horodatage_meteo else t('meteo_inconnu')))
+        if nb_meteo == 0:
+            doc.add_paragraph(t('aucune_meteo_periode'))
+
     doc.add_heading(t('activites_agents'), level=2)
     for a in activites:
         doc.add_heading(f"{a.projet.nom} — {a.date_creation.strftime('%d/%m/%Y %H:%M')}", level=3)
@@ -2363,6 +2506,8 @@ def _generer_pdf(ctx, nom_fichier, lang='fr'):
 
     def nom_agent(u):
         return (u.get_full_name() or u.username) if u else 'N/A'
+
+    meteo_par_activite = ctx.get('meteo_par_activite', {})
 
     def net(s):
         if s is None:
@@ -2762,6 +2907,60 @@ def _generer_pdf(ctx, nom_fichier, lang='fr'):
             pdf.set_text_color(*GRIS)
             pdf.cell(0, 7, net(t('aucun_obs_rec')), 0, 1)
 
+    # ── 4ter. Conditions météorologiques des activités
+    if 'conditions_meteo' in sections:
+        titre_section(f"{t('conditions_meteo_activite')}")
+        nb_meteo = 0
+        for a in activites:
+            m = meteo_par_activite.get(a.pk)
+            if not m:
+                continue
+            nb_meteo += 1
+            if pdf.get_y() > 235:
+                pdf.add_page()
+            pdf.set_font(fam, 'B', 9)
+            pdf.cell(0, 5.5, f"{nom_agent(a.agent)} — {a.projet.nom} ({a.date_creation.strftime('%d/%m/%Y')})", 0, 1)
+            pdf.set_font(fam, '', 9)
+            pdf.set_text_color(*TEXTE)
+            if m.donnees_disponibles and m.temperature_c is not None:
+                ligne = f"  {t('temperature')} : {m.temperature_c:.1f} °C"
+                if m.conditions:
+                    ligne += f"   |   {t('conditions_meteo')} : {tronque(m.conditions, 40)}"
+                pdf.set_x(10)
+                pdf.multi_cell(0, 5.5, ligne)
+                if m.localisation:
+                    pdf.set_x(10)
+                    pdf.multi_cell(0, 5.5, f"  {t('meteo_localisation')} : " + tronque(m.localisation, 60))
+                ligne2 = ''
+                if m.humidite is not None:
+                    ligne2 += f"{t('humidite')} : {m.humidite} %"
+                if m.vent_kmh is not None:
+                    ligne2 += f"   |   {t('vent')} : {m.vent_kmh:.0f} km/h {m.vent_direction or ''}".strip()
+                if m.proba_pluie is not None:
+                    ligne2 += f"   |   {t('proba_pluie')} : {m.proba_pluie} %"
+                if ligne2:
+                    pdf.set_x(10)
+                    pdf.multi_cell(0, 5.5, '  ' + ligne2)
+                if m.lever_soleil and m.coucher_soleil:
+                    pdf.set_x(10)
+                    pdf.multi_cell(0, 5.5, f"  {t('soleil')} : {m.lever_soleil.strftime('%H:%M')} — {m.coucher_soleil.strftime('%H:%M')}")
+            else:
+                pdf.set_x(10)
+                pdf.multi_cell(0, 5.5, '  ' + net(t('meteo_indisponible')))
+            src = m.source if m.source in ('temps_reel', 'cache', 'synchronise') else 'temps_reel'
+            horo = m.horodatage_meteo.strftime('%d/%m/%Y %H:%M') if m.horodatage_meteo else t('meteo_inconnu')
+            pdf.set_font(fam, 'I', 8)
+            pdf.set_text_color(*GRIS)
+            pdf.set_x(10)
+            pdf.cell(0, 5, f"{t('meteo_source')} : {t('source_' + src)}   |   {t('meteo_releve_le')} {horo}", 0, 1)
+            pdf.set_text_color(*TEXTE)
+            pdf.set_font(fam, '', 9)
+            pdf.ln(1)
+        if nb_meteo == 0:
+            pdf.set_font(fam, 'I', 9)
+            pdf.set_text_color(*GRIS)
+            pdf.cell(0, 7, net(t('aucune_meteo_periode')), 0, 1)
+
     # ── 5. Activités des agents
     titre_section(f"{t('activites_agents')} ({total})")
     for i, a in enumerate(activites, 1):
@@ -2846,6 +3045,8 @@ def _generer_excel(ctx, nom_fichier, lang='fr'):
     def nom_agent(u):
         return (u.get_full_name() or u.username) if u else 'N/A'
 
+    meteo_par_activite = ctx.get('meteo_par_activite', {})
+
     wb = Workbook()
     ENTETE_FILL = PatternFill('solid', fgColor='4F46E5')
     ENTETE_FONT = Font(color='FFFFFF', bold=True)
@@ -2919,6 +3120,38 @@ def _generer_excel(ctx, nom_fichier, lang='fr'):
                        a.enfants or 0, a.menages or 0, a.objectif or '', a.rapport or '',
                        a.resultats or '', a.difficultes or '', a.recommandations or '',
                        a.observations or ''])
+    remplir(ws, lignes)
+
+    # ── Conditions météo ────────────────────────────────────────
+    ws = wb.create_sheet('Meteo')
+    cols = [t('date'), t('projet_sg'), t('agent'), t('meteo_localisation'),
+            t('temperature'), t('conditions_meteo'), t('humidite'), t('vent'),
+            t('proba_pluie'), t('soleil'), t('meteo_source'), t('meteo_releve_le')]
+    preparer(ws, [16, 20, 20, 26, 12, 22, 10, 14, 12, 18, 14, 16], cols)
+    lignes = []
+    for a in activites:
+        m = meteo_par_activite.get(a.pk)
+        if not m:
+            continue
+        src = m.source if m.source in ('temps_reel', 'cache', 'synchronise') else 'temps_reel'
+        soleil = ''
+        if m.lever_soleil and m.coucher_soleil:
+            soleil = f"{m.lever_soleil.strftime('%H:%M')} — {m.coucher_soleil.strftime('%H:%M')}"
+        vent = ''
+        if m.vent_kmh is not None:
+            vent = f"{m.vent_kmh:.0f} km/h {m.vent_direction or ''}".strip()
+        lignes.append([
+            a.date_creation.strftime('%d/%m/%Y %H:%M'), a.projet.nom, nom_agent(a.agent),
+            m.localisation or '',
+            f"{m.temperature_c:.1f} °C" if m.donnees_disponibles and m.temperature_c is not None else t('meteo_indisponible'),
+            m.conditions or '',
+            m.humidite if m.humidite is not None else '',
+            vent,
+            m.proba_pluie if m.proba_pluie is not None else '',
+            soleil,
+            t('source_' + src),
+            m.horodatage_meteo.strftime('%d/%m/%Y %H:%M') if m.horodatage_meteo else t('meteo_inconnu'),
+        ])
     remplir(ws, lignes)
 
     # ── Projets ──────────────────────────────────────────────────

@@ -145,6 +145,40 @@ class Activite(models.Model):
         return f"{nom} - {self.projet.nom} - {self.date_creation.strftime('%d/%m/%Y %H:%M')}"
 
 
+class MeteoActivite(models.Model):
+    """Conditions météorologiques au moment d'une activité de terrain (snapshot historisé)."""
+    SOURCE_CHOICES = [
+        ('temps_reel', 'Temps réel'),
+        ('cache', 'Cache local'),
+        ('synchronise', 'Synchronisé'),
+    ]
+    activite = models.OneToOneField(Activite, on_delete=models.CASCADE, related_name='meteo', verbose_name="Activité")
+    latitude = models.FloatField(blank=True, null=True, verbose_name="Latitude du relevé")
+    longitude = models.FloatField(blank=True, null=True, verbose_name="Longitude du relevé")
+    localisation = models.CharField(max_length=200, blank=True, default='', verbose_name="Localisation")
+    temperature_c = models.FloatField(null=True, blank=True, verbose_name="Température (°C)")
+    conditions = models.CharField(max_length=120, blank=True, default='', verbose_name="Conditions")
+    code_conditions = models.IntegerField(null=True, blank=True, verbose_name="Code WMO")
+    humidite = models.IntegerField(null=True, blank=True, verbose_name="Humidité (%)")
+    vent_kmh = models.FloatField(null=True, blank=True, verbose_name="Vent (km/h)")
+    vent_direction = models.CharField(max_length=40, blank=True, default='', verbose_name="Direction du vent")
+    vent_direction_deg = models.IntegerField(null=True, blank=True, verbose_name="Direction du vent (°)")
+    proba_pluie = models.IntegerField(null=True, blank=True, verbose_name="Probabilité de pluie (%)")
+    lever_soleil = models.DateTimeField(null=True, blank=True, verbose_name="Lever du soleil")
+    coucher_soleil = models.DateTimeField(null=True, blank=True, verbose_name="Coucher du soleil")
+    donnees_disponibles = models.BooleanField(default=False, verbose_name="Données météo disponibles")
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='temps_reel', verbose_name="Source")
+    horodatage_meteo = models.DateTimeField(null=True, blank=True, verbose_name="Horodatage des données météo")
+    cree_le = models.DateTimeField(auto_now_add=True, verbose_name="Enregistré le")
+
+    class Meta:
+        verbose_name = "Conditions météo d'activité"
+        verbose_name_plural = "Conditions météo des activités"
+
+    def __str__(self):
+        return f"Météo activité #{self.activite_id} - {self.temperature_c or 'N/D'} °C"
+
+
 class PhotoActivite(models.Model):
     activite = models.ForeignKey(Activite, on_delete=models.CASCADE, related_name='photos', verbose_name="Activité")
     image = models.ImageField(upload_to='photos_activites/', verbose_name="Photo")

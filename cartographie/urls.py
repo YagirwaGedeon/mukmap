@@ -4,6 +4,7 @@ from . import api_points
 from . import offline
 from . import water_supply
 from . import api_audit
+from . import meteo
 
 urlpatterns = [
     path('', views.index_cartographie, name='index_cartographie'),
@@ -33,6 +34,7 @@ urlpatterns = [
     path('api/offline/sync/', offline.api_sync, name='api_offline_sync'),
     path('api/offline/traces/', offline.api_traces_sync, name='api_offline_traces'),
     path('api/offline/photos/', offline.api_photo_upload, name='api_offline_photos'),
+    path('api/meteo/', meteo.api_meteo, name='api_meteo'),
     path('export/carte-pdf/', views.export_carte_pdf, name='export_carte_pdf'),
     path('export/<str:format>/', views.export_points, name='export_points'),
 

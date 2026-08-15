@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="fr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
@@ -7,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <link rel="stylesheet" href="{% static 'css/meteo.css' %}?v=3">
     <style>
         :root {
             --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
@@ -254,6 +256,10 @@
             <h3><span>👥</span> <span data-i18n="beneficiaires_mois">Bénéficiaires par mois</span></h3>
             <div class="chart chart-petit" id="chart-benef"></div>
         </div>
+        <div class="carte-chart">
+            <h3><span>⛅</span> <span data-i18n="meteo_widget">Météo</span></h3>
+            <div id="widget-meteo"></div>
+        </div>
     </div>
 
     <div class="carte-chart" style="margin-top:16px;">
@@ -370,6 +376,7 @@ setInterval(majHorloge, 1000);
 
 if (window.lucide) lucide.createIcons();
 </script>
+<script src="{% static 'js/weather-widget.js' %}?v=3"></script>
 {% include 'cartographie/_i18n.html' %}
 {% include 'cartographie/_pwa_body.html' %}
 </body>

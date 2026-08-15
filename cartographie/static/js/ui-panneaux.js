@@ -104,6 +104,13 @@
         { sel: '#panel-thema', tete: '.th-tete' },
         { sel: '.mukmap-analyse', tete: '.mukmap-analyse-tete' },
         { sel: '.mukmap-gps', tete: '.mukmap-gps-tete' },
+        { sel: '.mukmap-meteo', tete: '.mukmap-meteo-tete',
+          fermer: function () {
+              var p = document.querySelector('.mukmap-meteo');
+              if (p) p.classList.remove('ouvert');
+              var b = document.querySelector('#mukmap-meteo-ancre');
+              if (b) b.classList.remove('actif');
+          } },
         { sel: '.mukmap-offline-panneau', tete: '.mukmap-offline-entete',
           fermer: function () {
               var badge = document.querySelector('#mukmap-offline-ancre .mukmap-offline-badge');
