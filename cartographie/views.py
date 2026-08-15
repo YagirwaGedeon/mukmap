@@ -4736,6 +4736,50 @@ def mode_avance_admin(request):
     })
 
 
+@user_passes_test(_est_admin)
+def guide_utilisation(request):
+    """Section « Guide d'utilisation » de l'espace Super Admin :
+    consultation, téléchargement (PDF/Word) et régénération du guide officiel MUKESHABA."""
+    import datetime
+    from django.core.management import call_command
+
+    from cartographie.guide_contenu import CHAPITRES, META
+
+    dossier = os.path.join(settings.BASE_DIR, 'cartographie', 'static', 'docs')
+    if request.method == 'POST':
+        if not _est_admin_principal(request.user):
+            messages.error(request, "Seul l'administrateur principal peut régénérer le guide d'utilisation.")
+            return redirect('guide_utilisation')
+        try:
+            call_command('generer_guide')
+            _audit(request, "Régénération du guide d'utilisation", "PDF + Word")
+            messages.success(request, "Le guide d'utilisation a été régénéré avec succès.")
+        except Exception as exc:
+            messages.error(request, "Erreur lors de la régénération du guide : %s" % exc)
+        return redirect('guide_utilisation')
+
+    fichiers = {}
+    for ext, nom in (('pdf', 'MUKMAP_Guide_Complet_Utilisateur.pdf'),
+                     ('docx', 'MUKMAP_Guide_Complet_Utilisateur.docx')):
+        chemin = os.path.join(dossier, nom)
+        if os.path.exists(chemin):
+            fichiers[ext] = {
+                'nom': nom,
+                'taille_ko': round(os.path.getsize(chemin) / 1024, 1),
+                'modifie': datetime.datetime.fromtimestamp(
+                    os.path.getmtime(chemin)).strftime('%d/%m/%Y %H:%M'),
+            }
+        else:
+            fichiers[ext] = None
+
+    return render(request, 'cartographie/guide_utilisation.html', {
+        'meta': META,
+        'chapitres': CHAPITRES,
+        'fichiers': fichiers,
+        'est_admin_principal': _est_admin_principal(request.user),
+    })
+
+
 @login_required
 def api_codes_mode(request):
     """Génération / liste des codes d'accès (POST/GET) — réservée à l'administrateur principal."""

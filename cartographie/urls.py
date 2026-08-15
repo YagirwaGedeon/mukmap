@@ -92,6 +92,7 @@ urlpatterns = [
     path('api/mode/', views.api_mode, name='api_mode'),
     path('api/mode/changer/', views.api_mode_changer, name='api_mode_changer'),
     path('mode-avance/administration/', views.mode_avance_admin, name='mode_avance_admin'),
+    path('guide-utilisation/', views.guide_utilisation, name='guide_utilisation'),
     path('api/mode-avance/codes/', views.api_codes_mode, name='api_codes_mode'),
     path('api/mode-avance/codes/<int:pk>/revoquer/', views.api_code_revoquer, name='api_code_revoquer'),
 

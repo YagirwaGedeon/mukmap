@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guide d'utilisation — MUKMAP</title>
+    {% load static %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.css">
+    <style>
+        :root {
+            --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
+            --text: #eef0ff; --text-2: #a3a9d0; --text-3: #6b729c;
+            --accent: #6d5df6; --accent-2: #4f46e5;
+            --green: #22c55e; --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+            --shadow: 0 10px 40px rgba(0,0,0,.45); --radius: 14px;
+        }
+        [data-theme="light"] {
+            --bg: #f4f5fb; --bg-2: #ffffff; --bg-3: #f1f2fa; --border: #e3e5f2; --border-2: #cdd1e8;
+            --text: #1a1f36; --text-2: #4b5278; --text-3: #8a90b8;
+            --shadow: 0 10px 30px rgba(30,40,90,.12);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 8px; }
+
+        #topbar { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px; padding: 12px 22px; background: color-mix(in srgb, var(--bg-2) 88%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .pastille { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; box-shadow: 0 4px 14px rgba(79,70,229,.4); }
+        .titre { font-weight: 800; font-size: 1rem; }
+        .sous-titre { font-size: .7rem; color: var(--text-3); }
+        nav { display: flex; gap: 6px; margin-left: 24px; flex-wrap: wrap; }
+        nav a { text-decoration: none; color: var(--text-2); font-size: .8rem; font-weight: 600; padding: 8px 14px; border-radius: 10px; transition: all .18s; display: flex; align-items: center; gap: 7px; }
+        nav a:hover { background: var(--bg-3); color: var(--text); }
+        nav a.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+        .droite { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+        .conteneur { padding: 22px; max-width: 1100px; margin: 0 auto; }
+        .entete { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+        .entete h2 { font-size: 1.2rem; display: flex; align-items: center; gap: 9px; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border-radius: 10px; font-weight: 600; font-size: .83rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; cursor: pointer; }
+        .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-rouge { background: rgba(239,68,68,.14); color: var(--red); border-color: rgba(239,68,68,.3); }
+        .btn-vert { background: rgba(34,197,94,.14); color: var(--green); border-color: rgba(34,197,94,.3); }
+        .btn-sm { padding: 6px 12px; font-size: .74rem; border-radius: 8px; }
+
+        .flash { display: none; padding: 11px 14px; border-radius: 10px; font-size: .8rem; margin-bottom: 16px; }
+        .flash.visible { display: block; }
+        .flash-ok { border: 1px solid var(--green); background: rgba(34,197,94,.1); color: var(--green); }
+        .flash-err { border: 1px solid var(--red); background: rgba(239,68,68,.1); color: var(--red); }
+
+        .grille-infos { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 22px; }
+        .info-carte { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+        .info-carte .cle { font-size: .68rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 7px; }
+        .info-carte .valeur { font-size: .92rem; font-weight: 700; }
+        .info-carte .valeur.petit { font-size: .8rem; font-weight: 600; color: var(--text-2); }
+
+        .boite { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 22px; }
+        .boite-entete { padding: 15px 18px; border-bottom: 1px solid var(--border); font-weight: 800; display: flex; align-items: center; gap: 9px; }
+        .boite-corps { padding: 18px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: .7rem; color: var(--text-3); text-transform: uppercase; letter-spacing: .4px; padding: 11px 16px; border-bottom: 1px solid var(--border); }
+        td { padding: 12px 16px; font-size: .8rem; border-bottom: 1px solid var(--border); }
+        tr:last-child td { border-bottom: none; }
+        .badge { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: .66rem; font-weight: 700; }
+        .badge-vert { background: rgba(34,197,94,.15); color: var(--green); }
+        .badge-rouge { background: rgba(239,68,68,.15); color: var(--red); }
+        .badge-jaune { background: rgba(245,158,11,.15); color: var(--orange); }
+        .muted { color: var(--text-3); font-size: .74rem; }
+        .retour { display: inline-flex; align-items: center; gap: 7px; color: var(--text-2); text-decoration: none; font-size: .8rem; font-weight: 600; margin-bottom: 14px; }
+        .retour:hover { color: var(--accent); }
+
+        #filtre-chapitres { width: 100%; padding: 11px 14px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); font-size: .85rem; outline: none; margin-bottom: 14px; }
+        #filtre-chapitres:focus { border-color: var(--accent); }
+        .liste-chapitres { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+        .chap { background: var(--bg-3); border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; font-size: .8rem; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+        .chap .num { color: var(--accent); font-weight: 800; }
+        .vide { color: var(--text-3); text-align: center; padding: 50px 0; font-size: .85rem; }
+        @media (max-width: 900px) { nav { display: none; } }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<header id="topbar">
+    <div class="logo">
+        <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
+        <div>
+            <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">PRO</span></div>
+            <div class="sous-titre" data-i18n="guide_sous_titre">Guide complet d'utilisation — Manuel officiel</div>
+        </div>
+    </div>
+    <nav>
+        <a href="{% url 'dashboard' %}"><i data-lucide="layout-dashboard"></i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'projet_list' %}"><i data-lucide="folder-kanban"></i> <span data-i18n="projets">Projets</span></a>
+        <a href="{% url 'audit_list' %}"><i data-lucide="history"></i> <span data-i18n="historique">Historique</span></a>
+        <a href="{% url 'mode_avance_admin' %}"><i data-lucide="key-round"></i> <span data-i18n="mode_admin_codes">Codes Mode Avancé</span></a>
+        <a href="{% url 'guide_utilisation' %}" class="actif"><i data-lucide="book-open"></i> <span data-i18n="guide_titre">Guide d'utilisation</span></a>
+    </nav>
+    <div class="droite">
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <button class="btn btn-icon" id="btn-theme" title="Thème" data-i18n-title="theme"><i data-lucide="moon"></i></button>
+        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+    </div>
+</header>
+
+<main class="conteneur">
+    <a class="retour" href="{% url 'dashboard' %}"><i data-lucide="arrow-left"></i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+
+    {% if messages %}
+    <div style="display:grid;gap:8px;margin-bottom:16px;">
+        {% for m in messages %}<div style="padding:11px 14px;border-radius:10px;font-size:.8rem;border:1px solid {% if m.tags == 'error' %}var(--red){% else %}var(--green){% endif %};background:{% if m.tags == 'error' %}rgba(239,68,68,.1){% else %}rgba(34,197,94,.1){% endif %};color:{% if m.tags == 'error' %}var(--red){% else %}var(--green){% endif %};">{{ m }}</div>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="entete">
+        <h2><i data-lucide="book-open" style="width:22px;height:22px;color:var(--accent);"></i> <span data-i18n="guide_titre">Guide d'utilisation</span></h2>
+        {% if est_admin_principal %}
+        <form method="POST" onsubmit="return confirm(window.mukmapT ? (window.mukmapT('guide_regenerer_confirm') || 'Regenerate the guide?') : 'Regenerate the guide?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-vert"><i data-lucide="refresh-cw"></i> <span data-i18n="guide_regenerer">Régénérer le guide</span></button>
+        </form>
+        {% else %}
+        <div class="muted" data-i18n="guide_reserve">Réservé à l'administrateur principal (YAGIRWA).</div>
+        {% endif %}
+    </div>
+
+    <p class="muted" style="margin-bottom:18px;line-height:1.6;" data-i18n="guide_desc">Consultez ou téléchargez le guide complet d'utilisation de MUKMAP en PDF ou Word. Ce guide est le manuel officiel édité par MUKESHABA.</p>
+
+    <div class="grille-infos">
+        <div class="info-carte">
+            <div class="cle" data-i18n="guide_version">Version</div>
+            <div class="valeur">{{ meta.app_nom }} {{ meta.app_version }}</div>
+        </div>
+        <div class="info-carte">
+            <div class="cle" data-i18n="guide_date_edition">Édition</div>
+            <div class="valeur">{{ meta.date_guide }}</div>
+        </div>
+        <div class="info-carte">
+            <div class="cle" data-i18n="guide_chapitres">Chapitres & annexes</div>
+            <div class="valeur">{{ chapitres|length }}</div>
+        </div>
+        <div class="info-carte">
+            <div class="cle" data-i18n="guide_contact">Éditeur</div>
+            <div class="valeur petit">{{ meta.societe }} · +243 971460415</div>
+        </div>
+    </div>
+
+    <div class="boite">
+        <div class="boite-entete"><i data-lucide="file-down" style="width:18px;height:18px;color:var(--accent);"></i> <span data-i18n="guide_fichiers">Fichiers disponibles</span></div>
+        {% if fichiers.pdf or fichiers.docx %}
+        <table>
+            <thead>
+                <tr><th>Format</th><th>Fichier</th><th>Taille</th><th>Modifié le</th><th style="text-align:right;"></th></tr>
+            </thead>
+            <tbody>
+                {% if fichiers.pdf %}
+                <tr>
+                    <td><span class="badge badge-rouge">PDF</span></td>
+                    <td>{{ fichiers.pdf.nom }}</td>
+                    <td>{{ fichiers.pdf.taille_ko }} Ko</td>
+                    <td>{{ fichiers.pdf.modifie }}</td>
+                    <td style="text-align:right;white-space:nowrap;">
+                        <a class="btn btn-rouge btn-sm" target="_blank" href="{% static 'docs/' %}{{ fichiers.pdf.nom }}"><i data-lucide="eye"></i> <span data-i18n="guide_consulter">Consulter</span></a>
+                        <a class="btn btn-primary btn-sm" href="{% static 'docs/' %}{{ fichiers.pdf.nom }}" download><i data-lucide="download"></i> <span data-i18n="guide_telecharger_pdf">Télécharger PDF</span></a>
+                    </td>
+                </tr>
+                {% endif %}
+                {% if fichiers.docx %}
+                <tr>
+                    <td><span class="badge badge-vert">DOCX</span></td>
+                    <td>{{ fichiers.docx.nom }}</td>
+                    <td>{{ fichiers.docx.taille_ko }} Ko</td>
+                    <td>{{ fichiers.docx.modifie }}</td>
+                    <td style="text-align:right;white-space:nowrap;">
+                        <a class="btn btn-vert btn-sm" href="{% static 'docs/' %}{{ fichiers.docx.nom }}" download><i data-lucide="download"></i> <span data-i18n="guide_telecharger_word">Télécharger Word</span></a>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="boite-corps">
+            <div class="muted" data-i18n="guide_aucun_fichier">Le guide n'a pas encore été généré. Cliquez sur « Régénérer le guide » pour créer les fichiers PDF et Word.</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="boite">
+        <div class="boite-entete"><i data-lucide="list" style="width:18px;height:18px;color:var(--accent);"></i> <span data-i18n="guide_chapitres">Chapitres & annexes</span></div>
+        <div class="boite-corps">
+            <input type="text" id="filtre-chapitres" placeholder="{{ guide_filtrer }}" data-i18n-placeholder="guide_filtrer">
+            <div class="liste-chapitres" id="liste-chapitres">
+                {% for c in chapitres %}
+                <div class="chap" data-texte="{{ c.titre|lower }}"><span class="num">{{ c.titre|slice:":3" }}</span> <span>{{ c.titre }}</span></div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script>
+document.getElementById('btn-theme').addEventListener('click', () => {
+    const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('theme', t);
+});
+const themeStocke = localStorage.getItem('theme');
+if (themeStocke) document.documentElement.dataset.theme = themeStocke;
+if (window.lucide) lucide.createIcons();
+
+const champFiltre = document.getElementById('filtre-chapitres');
+champFiltre.addEventListener('input', function () {
+    const q = this.value.trim().toLowerCase();
+    let visibles = 0;
+    document.querySelectorAll('#liste-chapitres .chap').forEach(el => {
+        const ok = !q || el.dataset.texte.includes(q);
+        el.style.display = ok ? 'flex' : 'none';
+        if (ok) visibles++;
+    });
+    const vide = document.getElementById('aucun-resultat');
+    if (vide) vide.style.display = visibles ? 'none' : 'block';
+});
+const videDiv = document.createElement('div');
+videDiv.id = 'aucun-resultat';
+videDiv.className = 'vide';
+videDiv.textContent = window.mukmapT ? (window.mukmapT('guide_aucun_resultat') || 'Aucun chapitre ne correspond à ce filtre.') : 'Aucun chapitre ne correspond à ce filtre.';
+document.getElementById('liste-chapitres').appendChild(videDiv);
+videDiv.style.display = 'none';
+</script>
+{% include 'cartographie/_i18n.html' %}
+{% include 'cartographie/_pwa_body.html' %}
+</body>
+</html>
