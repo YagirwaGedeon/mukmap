@@ -557,7 +557,7 @@
         </style>
 
         <hr class="separateur">
-        <details class="groupe-outils" open>
+        <details class="groupe-outils">
             <summary><span data-lucide="sliders-horizontal"></span> <span data-i18n="filtres">Filtres dynamiques</span></summary>
             <div class="g-corps">
                 <div style="text-align:right;margin-bottom:4px;"><button class="btn btn-sm btn-ghost" onclick="reinitialiserFiltres()" style="color:var(--accent);font-size:.72rem;" data-i18n="reinitialiser">Réinitialiser</button></div>
@@ -583,11 +583,11 @@
             <a class="btn btn-primary btn-sm" href="{% url 'connexion' %}" style="margin-top:10px;width:100%;"><span data-lucide="log-in"></span> <span data-i18n="se_connecter">Se connecter</span></a>
         </div>
         {% else %}
-        <details class="groupe-outils" open>
+        <details class="groupe-outils">
             <summary><span data-lucide="pen-tool"></span> <span data-i18n="outils_terrain">Outils de terrain</span></summary>
             <div class="g-corps" style="padding:6px;">
         <div id="outils-dessin">
-            <details class="groupe-outils" open>
+            <details class="groupe-outils">
                 <summary><span data-lucide="pen-tool"></span> <span data-i18n="dessin">Dessin</span></summary>
                 <div class="g-corps liste-outils">
                     <button class="btn-tool" data-mode="point" title="Point" data-i18n-title="point"><span data-lucide="map-pin" style="width:15px;height:15px;color:var(--accent);flex-shrink:0;"></span><span class="p-nom"><span data-i18n="point">Point</span><span class="p-sous" data-i18n="dessin_msg_point">Cliquez pour placer le point.</span></span></button>
@@ -716,7 +716,7 @@
 
         <hr class="separateur">
         <div class="titre-section" data-i18n="imports_exports">Imports & exports</div>
-        <details class="groupe-outils" open>
+        <details class="groupe-outils">
             <summary><span data-lucide="download"></span> <span data-i18n="exporter">Exporter</span></summary>
             <div class="g-corps liste-outils" id="exports-outils">
                 <button type="button" class="btn-export" data-export="geojson"><span data-lucide="file-code"></span><span class="p-nom">GeoJSON</span></button>
