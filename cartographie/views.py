@@ -937,8 +937,16 @@ def activite_create(request):
         rapport = request.POST.get('rapport')
         nom_activite = request.POST.get('nom_activite', '').strip()
         description = request.POST.get('description', '')
+        objectif = request.POST.get('objectif', '')
+        resultats = request.POST.get('resultats', '')
+        difficultes = request.POST.get('difficultes', '')
+        recommandations = request.POST.get('recommandations', '')
         observations = request.POST.get('observations', '')
         nb = request.POST.get('nombre_beneficiaires', 0)
+        hommes = request.POST.get('hommes', '')
+        femmes = request.POST.get('femmes', '')
+        enfants = request.POST.get('enfants', '')
+        menages = request.POST.get('menages', '')
         latitude = request.POST.get('latitude')
         longitude = request.POST.get('longitude')
         zone_visitee = request.POST.get('zone_visitee', '')
@@ -975,9 +983,17 @@ def activite_create(request):
                 agent=agent,
                 nom_activite=nom_activite,
                 description=description,
+                objectif=objectif,
+                resultats=resultats,
+                difficultes=difficultes,
+                recommandations=recommandations,
                 rapport=rapport,
                 observations=observations,
                 nombre_beneficiaires=int(nb) if nb else 0,
+                hommes=int(hommes) if str(hommes).isdigit() else None,
+                femmes=int(femmes) if str(femmes).isdigit() else None,
+                enfants=int(enfants) if str(enfants).isdigit() else None,
+                menages=int(menages) if str(menages).isdigit() else None,
                 latitude=float(latitude),
                 longitude=float(longitude),
                 zone_visitee=zone_visitee,
@@ -1656,75 +1672,266 @@ def agent_bloquer(request, pk):
 # ─── RAPPORTS ────────────────────────────────────────────────────
 
 
-def _donnees_rapport(debut, fin):
-    activites = Activite.objects.filter(date_creation__gte=debut, date_creation__lte=fin)
-    activites = activites.select_related('projet', 'agent').prefetch_related('photos')
-    total = activites.count()
-    zones_dang = ZoneSecurite.objects.filter(statut='dangereuse').count()
-    zones_secu = ZoneSecurite.objects.filter(statut='securisee').count()
-    zones_indis = ZoneSecurite.objects.filter(statut='indisponible').count()
-    zones = ZoneSecurite.objects.select_related('auteur').order_by('-date_declaration')
-    audits = JournalAudit.objects.filter(utilisateur__is_superuser=True, date__gte=debut, date__lte=fin)
-    audits = audits.select_related('utilisateur').order_by('-date')
-    profils = ProfilAgent.objects.select_related('utilisateur').all()
-    bene_total = activites.aggregate(s=db_models.Sum('nombre_beneficiaires'))['s'] or 0
-    return activites, total, zones_dang, zones_secu, zones_indis, zones, audits, profils, bene_total
+TOUTES_SECTIONS_RAPPORT = (
+    'infos', 'stats', 'activites', 'beneficiaires', 'agents',
+    'terrain', 'itineraire', 'points', 'zones', 'dangers',
+    'photos', 'observations', 'recommandations', 'audits',
+)
+
+
+def _filtres_rapport(request, user):
+    """Analyse les filtres de l'assistant de rapport (période, projet, activités, agent, zone, sections)."""
+    est_admin = _est_admin(user)
+    aujourd = timezone.localdate()
+
+    type_ = request.GET.get('type', 'mensuel')
+    mapping = {
+        'journalier': (aujourd, aujourd),
+        'hebdomadaire': (aujourd - timedelta(days=7), aujourd),
+        'mensuel': (aujourd - timedelta(days=30), aujourd),
+        'annuel': (aujourd - timedelta(days=365), aujourd),
+    }
+    if type_ == 'personnalise':
+        try:
+            debut = date.fromisoformat(request.GET.get('date_debut', ''))
+            fin = date.fromisoformat(request.GET.get('date_fin', ''))
+        except ValueError:
+            debut, fin = mapping['mensuel']
+    else:
+        debut, fin = mapping.get(type_, mapping['mensuel'])
+    if fin < debut:
+        debut, fin = fin, debut
+
+    if est_admin:
+        projets = Projet.objects.all().order_by('nom')
+    else:
+        ids_miens = set(Activite.objects.filter(agent=user).values_list('projet_id', flat=True))
+        ids_miens |= set(Projet.objects.filter(cree_par=user).values_list('pk', flat=True))
+        projets = Projet.objects.filter(pk__in=ids_miens).order_by('nom')
+
+    pid = None
+    val_projet = request.GET.get('projet', '') or ''
+    if val_projet.isdigit():
+        pid = int(val_projet)
+        if not projets.filter(pk=pid).exists():
+            pid = None
+    projet = Projet.objects.filter(pk=pid).first() if pid else None
+
+    qs_dispo = Activite.objects.filter(date_creation__date__gte=debut, date_creation__date__lte=fin)
+    if pid:
+        qs_dispo = qs_dispo.filter(projet_id=pid)
+    if not est_admin:
+        qs_dispo = qs_dispo.filter(agent=user)
+    activites_disponibles = qs_dispo.select_related('projet').order_by('-date_creation')
+
+    activite_ids = None
+    val_act = request.GET.getlist('activites')
+    if val_act and val_act != ['toutes']:
+        ids = [int(x) for x in val_act if x.strip().isdigit()]
+        if ids:
+            dispo_ids = set(activites_disponibles.values_list('pk', flat=True))
+            activite_ids = [i for i in ids if i in dispo_ids] or None
+
+    agent_id = None
+    if est_admin:
+        val_agent = request.GET.get('agent', '') or ''
+        if val_agent.isdigit():
+            agent_id = int(val_agent)
+    else:
+        agent_id = user.pk
+
+    zone = request.GET.get('zone', '') or ''
+    mode_global = bool(request.GET.get('global')) and est_admin
+
+    val_sec = request.GET.getlist('sections')
+    if val_sec and val_sec != ['toutes']:
+        sections = [s for s in val_sec if s in TOUTES_SECTIONS_RAPPORT] or list(TOUTES_SECTIONS_RAPPORT)
+    else:
+        sections = list(TOUTES_SECTIONS_RAPPORT)
+
+    return {
+        'type': type_, 'debut': debut, 'fin': fin,
+        'projet': projet, 'projet_id': pid,
+        'activite_ids': activite_ids, 'activites_disponibles': activites_disponibles,
+        'agent_id': agent_id, 'zone': zone, 'mode_global': mode_global,
+        'sections': sections, 'est_admin': est_admin, 'projets': projets,
+    }
+
+
+def _donnees_rapport_v2(f):
+    """Construit le contexte complet d'un rapport à partir des filtres analysés."""
+    debut, fin = f['debut'], f['fin']
+    sections = set(f['sections'])
+
+    qs = Activite.objects.filter(date_creation__date__gte=debut, date_creation__date__lte=fin)
+    if f['projet_id']:
+        qs = qs.filter(projet_id=f['projet_id'])
+    if f['agent_id']:
+        qs = qs.filter(agent_id=f['agent_id'])
+    if f['zone']:
+        qs = qs.filter(zone_visitee__icontains=f['zone'])
+    if f['activite_ids']:
+        qs = qs.filter(pk__in=f['activite_ids'])
+    activites = list(qs.select_related('projet', 'agent').prefetch_related('photos').order_by('date_creation'))
+
+    total = len(activites)
+    agr = qs.aggregate(
+        bene=db_models.Sum('nombre_beneficiaires'),
+        hommes=db_models.Sum('hommes'),
+        femmes=db_models.Sum('femmes'),
+        enfants=db_models.Sum('enfants'),
+        menages=db_models.Sum('menages'),
+    )
+    bene_total = agr['bene'] or 0
+    tot_h = agr['hommes'] or 0
+    tot_f = agr['femmes'] or 0
+    tot_e = agr['enfants'] or 0
+    tot_m = agr['menages'] or 0
+
+    projet_ids = [a.projet_id for a in activites]
+    user_ids = [a.agent_id for a in activites if a.agent_id]
+
+    points_qs = PointGeographique.objects.filter(
+        supprime=False, date_creation__date__gte=debut, date_creation__date__lte=fin)
+    if projet_ids:
+        points_qs = points_qs.filter(projet_id__in=projet_ids)
+    if f['agent_id']:
+        points_qs = points_qs.filter(auteur_id=f['agent_id'])
+    points = list(points_qs.select_related('projet', 'auteur').order_by('-date_creation'))
+
+    iti_qs = Itineraire.objects.filter(date_creation__date__gte=debut, date_creation__date__lte=fin)
+    if projet_ids:
+        iti_qs = iti_qs.filter(projet_id__in=projet_ids)
+    if f['agent_id']:
+        iti_qs = iti_qs.filter(utilisateur_id=f['agent_id'])
+    itineraires = list(iti_qs.select_related('projet', 'utilisateur').order_by('-date_creation'))
+
+    zones_qs = ZoneSecurite.objects.select_related('projet', 'auteur').filter(
+        date_declaration__date__gte=debut, date_declaration__date__lte=fin)
+    if f['projet_id']:
+        zones_qs = zones_qs.filter(projet_id=f['projet_id'])
+    elif projet_ids:
+        zones_qs = zones_qs.filter(projet_id__in=projet_ids)
+    zones = list(zones_qs.order_by('-date_declaration'))
+    zd = sum(1 for z in zones if z.statut == 'dangereuse')
+    zs = sum(1 for z in zones if z.statut == 'securisee')
+    zi = sum(1 for z in zones if z.statut == 'indisponible')
+
+    profils_qs = ProfilAgent.objects.select_related('utilisateur')
+    if user_ids:
+        profils_qs = profils_qs.filter(utilisateur_id__in=user_ids)
+    profils = list(profils_qs.order_by('utilisateur__username'))
+
+    ses_qs = SessionTravail.objects.select_related('utilisateur', 'projet').filter(
+        debut__date__gte=debut, debut__date__lte=fin)
+    if f['projet_id']:
+        ses_qs = ses_qs.filter(projet_id=f['projet_id'])
+    if f['agent_id']:
+        ses_qs = ses_qs.filter(utilisateur_id=f['agent_id'])
+    sessions = list(ses_qs.order_by('-debut'))
+
+    audits = []
+    if f['mode_global']:
+        audits = list(JournalAudit.objects.filter(
+            utilisateur__is_superuser=True, date__date__gte=debut, date__date__lte=fin)
+            .select_related('utilisateur').order_by('-date'))
+
+    par_projet = []
+    for pid in sorted(set(projet_ids)):
+        sub = [a for a in activites if a.projet_id == pid]
+        par_projet.append({
+            'projet': sub[0].projet,
+            'count': len(sub),
+            'benef': sum(a.nombre_beneficiaires or 0 for a in sub),
+        })
+    par_projet.sort(key=lambda x: x['count'], reverse=True)
+
+    cat_noms = dict(PointGeographique.CATEGORIE_CHOICES)
+    par_categorie = {}
+    for p in points:
+        par_categorie[cat_noms.get(p.categorie, p.categorie)] = par_categorie.get(cat_noms.get(p.categorie, p.categorie), 0) + 1
+
+    nb_photos = sum(a.photos.count() for a in activites)
+
+    graph_activites = {'labels': [x['projet'].nom for x in par_projet], 'values': [x['count'] for x in par_projet]}
+    graph_benef = {'labels': [x['projet'].nom for x in par_projet], 'values': [x['benef'] for x in par_projet]}
+    graph_zones = {'labels': ['dangereuse', 'securisee', 'indisponible'], 'values': [zd, zs, zi]}
+    graph_categories = {'labels': list(par_categorie.keys()), 'values': list(par_categorie.values())}
+
+    intitule_projet = f['projet'].nom if f['projet'] else None
+    ref = (f['projet'].code or f['projet'].nom if f['projet'] else 'global')
+    nom_fichier = f"rapport_{re.sub(r'[^A-Za-z0-9]+', '_', str(ref)).strip('_')}_{debut.strftime('%Y%m%d')}_{fin.strftime('%Y%m%d')}"
+
+    return {
+        'f': f, 'debut': debut, 'fin': fin, 'type': f['type'],
+        'projet': f['projet'], 'projet_id': f['projet_id'], 'zone': f['zone'],
+        'est_admin': f['est_admin'], 'mode_global': f['mode_global'],
+        'sections': list(sections),
+        'projets': f['projets'], 'activites_disponibles': f['activites_disponibles'],
+        'activites': activites, 'total': total,
+        'bene_total': bene_total, 'tot_h': tot_h, 'tot_f': tot_f, 'tot_e': tot_e, 'tot_m': tot_m,
+        'zones': zones, 'zones_dangereuses': zd, 'zones_securisees': zs, 'zones_indisponibles': zi,
+        'total_zones': len(zones),
+        'points': points, 'total_points': len(points),
+        'itineraires': itineraires, 'total_itineraires': len(itineraires),
+        'sessions': sessions, 'total_sessions': len(sessions),
+        'profils': profils, 'total_agents': len(profils),
+        'audits': audits,
+        'par_projet': par_projet, 'par_categorie': par_categorie,
+        'nb_photos': nb_photos,
+        'graph_activites': json.dumps(graph_activites),
+        'graph_benef': json.dumps(graph_benef),
+        'graph_zones': json.dumps(graph_zones),
+        'graph_categories': json.dumps(graph_categories),
+        'nom_fichier': nom_fichier,
+        'intitule_projet': intitule_projet,
+    }
 
 
 @login_required
 def rapport_generer(request):
-    periode = request.GET.get('periode', 'mensuel')
-    aujourd = timezone.localdate()
-
-    mapping = {
-        'journalier': (aujourd, aujourd),
-        'hebdomadaire': (aujourd - timedelta(days=7), aujourd),
-        'mensuel': (aujourd - timedelta(days=30), aujourd),
-        'trimestriel': (aujourd - timedelta(days=90), aujourd),
-    }
-    debut, fin = mapping.get(periode, (aujourd - timedelta(days=30), aujourd))
-    activites, total, zd, zs, zi, zones, audits, profils, bene_total = _donnees_rapport(debut, fin)
-
-    return render(request, 'cartographie/rapport.html', {
-        'periode': periode,
-        'debut': debut,
-        'fin': fin,
-        'activites': activites,
-        'total': total,
-        'zones_dangereuses': zd,
-        'zones_securisees': zs,
-        'zones_indisponibles': zi,
-        'zones': zones,
-        'audits': audits,
-        'profils': profils,
-        'total_beneficiaires': bene_total,
-    })
+    from .i18n import traduire
+    f = _filtres_rapport(request, request.user)
+    ctx = _donnees_rapport_v2(f)
+    lang = langue_active(request)
+    t = lambda cle: traduire(lang, cle)
+    gz = json.loads(ctx['graph_zones'])
+    gz['labels'] = [t('zone_dangereuse'), t('zone_securisee'), t('zone_indisponible')]
+    ctx['graph_zones'] = json.dumps(gz)
+    if not ctx['intitule_projet']:
+        ctx['intitule_projet'] = t('tous_projets')
+    ctx['type_choices'] = [(c, t('rapport_' + c)) for c in ('journalier', 'hebdomadaire', 'mensuel', 'annuel', 'personnalise')]
+    ctx['section_choices'] = [(c, t('sec_' + c)) for c in TOUTES_SECTIONS_RAPPORT]
+    ctx['date_debut_perso'] = f['debut'].isoformat() if f['type'] == 'personnalise' else ''
+    ctx['date_fin_perso'] = f['fin'].isoformat() if f['type'] == 'personnalise' else ''
+    val_etape = request.GET.get('etape', '1')
+    ctx['etape'] = int(val_etape) if val_etape.isdigit() and 1 <= int(val_etape) <= 6 else 1
+    ctx['tous_agents'] = User.objects.filter(is_superuser=False, profil__isnull=False).order_by('username')
+    agent_selectionne = ''
+    if f['agent_id']:
+        try:
+            u = User.objects.get(pk=f['agent_id'])
+            agent_selectionne = u.get_full_name() or u.username
+        except User.DoesNotExist:
+            pass
+    ctx['agent_selectionne'] = agent_selectionne
+    return render(request, 'cartographie/rapport.html', ctx)
 
 
 @login_required
 def rapport_telecharger(request, format):
-    from django.utils import timezone
-    periode = request.GET.get('periode', 'mensuel')
-    aujourd = timezone.localdate()
-    mapping = {
-        'journalier': (aujourd, aujourd),
-        'hebdomadaire': (aujourd - timedelta(days=7), aujourd),
-        'mensuel': (aujourd - timedelta(days=30), aujourd),
-        'trimestriel': (aujourd - timedelta(days=90), aujourd),
-    }
-    debut, fin = mapping.get(periode, (aujourd - timedelta(days=30), aujourd))
-    activites, total, zd, zs, zi, zones, audits, profils, bene_total = _donnees_rapport(debut, fin)
-
-    nom_fichier = f"rapport_{periode}_{aujourd.strftime('%Y%m%d')}"
-
+    f = _filtres_rapport(request, request.user)
+    ctx = _donnees_rapport_v2(f)
     lang = langue_active(request)
+    nom = ctx['nom_fichier']
     if format == 'docx':
-        return _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_total, debut, fin, nom_fichier, lang)
-    elif format == 'pdf':
-        return _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_total, debut, fin, nom_fichier, lang)
-    else:
-        messages.error(request, "Format non supporté.")
-        return redirect('rapport_generer')
+        return _generer_docx(ctx, nom, lang)
+    if format == 'pdf':
+        return _generer_pdf(ctx, nom, lang)
+    if format == 'xlsx':
+        return _generer_excel(ctx, nom, lang)
+    messages.error(request, "Format non supporté.")
+    return redirect('rapport_generer')
 
 
 # ─── PWA : manifest + service worker ──────────────────────────────
@@ -1779,7 +1986,7 @@ def service_worker_pwa(request):
     return response
 
 
-def _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_total, debut, fin, nom_fichier, lang='fr'):
+def _generer_docx(ctx, nom_fichier, lang='fr'):
     from docx import Document
     from docx.shared import Inches, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -1789,7 +1996,21 @@ def _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_tot
 
     t = lambda cle: traduire(lang, cle)
     maintenant = timezone.now()
+    debut, fin = ctx['debut'], ctx['fin']
+    activites = ctx['activites']
+    total = ctx['total']
+    zd = ctx['zones_dangereuses']
+    zs = ctx['zones_securisees']
+    zi = ctx['zones_indisponibles']
+    zones = ctx['zones']
+    audits = ctx['audits']
+    profils = ctx['profils']
+    bene_total = ctx['bene_total']
+    sections = set(ctx['sections'])
     doc = Document()
+
+    def nom_agent(u):
+        return (u.get_full_name() or u.username) if u else 'N/A'
 
     style = doc.styles['Normal']
     style.font.name = 'Calibri'
@@ -1817,11 +2038,14 @@ def _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_tot
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.add_run(' ').add_break()
-    table_info = doc.add_table(rows=4, cols=2)
+    table_info = doc.add_table(rows=6, cols=2)
     table_info.alignment = 1
     table_info.style = 'Light Shading Accent 1'
+    intitule = ctx['intitule_projet'] or t('tous_projets')
     for i, (lib, val) in enumerate([(t('periode_rapport'), f"{debut.strftime('%d/%m/%Y')} — {fin.strftime('%d/%m/%Y')}"),
-                                    (t('informations_projet'), nom_fichier.replace('rapport_', '').upper()),
+                                    (t('type_rapport'), t('rapport_' + ctx['type'])),
+                                    (t('informations_projet'), intitule),
+                                    (t('reference'), nom_fichier),
                                     (t('genere_le'), f"{maintenant.strftime('%d/%m/%Y')} {t('heure')} {maintenant.strftime('%H:%M')}"),
                                     (t('developpe_par'), DEVELOPPEUR)]):
         table_info.cell(i, 0).text = lib
@@ -1846,6 +2070,43 @@ def _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_tot
         resume.cell(0, i).text = lib
         resume.cell(1, i).text = str(val)
 
+    if 'stats' in sections:
+        doc.add_heading(t('kpis_rapport'), level=3)
+        kpis = doc.add_table(rows=2, cols=5)
+        kpis.style = 'Light Shading Accent 1'
+        for i, (lib, val) in enumerate([(t('kpi_hommes'), ctx['tot_h']), (t('kpi_femmes'), ctx['tot_f']),
+                                        (t('kpi_enfants'), ctx['tot_e']), (t('kpi_menages'), ctx['tot_m']),
+                                        (t('total_agents'), ctx['total_agents'])]):
+            kpis.cell(0, i).text = lib
+            kpis.cell(1, i).text = str(val)
+        for i, (lib, val) in enumerate([(t('points_visites'), ctx['total_points']),
+                                        (t('itineraires_effectues'), ctx['total_itineraires']),
+                                        (t('presence_terrain'), ctx['total_sessions']),
+                                        (t('photos_label'), ctx['nb_photos']),
+                                        (t('total_zones'), ctx['total_zones'])]):
+            kpis.cell(0, i).text = lib
+            kpis.cell(1, i).text = str(val)
+
+    if 'beneficiaires' in sections:
+        doc.add_heading(f"{t('section_beneficiaires')} ({bene_total})", level=2)
+        if ctx['par_projet']:
+            table = doc.add_table(rows=1, cols=6)
+            table.style = 'Light Shading Accent 1'
+            hdr = table.rows[0].cells
+            for i, k in enumerate(['informations_projet', 'beneficiaires', 'hommes', 'femmes', 'enfants', 'menages']):
+                hdr[i].text = t(k)
+            for x in ctx['par_projet']:
+                sub = [a for a in activites if a.projet_id == x['projet'].pk]
+                row = table.add_row().cells
+                row[0].text = x['projet'].nom
+                row[1].text = str(x['benef'])
+                row[2].text = str(sum(a.hommes or 0 for a in sub))
+                row[3].text = str(sum(a.femmes or 0 for a in sub))
+                row[4].text = str(sum(a.enfants or 0 for a in sub))
+                row[5].text = str(sum(a.menages or 0 for a in sub))
+        else:
+            doc.add_paragraph(t('aucun_activite'))
+
     doc.add_heading(t('zones_securite'), level=2)
     if zones:
         table = doc.add_table(rows=1, cols=5)
@@ -1866,6 +2127,84 @@ def _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_tot
             row[4].text = (z.auteur.get_full_name() or z.auteur.username) if z.auteur else '-'
     else:
         doc.add_paragraph(t('aucune_zone_periode'))
+
+    if 'dangers' in sections:
+        dangers = [z for z in zones if z.statut == 'dangereuse']
+        doc.add_heading(f"{t('zones_danger')} ({len(dangers)})", level=2)
+        if dangers:
+            table = doc.add_table(rows=1, cols=5)
+            table.style = 'Light Shading Accent 1'
+            hdr = table.rows[0].cells
+            for i, k in enumerate(['zone', 'statut', 'motif', 'declaree_le', 'par']):
+                hdr[i].text = t(k)
+            for z in dangers:
+                row = table.add_row().cells
+                row[0].text = z.nom
+                row[1].text = t('zone_dangereuse')
+                row[2].text = (z.motif or '')[:80]
+                row[3].text = z.date_declaration.strftime('%d/%m/%Y %H:%M')
+                row[4].text = nom_agent(z.auteur)
+        else:
+            doc.add_paragraph(t('aucun_danger_periode'))
+
+    if 'terrain' in sections:
+        doc.add_heading(f"{t('presence_terrain')} ({len(ctx['sessions'])})", level=2)
+        if ctx['sessions']:
+            table = doc.add_table(rows=1, cols=5)
+            table.style = 'Light Shading Accent 1'
+            hdr = table.rows[0].cells
+            for i, k in enumerate(['agent', 'projet_sg', 'activite', 'debut', 'duree']):
+                hdr[i].text = t(k)
+            for s in ctx['sessions']:
+                row = table.add_row().cells
+                row[0].text = nom_agent(s.utilisateur)
+                row[1].text = s.projet.nom if s.projet else '-'
+                row[2].text = (s.activite_nom or '-')[:60]
+                row[3].text = s.debut.strftime('%d/%m/%Y %H:%M')
+                if s.debut and s.fin:
+                    mins = int((s.fin - s.debut).total_seconds() // 60)
+                    row[4].text = f"{mins // 60}h{mins % 60:02d}"
+                else:
+                    row[4].text = '-'
+        else:
+            doc.add_paragraph(t('aucune_session'))
+
+    if 'itineraire' in sections:
+        doc.add_heading(f"{t('itineraires_effectues')} ({len(ctx['itineraires'])})", level=2)
+        if ctx['itineraires']:
+            table = doc.add_table(rows=1, cols=5)
+            table.style = 'Light Shading Accent 1'
+            hdr = table.rows[0].cells
+            for i, k in enumerate(['nom', 'agent', 'projet_sg', 'date', 'alerte']):
+                hdr[i].text = t(k)
+            for it in ctx['itineraires']:
+                row = table.add_row().cells
+                row[0].text = it.nom
+                row[1].text = nom_agent(it.utilisateur)
+                row[2].text = it.projet.nom if it.projet else '-'
+                row[3].text = it.date_creation.strftime('%d/%m/%Y %H:%M')
+                row[4].text = (it.alerte or '')[:80]
+        else:
+            doc.add_paragraph(t('aucun_itineraire'))
+
+    if 'points' in sections:
+        doc.add_heading(f"{t('points_visites')} ({len(ctx['points'])})", level=2)
+        if ctx['points']:
+            table = doc.add_table(rows=1, cols=6)
+            table.style = 'Light Shading Accent 1'
+            hdr = table.rows[0].cells
+            for i, k in enumerate(['nom', 'categorie', 'commune', 'projet_sg', 'agent', 'date']):
+                hdr[i].text = t(k)
+            for p in ctx['points']:
+                row = table.add_row().cells
+                row[0].text = p.nom
+                row[1].text = p.get_categorie_display()
+                row[2].text = p.commune or '-'
+                row[3].text = p.projet.nom if p.projet else '-'
+                row[4].text = nom_agent(p.auteur)
+                row[5].text = p.date_creation.strftime('%d/%m/%Y')
+        else:
+            doc.add_paragraph(t('aucun_point'))
 
     doc.add_heading(t('agents'), level=2)
     table = doc.add_table(rows=1, cols=4)
@@ -1896,12 +2235,33 @@ def _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_tot
     else:
         doc.add_paragraph(t('aucune_admin_periode'))
 
+    if 'observations' in sections or 'recommandations' in sections:
+        doc.add_heading(f"{t('observations_recommandations')}", level=2)
+        nb = 0
+        for a in activites:
+            a_obs = a.observations and 'observations' in sections
+            a_rec = a.recommandations and 'recommandations' in sections
+            if not (a_obs or a_rec):
+                continue
+            nb += 1
+            doc.add_heading(f"{nom_agent(a.agent)} — {a.projet.nom} ({a.date_creation.strftime('%d/%m/%Y')})", level=3)
+            if a_obs:
+                p = doc.add_paragraph()
+                p.add_run(f"{t('observations_du')} : ").bold = True
+                p.add_run((a.observations or '')[:300])
+            if a_rec:
+                p = doc.add_paragraph()
+                p.add_run(f"{t('recommandations')} : ").bold = True
+                p.add_run((a.recommandations or '')[:300])
+        if nb == 0:
+            doc.add_paragraph(t('aucun_obs_rec'))
+
     doc.add_heading(t('activites_agents'), level=2)
     for a in activites:
         doc.add_heading(f"{a.projet.nom} — {a.date_creation.strftime('%d/%m/%Y %H:%M')}", level=3)
         p = doc.add_paragraph()
         p.add_run(f"{t('agent')} : ").bold = True
-        p.add_run((a.agent.get_full_name() or a.agent.username) if a.agent else 'N/A')
+        p.add_run(nom_agent(a.agent))
         p = doc.add_paragraph()
         p.add_run(f"{t('zone_visitee')} : ").bold = True
         p.add_run(a.zone_visitee or 'N/A')
@@ -1914,9 +2274,29 @@ def _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_tot
         p = doc.add_paragraph()
         p.add_run(f"{t('beneficiaires')} : ").bold = True
         p.add_run(str(a.nombre_beneficiaires or 0))
+        if 'beneficiaires' in sections:
+            p = doc.add_paragraph()
+            p.add_run(f"{t('detail_beneficiaires')} : ").bold = True
+            p.add_run(f"{t('hommes')} : {a.hommes or 0} | {t('femmes')} : {a.femmes or 0} | {t('enfants')} : {a.enfants or 0} | {t('menages')} : {a.menages or 0}")
+        if a.objectif:
+            p = doc.add_paragraph()
+            p.add_run(f"{t('objectif_activite')} : ").bold = True
+            p.add_run((a.objectif or '')[:300])
         p = doc.add_paragraph()
         p.add_run(f"{t('rapport_du')} : ").bold = True
         p.add_run((a.rapport or '')[:300])
+        if a.resultats:
+            p = doc.add_paragraph()
+            p.add_run(f"{t('resultats_activite')} : ").bold = True
+            p.add_run((a.resultats or '')[:300])
+        if a.difficultes:
+            p = doc.add_paragraph()
+            p.add_run(f"{t('difficultes_activite')} : ").bold = True
+            p.add_run((a.difficultes or '')[:300])
+        if a.recommandations:
+            p = doc.add_paragraph()
+            p.add_run(f"{t('recommandations_activite')} : ").bold = True
+            p.add_run((a.recommandations or '')[:300])
         if a.observations:
             p = doc.add_paragraph()
             p.add_run(f"{t('observations_du')} : ").bold = True
@@ -1936,7 +2316,7 @@ def _generer_docx(activites, total, zd, zs, zi, zones, audits, profils, bene_tot
     return response
 
 
-def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_total, debut, fin, nom_fichier, lang='fr'):
+def _generer_pdf(ctx, nom_fichier, lang='fr'):
     from fpdf import FPDF
     from django.utils import timezone
     from .branding import chemin_logo, DEVELOPPEUR, NOM, VERSION
@@ -1944,6 +2324,20 @@ def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_tota
 
     t = lambda cle: traduire(lang, cle)
     maintenant = timezone.now()
+    debut, fin = ctx['debut'], ctx['fin']
+    activites = ctx['activites']
+    total = ctx['total']
+    zd = ctx['zones_dangereuses']
+    zs = ctx['zones_securisees']
+    zi = ctx['zones_indisponibles']
+    zones = ctx['zones']
+    audits = ctx['audits']
+    profils = ctx['profils']
+    bene_total = ctx['bene_total']
+    sections = set(ctx['sections'])
+
+    def nom_agent(u):
+        return (u.get_full_name() or u.username) if u else 'N/A'
 
     def net(s):
         if s is None:
@@ -2089,8 +2483,11 @@ def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_tota
     pdf.cell(0, 10, net(t('couverture')), 0, 1, 'C')
     pdf.ln(14)
     pdf.set_font(fam, '', 11)
+    intitule = ctx['intitule_projet'] or t('tous_projets')
     for lib, val in [(t('periode_rapport'), f"{debut.strftime('%d/%m/%Y')} — {fin.strftime('%d/%m/%Y')}"),
-                     (t('informations_projet'), nom_fichier.replace('rapport_', '').upper()),
+                     (t('type_rapport'), t('rapport_' + ctx['type'])),
+                     (t('informations_projet'), intitule),
+                     (t('reference'), nom_fichier),
                      (t('genere_le'), f"{maintenant.strftime('%d/%m/%Y')} {t('heure')} {maintenant.strftime('%H:%M')}"),
                      (t('developpe_par'), DEVELOPPEUR)]:
         pdf.set_font(fam, 'B', 11)
@@ -2131,24 +2528,53 @@ def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_tota
         pdf.set_text_color(*TEXTE)
 
     # ── 1. Résumé (blocs de statistiques)
-    titre_section(t('resume_periode'))
-    stats = [(t('activites'), total, ACCENT), (t('beneficiaires'), bene_total, ACCENT),
-             (t('zones_dangereuses'), zd, ROUGE), (t('zones_securisees'), zs, VERT),
-             (t('zones_sans_info'), zi, JAUNE)]
+    titre_section(f"{t('resume_periode')} — {total} {t('activites').lower()} / {bene_total} {t('beneficiaires').lower()}")
     x0 = 10
     bloc = 37
-    y = pdf.get_y()
-    for lib, val, col in stats:
-        pdf.set_fill_color(*col)
-        pdf.rect(x0, y, bloc, 18, 'F')
-        pdf.set_xy(x0, y + 2)
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font(fam, 'B', 14)
-        pdf.cell(bloc, 7, net(str(val)), 0, 1, 'C')
-        pdf.set_font(fam, '', 7)
-        pdf.cell(bloc, 7, net(lib), 0, 1, 'C')
-        x0 += bloc + 1
-    pdf.set_y(y + 22)
+    lignes_stats = [
+        [(t('activites'), total, ACCENT), (t('beneficiaires'), bene_total, ACCENT),
+         (t('kpi_hommes'), ctx['tot_h'], ACCENT), (t('kpi_femmes'), ctx['tot_f'], ACCENT),
+         (t('kpi_enfants'), ctx['tot_e'], ACCENT)],
+        [(t('kpi_menages'), ctx['tot_m'], ACCENT), (t('agents'), ctx['total_agents'], ACCENT),
+         (t('kpi_zones'), ctx['total_zones'], JAUNE), (t('points_visites'), ctx['total_points'], ACCENT),
+         (t('itineraires_effectues'), ctx['total_itineraires'], ACCENT)],
+        [(t('kpi_sessions'), ctx['total_sessions'], VERT), (t('photos_label'), ctx['nb_photos'], ACCENT),
+         (t('zones_dangereuses'), zd, ROUGE), (t('zones_securisees'), zs, VERT),
+         (t('zones_sans_info'), zi, JAUNE)],
+    ]
+    for ligne in lignes_stats:
+        y = pdf.get_y()
+        x0 = 10
+        for lib, val, col in ligne:
+            pdf.set_fill_color(*col)
+            pdf.rect(x0, y, bloc, 18, 'F')
+            pdf.set_xy(x0, y + 2)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font(fam, 'B', 14)
+            pdf.cell(bloc, 7, net(str(val)), 0, 1, 'C')
+            pdf.set_font(fam, '', 7)
+            pdf.cell(bloc, 7, net(lib), 0, 1, 'C')
+            x0 += bloc + 1
+        pdf.set_y(y + 22)
+
+    # ── 1bis. Bénéficiaires par projet
+    if 'beneficiaires' in sections:
+        titre_section(f"{t('section_beneficiaires')} ({bene_total})")
+        if ctx['par_projet']:
+            largeurs = [70, 26, 26, 26, 26, 26]
+            table_entete(largeurs, [t('informations_projet'), t('beneficiaires'), t('hommes'), t('femmes'), t('enfants'), t('menages')])
+            for i, x in enumerate(ctx['par_projet']):
+                sub = [a for a in activites if a.projet_id == x['projet'].pk]
+                ligne_table(largeurs, [tronque(x['projet'].nom, 40), str(x['benef']),
+                                       str(sum(a.hommes or 0 for a in sub)),
+                                       str(sum(a.femmes or 0 for a in sub)),
+                                       str(sum(a.enfants or 0 for a in sub)),
+                                       str(sum(a.menages or 0 for a in sub))],
+                            alterner=i % 2 == 1)
+        else:
+            pdf.set_font(fam, 'I', 9)
+            pdf.set_text_color(*GRIS)
+            pdf.cell(0, 7, net(t('aucun_activite')), 0, 1)
 
     # ── 2. Zones de sécurité
     titre_section(f"{t('zones_securite')} ({len(zones)})")
@@ -2174,6 +2600,87 @@ def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_tota
         pdf.set_font(fam, 'I', 9)
         pdf.set_text_color(*GRIS)
         pdf.cell(0, 7, net(t('aucune_zone_periode')), 0, 1)
+
+    # ── 2bis. Zones de danger
+    if 'dangers' in sections:
+        dangers = [z for z in zones if z.statut == 'dangereuse']
+        titre_section(f"{t('zones_danger')} ({len(dangers)})")
+        if dangers:
+            largeurs = [44, 34, 57, 24, 28]
+            table_entete(largeurs, [t('zone'), t('statut'), t('motif'), t('declaree_le'), t('par')])
+            for i, z in enumerate(dangers):
+                pdf.set_font(fam, '', 8.5)
+                if i % 2 == 1:
+                    pdf.set_fill_color(243, 244, 252)
+                pdf.cell(largeurs[0], 7, tronque(z.nom, 24), 1, 0, 'L', i % 2 == 1)
+                pdf.set_text_color(*ROUGE)
+                pdf.set_font(fam, 'B', 8.5)
+                pdf.cell(largeurs[1], 7, tronque(t('zone_dangereuse'), 18), 1, 0, 'C', i % 2 == 1)
+                pdf.set_text_color(*TEXTE)
+                pdf.set_font(fam, '', 8.5)
+                pdf.cell(largeurs[2], 7, tronque(z.motif, 32), 1, 0, 'L', i % 2 == 1)
+                pdf.cell(largeurs[3], 7, tronque(z.date_declaration.strftime('%d/%m/%Y'), 13), 1, 0, 'C', i % 2 == 1)
+                pdf.cell(largeurs[4], 7, tronque(nom_agent(z.auteur), 15), 1, 0, 'L', i % 2 == 1)
+                pdf.ln()
+        else:
+            pdf.set_font(fam, 'I', 9)
+            pdf.set_text_color(*GRIS)
+            pdf.cell(0, 7, net(t('aucun_danger_periode')), 0, 1)
+
+    # ── 2ter. Présence terrain (sessions)
+    if 'terrain' in sections:
+        titre_section(f"{t('presence_terrain')} ({len(ctx['sessions'])})")
+        if ctx['sessions']:
+            largeurs = [40, 52, 42, 30, 23]
+            table_entete(largeurs, [t('agent'), t('projet_sg'), t('activite'), t('debut'), t('duree')])
+            for i, s in enumerate(ctx['sessions']):
+                duree = ''
+                if s.debut and s.fin:
+                    mins = int((s.fin - s.debut).total_seconds() // 60)
+                    duree = f"{mins // 60}h{mins % 60:02d}"
+                ligne_table(largeurs, [nom_agent(s.utilisateur),
+                                       tronque(s.projet.nom if s.projet else '-', 28),
+                                       tronque(s.activite_nom or '-', 24),
+                                       s.debut.strftime('%d/%m %H:%M'), duree],
+                            alterner=i % 2 == 1)
+        else:
+            pdf.set_font(fam, 'I', 9)
+            pdf.set_text_color(*GRIS)
+            pdf.cell(0, 7, net(t('aucune_session')), 0, 1)
+
+    # ── 2quater. Itinéraires
+    if 'itineraire' in sections:
+        titre_section(f"{t('itineraires_effectues')} ({len(ctx['itineraires'])})")
+        if ctx['itineraires']:
+            largeurs = [50, 42, 30, 32, 33]
+            table_entete(largeurs, [t('nom'), t('agent'), t('projet_sg'), t('date'), t('alerte')])
+            for i, it in enumerate(ctx['itineraires']):
+                ligne_table(largeurs, [tronque(it.nom, 28), nom_agent(it.utilisateur),
+                                       tronque(it.projet.nom if it.projet else '-', 16),
+                                       it.date_creation.strftime('%d/%m/%Y'),
+                                       tronque(it.alerte or '-', 18)],
+                            alterner=i % 2 == 1)
+        else:
+            pdf.set_font(fam, 'I', 9)
+            pdf.set_text_color(*GRIS)
+            pdf.cell(0, 7, net(t('aucun_itineraire')), 0, 1)
+
+    # ── 2quinquies. Points visités
+    if 'points' in sections:
+        titre_section(f"{t('points_visites')} ({len(ctx['points'])})")
+        if ctx['points']:
+            largeurs = [44, 28, 30, 34, 30, 21]
+            table_entete(largeurs, [t('nom'), t('categorie'), t('commune'), t('projet_sg'), t('agent'), t('date')])
+            for i, p in enumerate(ctx['points']):
+                ligne_table(largeurs, [tronque(p.nom, 25), tronque(p.get_categorie_display(), 15),
+                                       tronque(p.commune or '-', 16),
+                                       tronque(p.projet.nom if p.projet else '-', 18),
+                                       nom_agent(p.auteur), p.date_creation.strftime('%d/%m/%Y')],
+                            alterner=i % 2 == 1)
+        else:
+            pdf.set_font(fam, 'I', 9)
+            pdf.set_text_color(*GRIS)
+            pdf.cell(0, 7, net(t('aucun_point')), 0, 1)
 
     # ── 3. Agents
     titre_section(f"{t('agents')} ({len(profils)})")
@@ -2204,6 +2711,32 @@ def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_tota
         pdf.set_text_color(*GRIS)
         pdf.cell(0, 7, net(t('aucune_admin_periode')), 0, 1)
 
+    # ── 4bis. Observations & recommandations
+    if 'observations' in sections or 'recommandations' in sections:
+        titre_section(f"{t('observations_recommandations')}")
+        nb_or = 0
+        for a in activites:
+            a_obs = a.observations and 'observations' in sections
+            a_rec = a.recommandations and 'recommandations' in sections
+            if not (a_obs or a_rec):
+                continue
+            nb_or += 1
+            if pdf.get_y() > 235:
+                pdf.add_page()
+            pdf.set_font(fam, 'B', 9)
+            pdf.cell(0, 5.5, f"{nom_agent(a.agent)} — {a.projet.nom} ({a.date_creation.strftime('%d/%m/%Y')})", 0, 1)
+            if a_obs:
+                pdf.set_x(10)
+                pdf.multi_cell(0, 5.5, f"  {t('observations_du')} : " + tronque(a.observations, 200))
+            if a_rec:
+                pdf.set_x(10)
+                pdf.multi_cell(0, 5.5, f"  {t('recommandations')} : " + tronque(a.recommandations, 200))
+            pdf.ln(1)
+        if nb_or == 0:
+            pdf.set_font(fam, 'I', 9)
+            pdf.set_text_color(*GRIS)
+            pdf.cell(0, 7, net(t('aucun_obs_rec')), 0, 1)
+
     # ── 5. Activités des agents
     titre_section(f"{t('activites_agents')} ({total})")
     for i, a in enumerate(activites, 1):
@@ -2220,12 +2753,27 @@ def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_tota
         pdf.ln(2)
 
         pdf.set_font(fam, '', 9)
-        pdf.cell(0, 5.5, f"{t('agent')} : {(a.agent.get_full_name() or a.agent.username) if a.agent else 'N/A'}   |   Date : {a.date_creation.strftime('%d/%m/%Y')} {t('heure')} {a.date_creation.strftime('%H:%M')}", 0, 1)
+        pdf.cell(0, 5.5, f"{t('agent')} : {nom_agent(a.agent)}   |   Date : {a.date_creation.strftime('%d/%m/%Y')} {t('heure')} {a.date_creation.strftime('%H:%M')}", 0, 1)
         pdf.cell(0, 5.5, f"{t('zone_visitee')} : {tronque(a.zone_visitee or 'N/A', 60)}   |   {t('securite')} : {tronque(a.niveau_securite or 'N/A', 18)}", 0, 1)
         pdf.cell(0, 5.5, f"{t('coordonnees_gps')} : {a.latitude}, {a.longitude}   |   {t('beneficiaires')} : {a.nombre_beneficiaires or 0}", 0, 1)
+        if 'beneficiaires' in sections:
+            pdf.set_x(10)
+            pdf.cell(0, 5.5, f"  {t('detail_beneficiaires')} : {t('hommes')} : {a.hommes or 0} | {t('femmes')} : {a.femmes or 0} | {t('enfants')} : {a.enfants or 0} | {t('menages')} : {a.menages or 0}", 0, 1)
+        if a.objectif:
+            pdf.set_x(10)
+            pdf.multi_cell(0, 5.5, f"{t('objectif_activite')} : " + tronque(a.objectif, 200))
         if a.rapport:
             pdf.set_x(10)
             pdf.multi_cell(0, 5.5, f"{t('rapport_du')} : " + tronque(a.rapport, 280))
+        if a.resultats:
+            pdf.set_x(10)
+            pdf.multi_cell(0, 5.5, f"{t('resultats_activite')} : " + tronque(a.resultats, 200))
+        if a.difficultes:
+            pdf.set_x(10)
+            pdf.multi_cell(0, 5.5, f"{t('difficultes_activite')} : " + tronque(a.difficultes, 200))
+        if a.recommandations:
+            pdf.set_x(10)
+            pdf.multi_cell(0, 5.5, f"{t('recommandations_activite')} : " + tronque(a.recommandations, 200))
         if a.observations:
             pdf.set_x(10)
             pdf.multi_cell(0, 5.5, f"{t('observations_du')} : " + tronque(a.observations, 180))
@@ -2254,6 +2802,177 @@ def _generer_pdf(activites, total, zd, zs, zi, zones, audits, profils, bene_tota
     response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.pdf"'
     response.write(bytes(pdf.output()))
     _audit(None, "Téléchargement rapport PDF", nom_fichier)
+    return response
+
+
+def _generer_excel(ctx, nom_fichier, lang='fr'):
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from django.utils import timezone
+    from .branding import NOM, VERSION
+    from .i18n import traduire
+
+    t = lambda cle: traduire(lang, cle)
+    maintenant = timezone.now()
+    debut, fin = ctx['debut'], ctx['fin']
+    activites = ctx['activites']
+
+    def nom_agent(u):
+        return (u.get_full_name() or u.username) if u else 'N/A'
+
+    wb = Workbook()
+    ENTETE_FILL = PatternFill('solid', fgColor='4F46E5')
+    ENTETE_FONT = Font(color='FFFFFF', bold=True)
+    BORDURE = Border(*[Side(style='thin', color='D9D9D9')] * 4)
+
+    def preparer(ws, largeurs, entetes):
+        for i, w in enumerate(largeurs, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        for j, lib in enumerate(entetes, 1):
+            c = ws.cell(row=1, column=j, value=lib)
+            c.fill = ENTETE_FILL
+            c.font = ENTETE_FONT
+            c.alignment = Alignment(horizontal='center', vertical='center')
+        ws.freeze_panes = 'A2'
+
+    def remplir(ws, lignes):
+        for i, row in enumerate(lignes, 2):
+            for j, val in enumerate(row, 1):
+                c = ws.cell(row=i, column=j, value=val)
+                c.border = BORDURE
+        if lignes:
+            ws.auto_filter.ref = ws.dimensions
+
+    # ── Synthèse ─────────────────────────────────────────────────
+    ws = wb.active
+    ws.title = 'Synthese'
+    ws.column_dimensions['A'].width = 34
+    ws.column_dimensions['B'].width = 22
+    ws['A1'] = NOM + ' v' + VERSION
+    ws['A2'] = t('rapport_periode') + f" : {debut.strftime('%d/%m/%Y')} — {fin.strftime('%d/%m/%Y')}"
+    ws['A3'] = t('informations_projet') + ' : ' + (ctx['intitule_projet'] or t('tous_projets'))
+    ws['A4'] = t('reference') + ' : ' + nom_fichier
+    ws['A5'] = t('genere_le') + f" : {maintenant.strftime('%d/%m/%Y %H:%M')}"
+    indicateurs = [
+        (t('activites'), ctx['total']),
+        (t('beneficiaires'), ctx['bene_total']),
+        (t('kpi_hommes'), ctx['tot_h']),
+        (t('kpi_femmes'), ctx['tot_f']),
+        (t('kpi_enfants'), ctx['tot_e']),
+        (t('kpi_menages'), ctx['tot_m']),
+        (t('agents'), ctx['total_agents']),
+        (t('total_zones'), ctx['total_zones']),
+        (t('zones_dangereuses'), ctx['zones_dangereuses']),
+        (t('zones_securisees'), ctx['zones_securisees']),
+        (t('zones_indisponibles'), ctx['zones_indisponibles']),
+        (t('points_visites'), ctx['total_points']),
+        (t('itineraires_effectues'), ctx['total_itineraires']),
+        (t('presence_terrain'), ctx['total_sessions']),
+        (t('photos_label'), ctx['nb_photos']),
+    ]
+    row = 7
+    for lib, val in indicateurs:
+        ws.cell(row=row, column=1, value=lib).font = Font(bold=True)
+        ws.cell(row=row, column=2, value=val)
+        row += 1
+
+    # ── Activités ────────────────────────────────────────────────
+    ws = wb.create_sheet('Activites')
+    cols = [t('date'), t('projet_sg'), t('code_projet'), t('agent'), t('nom_activite'),
+            t('zone_visitee'), t('securite'), t('latitude'), t('longitude'),
+            t('beneficiaires'), t('hommes'), t('femmes'), t('enfants'), t('menages'),
+            t('objectif_activite'), t('rapport_activite'), t('resultats_activite'),
+            t('difficultes_activite'), t('recommandations_activite'), t('observations')]
+    preparer(ws, [12, 22, 10, 20, 24, 18, 12, 11, 11, 12, 9, 9, 9, 9, 30, 40, 30, 30, 30, 25], cols)
+    lignes = []
+    for a in activites:
+        lignes.append([a.date_creation.strftime('%d/%m/%Y %H:%M'), a.projet.nom, a.projet.code or '',
+                       nom_agent(a.agent), a.nom_activite or '', a.zone_visitee or '',
+                       a.niveau_securite or '', a.latitude, a.longitude,
+                       a.nombre_beneficiaires or 0, a.hommes or 0, a.femmes or 0,
+                       a.enfants or 0, a.menages or 0, a.objectif or '', a.rapport or '',
+                       a.resultats or '', a.difficultes or '', a.recommandations or '',
+                       a.observations or ''])
+    remplir(ws, lignes)
+
+    # ── Projets ──────────────────────────────────────────────────
+    ws = wb.create_sheet('Projets')
+    preparer(ws, [24, 12, 14, 30, 12], [t('informations_projet'), t('code_projet'), t('activites'), t('beneficiaires'), t('statut')])
+    lignes = []
+    for x in ctx['par_projet']:
+        lignes.append([x['projet'].nom, x['projet'].code or '', x['count'], x['benef'],
+                       x['projet'].get_statut_display()])
+    remplir(ws, lignes)
+
+    # ── Points ───────────────────────────────────────────────────
+    ws = wb.create_sheet('Points')
+    preparer(ws, [26, 16, 16, 16, 22, 12, 12, 12],
+             [t('nom'), t('categorie'), t('province'), t('commune'), t('projet_sg'), t('latitude'), t('longitude'), t('date')])
+    lignes = []
+    for p in ctx['points']:
+        lignes.append([p.nom, p.get_categorie_display(), p.province or '', p.commune or '',
+                       p.projet.nom if p.projet else '-', p.latitude, p.longitude,
+                       p.date_creation.strftime('%d/%m/%Y')])
+    remplir(ws, lignes)
+
+    # ── Itinéraires ──────────────────────────────────────────────
+    ws = wb.create_sheet('Itineraires')
+    preparer(ws, [26, 22, 22, 16, 30], [t('nom'), t('agent'), t('projet_sg'), t('date'), t('alerte')])
+    lignes = []
+    for it in ctx['itineraires']:
+        lignes.append([it.nom, nom_agent(it.utilisateur), it.projet.nom if it.projet else '-',
+                       it.date_creation.strftime('%d/%m/%Y'), it.alerte or ''])
+    remplir(ws, lignes)
+
+    # ── Zones ────────────────────────────────────────────────────
+    ws = wb.create_sheet('Zones')
+    preparer(ws, [26, 16, 34, 22, 16, 22], [t('zone'), t('statut'), t('motif'), t('projet_sg'), t('declaree_le'), t('par')])
+    lignes = []
+    for z in ctx['zones']:
+        lignes.append([z.nom, z.get_statut_display(), z.motif or '',
+                       z.projet.nom if z.projet else '-',
+                       z.date_declaration.strftime('%d/%m/%Y'), nom_agent(z.auteur)])
+    remplir(ws, lignes)
+
+    # ── Agents ───────────────────────────────────────────────────
+    ws = wb.create_sheet('Agents')
+    preparer(ws, [26, 18, 26, 30], [t('nom_complet'), t('telephone'), t('fonction'), t('email')])
+    lignes = []
+    for p in ctx['profils']:
+        lignes.append([nom_agent(p.utilisateur), p.telephone or '-', p.fonction or '-',
+                       p.utilisateur.email or '-'])
+    remplir(ws, lignes)
+
+    # ── Présence terrain ─────────────────────────────────────────
+    ws = wb.create_sheet('Presence')
+    preparer(ws, [26, 24, 24, 18, 12, 30],
+             [t('agent'), t('projet_sg'), t('activite'), t('debut'), t('duree'), t('observations')])
+    lignes = []
+    for s in ctx['sessions']:
+        duree = ''
+        if s.debut and s.fin:
+            mins = int((s.fin - s.debut).total_seconds() // 60)
+            duree = f"{mins // 60}h{mins % 60:02d}"
+        lignes.append([nom_agent(s.utilisateur), s.projet.nom if s.projet else '-',
+                       s.activite_nom or '-', s.debut.strftime('%d/%m/%Y %H:%M'), duree,
+                       s.observations or ''])
+    remplir(ws, lignes)
+
+    # ── Audits (mode global) ─────────────────────────────────────
+    if ctx['audits']:
+        ws = wb.create_sheet('Audits')
+        preparer(ws, [18, 26, 40, 18], [t('date_heure'), t('administrateur'), t('action'), t('adresse_ip')])
+        lignes = []
+        for l in ctx['audits']:
+            lignes.append([l.date.strftime('%d/%m/%Y %H:%M'), nom_agent(l.utilisateur),
+                           l.action or '', l.adresse_ip or '-'])
+        remplir(ws, lignes)
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.xlsx"'
+    wb.save(response)
+    _audit(None, "Téléchargement rapport Excel", nom_fichier)
     return response
 
 

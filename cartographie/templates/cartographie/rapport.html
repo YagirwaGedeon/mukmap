@@ -53,9 +53,67 @@
         .btn-pdf:hover { color: #fff; box-shadow: 0 6px 20px rgba(239,68,68,.4); }
         .btn-docx { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
         .btn-docx:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-excel { background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; border: none; }
+        .btn-excel:hover { color: #fff; box-shadow: 0 6px 20px rgba(22,163,74,.4); }
 
         .conteneur { padding: 22px; max-width: 1400px; margin: 0 auto; }
 
+        /* ── Assistant (stepper) ─────────────────────────────────── */
+        .assistant { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 22px; margin-bottom: 20px; }
+        .stepper { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
+        .stepper .etape-pastille {
+            flex: 1; min-width: 110px; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+            border-radius: 12px; background: var(--bg-3); border: 1px solid var(--border); cursor: pointer; transition: all .2s;
+            font-size: .72rem; font-weight: 700; color: var(--text-2);
+        }
+        .stepper .etape-pastille:hover { border-color: var(--accent); }
+        .stepper .etape-pastille.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; box-shadow: 0 4px 14px rgba(79,70,229,.35); }
+        .stepper .etape-pastille .num { width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.18); display: flex; align-items: center; justify-content: center; font-size: .68rem; flex-shrink: 0; }
+        .etape-panneau { display: none; }
+        .etape-panneau.visible { display: block; animation: fadein .25s; }
+        @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        .etape-panneau h3 { font-size: .95rem; font-weight: 800; margin-bottom: 4px; display: flex; align-items: center; gap: 9px; }
+        .etape-panneau .aide { font-size: .76rem; color: var(--text-3); margin-bottom: 16px; }
+        .nav-etapes { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; }
+
+        .choix-cartes { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+        .choix-carte {
+            position: relative; display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 12px;
+            background: var(--bg-3); border: 1px solid var(--border); cursor: pointer; transition: all .18s; font-size: .8rem; font-weight: 700;
+        }
+        .choix-carte:hover { border-color: var(--accent); }
+        .choix-carte input { position: absolute; opacity: 0; }
+        .choix-carte.sel { border-color: var(--accent); background: rgba(109,93,246,.12); box-shadow: 0 0 0 3px rgba(109,93,246,.15); }
+
+        .champ { margin-bottom: 14px; }
+        .champ label { font-size: .68rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 5px; display: block; }
+        .champ select, .champ input[type="text"], .champ input[type="date"], .champ input[type="number"] {
+            width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--bg-3); color: var(--text);
+            border: 1px solid var(--border); outline: none; font-size: .83rem; font-weight: 600;
+        }
+        .champ select:focus, .champ input:focus { border-color: var(--accent); }
+        .grille-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .grille-check { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+        .grille-check label {
+            display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: 10px;
+            background: var(--bg-3); border: 1px solid var(--border); cursor: pointer; font-size: .78rem; font-weight: 600;
+            transition: all .15s;
+        }
+        .grille-check label:hover { border-color: var(--accent); }
+        .grille-check label.checked { border-color: var(--accent); background: rgba(109,93,246,.12); }
+        .grille-check input { accent-color: var(--accent); width: 15px; height: 15px; }
+        .liste-activites { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
+        .liste-activites label {
+            display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 9px; cursor: pointer;
+            font-size: .76rem; font-weight: 600; background: var(--bg-3);
+        }
+        .liste-activites label:hover { border-color: var(--accent); }
+        .liste-activites input { accent-color: var(--accent); }
+
+        .resume-filtres { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+        .resume-filtres .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: .7rem; font-weight: 700; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); }
+
+        /* ── Aperçu ──────────────────────────────────────────────── */
         .entete-rapport {
             background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius);
             box-shadow: var(--shadow); padding: 20px 22px; margin-bottom: 20px;
@@ -63,13 +121,7 @@
         }
         .entete-rapport h2 { font-size: 1.05rem; font-weight: 800; display: flex; align-items: center; gap: 10px; }
         .entete-rapport .periode { font-size: .78rem; color: var(--text-3); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
-        .entete-rapport form { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-left: auto; }
-        .entete-rapport label { font-size: .68rem; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; display: block; }
-        .entete-rapport select {
-            min-width: 180px; padding: 9px 12px; border-radius: 10px; background: var(--bg-3); color: var(--text);
-            border: 1px solid var(--border); outline: none; font-size: .83rem; font-weight: 600;
-        }
-        .actions-dl { display: flex; gap: 10px; flex-wrap: wrap; }
+        .entete-rapport .actions-dl { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
 
         .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 20px; }
         .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; display: flex; align-items: center; gap: 14px; transition: transform .2s; }
@@ -82,6 +134,11 @@
         .kpi .ico.vert { background: rgba(34,197,94,.15); color: var(--green); }
         .kpi .ico.rouge { background: rgba(239,68,68,.15); color: var(--red); }
         .kpi .ico.orange { background: rgba(245,158,11,.15); color: var(--orange); }
+
+        .grille-graphiques { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+        .graphique { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+        .graphique h3 { font-size: .8rem; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .graphique .canevas { height: 240px; }
 
         .section { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; margin-bottom: 20px; }
         .section h3 { font-size: .85rem; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 9px; color: var(--text); }
@@ -118,7 +175,7 @@
         .vide { text-align: center; padding: 40px 20px; color: var(--text-3); font-size: .82rem; }
         .vide i { display: block; margin: 0 auto 8px; }
 
-        @media (max-width: 900px) { nav { display: none; } .grille { grid-template-columns: 1fr; } }
+        @media (max-width: 900px) { nav { display: none; } .grille-2 { grid-template-columns: 1fr; } .grille-graphiques { grid-template-columns: 1fr; } }
     </style>
 {% include 'cartographie/_pwa_head.html' %}
 </head>
@@ -128,7 +185,7 @@
         <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
         <div>
             <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
-            <div class="sous-titre" data-i18n="rapports">Rapports d'activités</div>
+            <div class="sous-titre" data-i18n="assistant_rapport">Assistant de rapport</div>
         </div>
     </div>
     <nav>
@@ -149,38 +206,237 @@
 </header>
 
 <main class="conteneur">
-    <div class="entete-rapport">
-        <div>
-            <h2><i data-lucide="file-text" style="color:var(--accent);"></i> <span data-i18n="rapport_periode">Rapport d'activités de la période</span></h2>
-            <div class="periode"><i data-lucide="calendar-range" style="width:14px;height:14px;"></i> <span data-i18n="du">Du</span> {{ debut|date:"d/m/Y" }} <span data-i18n="au">au</span> {{ fin|date:"d/m/Y" }}</div>
+    {% if not total and not total_points and not total_zones and not total_sessions %}
+    <div class="assistant">
+        <div class="vide">
+            <i data-lucide="inbox" style="width:44px;height:44px;color:var(--text-3);"></i>
+            <p style="font-weight:700;color:var(--text);margin-bottom:4px;" data-i18n="aucun_donnees_criteres">Aucune donnée ne correspond aux critères sélectionnés.</p>
+            <p style="font-size:.75rem;color:var(--text-3);margin-bottom:14px;" data-i18n="aucune_activite_periode">Aucune activité enregistrée sur cette période.</p>
+            <a class="btn btn-primary" href="#assistant"><i data-lucide="settings-2"></i> <span data-i18n="modifier_filtres">Modifier les filtres</span></a>
         </div>
-        <form method="GET" action="{% url 'rapport_generer' %}">
-            <div>
-                <label data-i18n="periode">Période</label>
-                <select name="periode" onchange="this.form.submit()">
-                    <option value="journalier" {% if periode == 'journalier' %}selected{% endif %} data-i18n="journalier">Journalier</option>
-                    <option value="hebdomadaire" {% if periode == 'hebdomadaire' %}selected{% endif %} data-i18n="hebdomadaire">Hebdomadaire</option>
-                    <option value="mensuel" {% if periode == 'mensuel' %}selected{% endif %} data-i18n="mensuel">Mensuel</option>
-                    <option value="trimestriel" {% if periode == 'trimestriel' %}selected{% endif %} data-i18n="trimestriel">Trimestriel</option>
+    </div>
+    {% endif %}
+
+    <form method="GET" action="{% url 'rapport_generer' %}" id="assistant" class="assistant">
+        <h2 style="font-size:1.05rem;font-weight:800;margin-bottom:4px;display:flex;align-items:center;gap:10px;"><i data-lucide="wand-2" style="color:var(--accent);"></i> <span data-i18n="assistant_rapport">Assistant de rapport</span></h2>
+        <div style="font-size:.75rem;color:var(--text-3);margin-bottom:18px;" data-i18n="rapport_texte">Générez le rapport de suivi du projet (activités, bénéficiaires, agents, zones de sécurité) pour la période choisie, puis téléchargez-le en PDF ou Word.</div>
+
+        <div class="stepper" id="stepper">
+            <div class="etape-pastille actif" data-eta="1"><span class="num">1</span> <span data-i18n="type_rapport">Type de rapport</span></div>
+            <div class="etape-pastille" data-eta="2"><span class="num">2</span> <span data-i18n="projet_sg">Projet</span></div>
+            <div class="etape-pastille" data-eta="3"><span class="num">3</span> <span data-i18n="activites">Activités</span></div>
+            <div class="etape-pastille" data-eta="4"><span class="num">4</span> <span data-i18n="filtres_avances">Filtres avancés</span></div>
+            <div class="etape-pastille" data-eta="5"><span class="num">5</span> <span data-i18n="sections_rapport">Sections</span></div>
+            <div class="etape-pastille" data-eta="6"><span class="num">6</span> <span data-i18n="apercu_rapport">Aperçu</span></div>
+        </div>
+
+        <input type="hidden" name="etape" id="input-etape" value="{{ etape|default:1 }}">
+
+        <div class="etape-panneau visible" id="panneau-1">
+            <h3><i data-lucide="calendar-range" style="color:var(--accent);"></i> <span data-i18n="type_rapport">Type de rapport</span></h3>
+            <p class="aide" data-i18n="choisir_type_periode">Choisissez la période couverte par le rapport.</p>
+            <div class="choix-cartes">
+                {% for cle, lib in type_choices %}
+                <label class="choix-carte {% if type == cle %}sel{% endif %}">
+                    <input type="radio" name="type" value="{{ cle }}" {% if type == cle %}checked{% endif %}>
+                    <i data-lucide="calendar" style="width:16px;height:16px;color:var(--accent);"></i>
+                    <span data-i18n="rapport_{{ cle }}">{{ lib }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <div class="grille-2" id="zone-personnalise" style="margin-top:14px;{% if type != 'personnalise' %}display:none;{% endif %}">
+                <div class="champ">
+                    <label for="date_debut" data-i18n="date_debut">Date de début</label>
+                    <input type="date" id="date_debut" name="date_debut" value="{{ date_debut_perso|default:'' }}">
+                </div>
+                <div class="champ">
+                    <label for="date_fin" data-i18n="date_fin">Date de fin</label>
+                    <input type="date" id="date_fin" name="date_fin" value="{{ date_fin_perso|default:'' }}">
+                </div>
+            </div>
+        </div>
+
+        <div class="etape-panneau" id="panneau-2">
+            <h3><i data-lucide="folder" style="color:var(--accent);"></i> <span data-i18n="projet_sg">Projet</span></h3>
+            <p class="aide" data-i18n="choisir_projet_rapport">Sélectionnez le projet à couvrir, ou tous les projets.</p>
+            <div class="champ">
+                <select name="projet" id="select-projet">
+                    <option value="" {% if not projet_id %}selected{% endif %} data-i18n="tous_projets">Tous les projets</option>
+                    {% for p in projets %}
+                    <option value="{{ p.pk }}" {% if projet_id == p.pk %}selected{% endif %}>{{ p.nom }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                    {% endfor %}
                 </select>
             </div>
-        </form>
+            {% if mode_global %}
+            <label class="choix-carte" style="margin-top:8px;">
+                <input type="checkbox" name="global" value="1" checked>
+                <i data-lucide="globe" style="width:16px;height:16px;color:var(--accent);"></i>
+                <span data-i18n="mode_global">Rapport global (tous projets, tous agents)</span>
+            </label>
+            {% endif %}
+        </div>
+
+        <div class="etape-panneau" id="panneau-3">
+            <h3><i data-lucide="clipboard-list" style="color:var(--accent);"></i> <span data-i18n="activites">Activités</span></h3>
+            <p class="aide" data-i18n="choisir_activites_rapport">Cochez les activités à inclure, ou laissez « Toutes ».</p>
+            <label class="choix-carte" style="margin-bottom:10px;max-width:340px;">
+                <input type="checkbox" id="act-toutes" name="activites" value="toutes" {% if not activite_ids %}checked{% endif %}>
+                <i data-lucide="check-check" style="width:16px;height:16px;color:var(--green);"></i>
+                <span data-i18n="toutes_activites">Toutes les activités</span>
+            </label>
+            <div class="liste-activites" id="liste-activites">
+                {% for a in activites_disponibles %}
+                <label>
+                    <input type="checkbox" name="activites" value="{{ a.pk }}" {% if activite_ids and a.pk in activite_ids %}checked{% endif %}>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ a.nom_activite|default:a.projet.nom }} — {{ a.date_creation|date:"d/m/Y" }}</span>
+                </label>
+                {% empty %}
+                <div class="vide" style="grid-column:1/-1;padding:16px;"><i data-lucide="inbox"></i><span data-i18n="aucune_activite_periode">Aucune activité enregistrée sur cette période.</span></div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="etape-panneau" id="panneau-4">
+            <h3><i data-lucide="sliders-horizontal" style="color:var(--accent);"></i> <span data-i18n="filtres_avances">Filtres avancés</span></h3>
+            <p class="aide" data-i18n="choisir_filtres_rapport">Affinez le rapport par agent ou par zone visitée.</p>
+            <div class="grille-2">
+                {% if est_admin %}
+                <div class="champ">
+                    <label for="select-agent" data-i18n="agent">Agent</label>
+                    <select name="agent" id="select-agent">
+                        <option value="" {% if not f.agent_id %}selected{% endif %} data-i18n="tous_agents">Tous les agents</option>
+                        {% for a in tous_agents %}
+                        <option value="{{ a.pk }}" {% if f.agent_id == a.pk %}selected{% endif %}>{{ a.get_full_name|default:a.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="champ">
+                    <label for="zone" data-i18n="zone">Zone</label>
+                    <input type="text" id="zone" name="zone" value="{{ zone }}" placeholder="Ex : Sake, Goma…" data-i18n-ph="ph_zone">
+                </div>
+            </div>
+            {% if est_admin %}
+            <label class="choix-carte" style="margin-top:8px;max-width:420px;">
+                <input type="checkbox" name="global" value="1" {% if mode_global %}checked{% endif %}>
+                <i data-lucide="globe" style="width:16px;height:16px;color:var(--accent);"></i>
+                <span data-i18n="mode_global">Rapport global (tous projets, tous agents)</span>
+            </label>
+            {% endif %}
+        </div>
+
+        <div class="etape-panneau" id="panneau-5">
+            <h3><i data-lucide="list-checks" style="color:var(--accent);"></i> <span data-i18n="sections_rapport">Sections du rapport</span></h3>
+            <p class="aide" data-i18n="choisir_sections_rapport">Choisissez les contenus à inclure dans le rapport.</p>
+            <div class="grille-check">
+                {% for cle, lib in section_choices %}
+                <label class="{% if cle in sections %}checked{% endif %}">
+                    <input type="checkbox" name="sections" value="{{ cle }}" {% if cle in sections %}checked{% endif %}>
+                    <span>{{ lib }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="etape-panneau" id="panneau-6">
+            <h3><i data-lucide="eye" style="color:var(--accent);"></i> <span data-i18n="apercu_rapport">Aperçu du rapport</span></h3>
+            <p class="aide" data-i18n="apercu_texte">Vérifiez les filtres, puis générez ou téléchargez le rapport.</p>
+            <div class="resume-filtres">
+                <span class="badge"><i data-lucide="calendar-range" style="width:12px;height:12px;"></i> <span data-i18n="rapport_{{ type }}">{{ type }}</span> — {{ debut|date:"d/m/Y" }} <span data-i18n="au">au</span> {{ fin|date:"d/m/Y" }}</span>
+                <span class="badge"><i data-lucide="folder" style="width:12px;height:12px;"></i> {{ intitule_projet|default:"Tous les projets" }}</span>
+                {% if f.agent_id %}<span class="badge"><i data-lucide="user" style="width:12px;height:12px;"></i> {{ agent_selectionne }}</span>{% endif %}
+                {% if zone %}<span class="badge"><i data-lucide="map-pin" style="width:12px;height:12px;"></i> {{ zone }}</span>{% endif %}
+                {% if mode_global %}<span class="badge badge-bleu"><i data-lucide="globe" style="width:12px;height:12px;"></i> <span data-i18n="rapport_global">Rapport global</span></span>{% endif %}
+                <span class="badge"><i data-lucide="activity" style="width:12px;height:12px;"></i> {{ total }} <span data-i18n="activites">activités</span></span>
+                <span class="badge"><i data-lucide="users" style="width:12px;height:12px;"></i> {{ bene_total }} <span data-i18n="beneficiaires">bénéficiaires</span></span>
+            </div>
+        </div>
+
+        <div class="nav-etapes">
+            <button type="button" class="btn" id="btn-prev"><i data-lucide="arrow-left"></i> <span data-i18n="precedent">Précédent</span></button>
+            <div style="display:flex;gap:10px;">
+                <button type="button" class="btn" id="btn-next"><span data-i18n="suivant">Suivant</span> <i data-lucide="arrow-right"></i></button>
+                <button type="submit" class="btn btn-primary" id="btn-generer"><i data-lucide="sparkles"></i> <span data-i18n="generer_rapport">Générer le rapport</span></button>
+            </div>
+        </div>
+    </form>
+
+    <div class="entete-rapport" id="apercu">
+        <div>
+            <h2><i data-lucide="file-text" style="color:var(--accent);"></i> <span data-i18n="rapport_periode">Rapport d'activités de la période</span></h2>
+            <div class="periode"><i data-lucide="calendar-range" style="width:14px;height:14px;"></i> <span data-i18n="du">Du</span> {{ debut|date:"d/m/Y" }} <span data-i18n="au">au</span> {{ fin|date:"d/m/Y" }} — <b>{{ intitule_projet|default:"Tous les projets" }}</b>{% if mode_global %} — <span data-i18n="rapport_global">Rapport global</span>{% endif %}</div>
+        </div>
         <div class="actions-dl">
-            <a class="btn btn-pdf" href="{% url 'rapport_telecharger' 'pdf' %}?periode={{ periode }}"><i data-lucide="file-down"></i> <span data-i18n="telecharger_pdf">Télécharger PDF</span></a>
-            <a class="btn btn-docx" href="{% url 'rapport_telecharger' 'docx' %}?periode={{ periode }}"><i data-lucide="file-down"></i> <span data-i18n="telecharger_word">Télécharger Word</span></a>
+            <button class="btn" onclick="window.print()"><i data-lucide="printer"></i> <span data-i18n="imprimer">Imprimer</span></button>
+            <a class="btn btn-excel" href="{% url 'rapport_telecharger' 'xlsx' %}?{{ request.GET.urlencode }}"><i data-lucide="file-spreadsheet"></i> <span data-i18n="telecharger_excel">Télécharger Excel</span></a>
+            <a class="btn btn-docx" href="{% url 'rapport_telecharger' 'docx' %}?{{ request.GET.urlencode }}"><i data-lucide="file-down"></i> <span data-i18n="telecharger_word">Télécharger Word</span></a>
+            <a class="btn btn-pdf" href="{% url 'rapport_telecharger' 'pdf' %}?{{ request.GET.urlencode }}"><i data-lucide="file-down"></i> <span data-i18n="telecharger_pdf">Télécharger PDF</span></a>
         </div>
     </div>
 
     <div class="kpis">
         <div class="kpi"><div class="ico violet"><i data-lucide="clipboard-list"></i></div><div><div class="valeur">{{ total }}</div><div class="libelle" data-i18n="activites">Activités</div></div></div>
-        <div class="kpi"><div class="ico bleu"><i data-lucide="users"></i></div><div><div class="valeur">{{ total_beneficiaires }}</div><div class="libelle" data-i18n="beneficiaires">Bénéficiaires</div></div></div>
+        <div class="kpi"><div class="ico bleu"><i data-lucide="users"></i></div><div><div class="valeur">{{ bene_total }}</div><div class="libelle" data-i18n="beneficiaires">Bénéficiaires</div></div></div>
+        <div class="kpi"><div class="ico violet"><i data-lucide="user"></i></div><div><div class="valeur">{{ total_agents }}</div><div class="libelle" data-i18n="total_agents">Agents mobilisés</div></div></div>
         <div class="kpi"><div class="ico rouge"><i data-lucide="shield-alert"></i></div><div><div class="valeur">{{ zones_dangereuses }}</div><div class="libelle" data-i18n="zones_dangereuses">Zones dangereuses</div></div></div>
         <div class="kpi"><div class="ico vert"><i data-lucide="shield-check"></i></div><div><div class="valeur">{{ zones_securisees }}</div><div class="libelle" data-i18n="zones_securisees">Zones sécurisées</div></div></div>
-        <div class="kpi"><div class="ico orange"><i data-lucide="shield-question"></i></div><div><div class="valeur">{{ zones_indisponibles }}</div><div class="libelle" data-i18n="sans_information">Sans information</div></div></div>
+        <div class="kpi"><div class="ico orange"><i data-lucide="shield-question"></i></div><div><div class="valeur">{{ zones_indisponibles }}</div><div class="libelle" data-i18n="zones_indisponibles">Sans information</div></div></div>
+        <div class="kpi"><div class="ico bleu"><i data-lucide="map-pin"></i></div><div><div class="valeur">{{ total_points }}</div><div class="libelle" data-i18n="points_visites">Points visités</div></div></div>
+        <div class="kpi"><div class="ico vert"><i data-lucide="route"></i></div><div><div class="valeur">{{ total_itineraires }}</div><div class="libelle" data-i18n="itineraires_effectues">Itinéraires</div></div></div>
+        <div class="kpi"><div class="ico violet"><i data-lucide="clock"></i></div><div><div class="valeur">{{ total_sessions }}</div><div class="libelle" data-i18n="presence_terrain">Présence terrain</div></div></div>
+        <div class="kpi"><div class="ico orange"><i data-lucide="camera"></i></div><div><div class="valeur">{{ nb_photos }}</div><div class="libelle" data-i18n="photos_label">Photos</div></div></div>
     </div>
 
+    <div class="grille-graphiques">
+        <div class="graphique"><h3><i data-lucide="bar-chart-3" style="color:var(--blue);"></i> <span data-i18n="activites_par_projet">Activités par projet</span></h3><div class="canevas" id="chart-activites"></div></div>
+        <div class="graphique"><h3><i data-lucide="bar-chart-4" style="color:var(--orange);"></i> <span data-i18n="beneficiaires_mois">Bénéficiaires par mois</span></h3><div class="canevas" id="chart-benef"></div></div>
+        <div class="graphique"><h3><i data-lucide="pie-chart" style="color:var(--green);"></i> <span data-i18n="zones_securite">Zones de sécurité</span></h3><div class="canevas" id="chart-zones"></div></div>
+        <div class="graphique"><h3><i data-lucide="pie-chart" style="color:var(--accent);"></i> <span data-i18n="repartition_categories">Répartition par catégorie</span></h3><div class="canevas" id="chart-categories"></div></div>
+    </div>
+
+    {% if 'stats' in sections %}
     <div class="section">
-        <h3><i data-lucide="shield-alert" style="color:var(--red);"></i> <span data-i18n="zones">Zones de sécurité</span> <span class="compte">{{ zones|length }}</span></h3>
+        <h3><i data-lucide="gauge" style="color:var(--accent);"></i> <span data-i18n="kpis_rapport">Indicateurs clés</span></h3>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th data-i18n="kpi_hommes">Hommes</th><th data-i18n="kpi_femmes">Femmes</th><th data-i18n="kpi_enfants">Enfants</th><th data-i18n="kpi_menages">Ménages</th><th data-i18n="total_agents">Agents</th><th data-i18n="kpi_zones">Zones</th><th data-i18n="points_visites">Points</th><th data-i18n="itineraires_effectues">Itinéraires</th><th data-i18n="kpi_sessions">Sessions</th><th data-i18n="photos_label">Photos</th></tr></thead>
+                <tbody><tr>
+                    <td><b>{{ tot_h }}</b></td><td><b>{{ tot_f }}</b></td><td><b>{{ tot_e }}</b></td><td><b>{{ tot_m }}</b></td>
+                    <td><b>{{ total_agents }}</b></td><td><b>{{ total_zones }}</b></td><td><b>{{ total_points }}</b></td>
+                    <td><b>{{ total_itineraires }}</b></td><td><b>{{ total_sessions }}</b></td><td><b>{{ nb_photos }}</b></td>
+                </tr></tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if 'beneficiaires' in sections %}
+    <div class="section">
+        <h3><i data-lucide="users" style="color:var(--blue);"></i> <span data-i18n="section_beneficiaires">Bénéficiaires</span> <span class="compte">{{ bene_total }}</span></h3>
+        {% if par_projet %}
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th data-i18n="projet_sg">Projet</th><th data-i18n="beneficiaires">Bénéficiaires</th><th data-i18n="hommes">Hommes</th><th data-i18n="femmes">Femmes</th><th data-i18n="enfants">Enfants</th><th data-i18n="menages">Ménages</th></tr></thead>
+                <tbody>
+                {% for x in par_projet %}
+                    <tr>
+                        <td><b>{{ x.projet.nom }}</b>{% if x.projet.code %} <span class="badge">{{ x.projet.code }}</span>{% endif %}</td>
+                        <td><b>{{ x.benef }}</b></td>
+                        <td>{{ x.hommes|default:0 }}</td><td>{{ x.femmes|default:0 }}</td><td>{{ x.enfants|default:0 }}</td><td>{{ x.menages|default:0 }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="vide"><i data-lucide="users"></i><span data-i18n="aucune_activite_periode">Aucune activité enregistrée sur cette période.</span></div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if 'zones' in sections %}
+    <div class="section">
+        <h3><i data-lucide="shield-alert" style="color:var(--red);"></i> <span data-i18n="zones_securite">Zones de sécurité</span> <span class="compte">{{ zones|length }}</span></h3>
         {% if zones %}
         <div style="overflow-x:auto;">
             <table>
@@ -188,7 +444,7 @@
                 <tbody>
                 {% for z in zones %}
                     <tr>
-                        <td><b>{{ z.nom }}</b></td>
+                        <td><b>{{ z.nom }}</b>{% if z.projet %} <span class="badge">{{ z.projet.nom }}</span>{% endif %}</td>
                         <td><span class="badge {% if z.statut == 'dangereuse' %}badge-danger{% elif z.statut == 'securisee' %}badge-vert{% else %}badge-jaune{% endif %}">{% if z.statut == 'dangereuse' %}<i data-lucide="alert-triangle" style="width:11px;height:11px;"></i>{% elif z.statut == 'securisee' %}<i data-lucide="shield-check" style="width:11px;height:11px;"></i>{% else %}<i data-lucide="help-circle" style="width:11px;height:11px;"></i>{% endif %}{{ z.get_statut_display }}</span></td>
                         <td style="max-width:280px;">{{ z.motif|default:'—' }}</td>
                         <td>{{ z.date_declaration|date:"d/m/Y H:i" }}</td>
@@ -202,7 +458,34 @@
         <div class="vide"><i data-lucide="shield"></i><span data-i18n="aucune_zone_periode">Aucune zone déclarée sur cette période.</span></div>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% if 'dangers' in sections %}
+    <div class="section">
+        <h3><i data-lucide="triangle-alert" style="color:var(--red);"></i> <span data-i18n="zones_danger">Zones de danger</span> <span class="compte">{{ zones_dangereuses }}</span></h3>
+        {% if zones_dangereuses %}
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th data-i18n="zone">Zone</th><th data-i18n="motif">Motif</th><th data-i18n="declaree_le">Déclarée le</th><th data-i18n="par">Par</th></tr></thead>
+                <tbody>
+                {% for z in zones %}{% if z.statut == 'dangereuse' %}
+                    <tr>
+                        <td><b>{{ z.nom }}</b></td>
+                        <td>{{ z.motif|default:'—' }}</td>
+                        <td>{{ z.date_declaration|date:"d/m/Y H:i" }}</td>
+                        <td>{% if z.auteur %}{{ z.auteur.get_full_name|default:z.auteur.username }}{% else %}—{% endif %}</td>
+                    </tr>
+                {% endif %}{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="vide"><i data-lucide="shield-check"></i><span data-i18n="aucun_danger_periode">Aucune zone de danger déclarée sur cette période.</span></div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if 'agents' in sections %}
     <div class="section">
         <h3><i data-lucide="users" style="color:var(--blue);"></i> <span data-i18n="agents">Agents</span> <span class="compte">{{ profils|length }}</span></h3>
         {% if profils %}
@@ -214,16 +497,98 @@
                     <div class="nom">{{ p.utilisateur.get_full_name|default:p.utilisateur.username }}</div>
                     <div class="meta">
                         <span><i data-lucide="phone" style="width:11px;height:11px;"></i> {{ p.telephone|default:'—' }}</span>
-                        <span><i data-lucide="briefcase" style="width:11px;height:11px;"></i> {{ p.fonction|default:'Agent de terrain' }}</span>                    </div>
+                        <span><i data-lucide="briefcase" style="width:11px;height:11px;"></i> {{ p.fonction|default:'Agent de terrain' }}</span>
+                    </div>
                 </div>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <div class="vide"><i data-lucide="user-x"></i><span data-i18n="aucun_agent">Aucun agent enregistré.</span></div>
+        <div class="vide"><i data-lucide="user-x"></i><span data-i18n="aucun_agent_periode">Aucun agent mobilisé sur cette période.</span></div>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% if 'terrain' in sections %}
+    <div class="section">
+        <h3><i data-lucide="clock" style="color:var(--green);"></i> <span data-i18n="presence_terrain">Présence terrain</span> <span class="compte">{{ sessions|length }}</span></h3>
+        {% if sessions %}
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th data-i18n="agent">Agent</th><th data-i18n="projet_sg">Projet</th><th data-i18n="activite">Activité</th><th data-i18n="debut">Début</th><th data-i18n="duree">Durée</th></tr></thead>
+                <tbody>
+                {% for s in sessions %}
+                    <tr>
+                        <td><b>{{ s.utilisateur.get_full_name|default:s.utilisateur.username }}</b></td>
+                        <td>{{ s.projet.nom|default:'—' }}</td>
+                        <td>{{ s.activite_nom|default:'—' }}</td>
+                        <td>{{ s.debut|date:"d/m/Y H:i" }}</td>
+                        <td>{% if s.debut and s.fin %}{{ s.duree_display }}{% else %}—{% endif %}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="vide"><i data-lucide="clock"></i><span data-i18n="aucune_session">Aucune session de travail sur cette période.</span></div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if 'itineraire' in sections %}
+    <div class="section">
+        <h3><i data-lucide="route" style="color:var(--blue);"></i> <span data-i18n="itineraires_effectues">Itinéraires</span> <span class="compte">{{ itineraires|length }}</span></h3>
+        {% if itineraires %}
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th data-i18n="nom">Nom</th><th data-i18n="agent">Agent</th><th data-i18n="projet_sg">Projet</th><th data-i18n="date">Date</th><th data-i18n="alerte">Alerte</th></tr></thead>
+                <tbody>
+                {% for it in itineraires %}
+                    <tr>
+                        <td><b>{{ it.nom }}</b></td>
+                        <td>{{ it.utilisateur.get_full_name|default:it.utilisateur.username }}</td>
+                        <td>{{ it.projet.nom|default:'—' }}</td>
+                        <td>{{ it.date_creation|date:"d/m/Y H:i" }}</td>
+                        <td>{% if it.alerte %}<span class="badge badge-danger"><i data-lucide="alert-triangle" style="width:11px;height:11px;"></i> {{ it.alerte }}</span>{% else %}—{% endif %}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="vide"><i data-lucide="route"></i><span data-i18n="aucun_itineraire">Aucun itinéraire sur cette période.</span></div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if 'points' in sections %}
+    <div class="section">
+        <h3><i data-lucide="map-pin" style="color:var(--blue);"></i> <span data-i18n="points_visites">Points visités</span> <span class="compte">{{ points|length }}</span></h3>
+        {% if points %}
+        <div style="overflow-x:auto;">
+            <table>
+                <thead><tr><th data-i18n="nom">Nom</th><th data-i18n="categorie">Catégorie</th><th data-i18n="commune">Commune</th><th data-i18n="projet_sg">Projet</th><th data-i18n="agent">Agent</th><th data-i18n="date">Date</th></tr></thead>
+                <tbody>
+                {% for p in points %}
+                    <tr>
+                        <td><b>{{ p.nom }}</b></td>
+                        <td><span class="badge badge-bleu">{{ p.get_categorie_display }}</span></td>
+                        <td>{{ p.commune|default:'—' }}</td>
+                        <td>{{ p.projet.nom|default:'—' }}</td>
+                        <td>{% if p.auteur %}{{ p.auteur.get_full_name|default:p.auteur.username }}{% else %}—{% endif %}</td>
+                        <td>{{ p.date_creation|date:"d/m/Y" }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="vide"><i data-lucide="map-pin-off"></i><span data-i18n="aucun_point">Aucun point enregistré sur cette période.</span></div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if mode_global and 'audits' in sections %}
     <div class="section">
         <h3><i data-lucide="terminal" style="color:var(--orange);"></i> <span data-i18n="activites_administrateurs">Activités des administrateurs</span> <span class="compte">{{ audits|length }}</span></h3>
         {% if audits %}
@@ -246,9 +611,30 @@
         <div class="vide"><i data-lucide="terminal-square"></i><span data-i18n="aucune_admin_periode">Aucune activité d'administration sur cette période.</span></div>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% if 'observations' in sections or 'recommandations' in sections %}
     <div class="section">
-        <h3><i data-lucide="map-pin" style="color:var(--green);"></i> <span data-i18n="activites_agents">Activités des agents</span> <span class="compte">{{ total }}</span></h3>
+        <h3><i data-lucide="message-square-text" style="color:var(--orange);"></i> <span data-i18n="observations_recommandations">Observations et recommandations</span></h3>
+        {% for a in activites %}{% if a.observations or a.recommandations %}
+        <div class="activite">
+            <div class="tete">
+                <span class="badge badge-bleu">{{ a.projet.nom }}</span>
+                <span class="badge"><i data-lucide="user" style="width:11px;height:11px;"></i> {{ a.agent.get_full_name|default:a.agent.username }}</span>
+                <span class="badge"><i data-lucide="clock" style="width:11px;height:11px;"></i> {{ a.date_creation|date:"d/m/Y" }}</span>
+            </div>
+            {% if a.observations %}<div class="texte" style="margin-bottom:6px;"><b data-i18n="observations">Observations</b><br>{{ a.observations }}</div>{% endif %}
+            {% if a.recommandations %}<div class="texte"><b data-i18n="recommandations_activite">Recommandations</b><br>{{ a.recommandations }}</div>{% endif %}
+        </div>
+        {% endif %}{% empty %}
+        <div class="vide"><i data-lucide="message-square-off"></i><span data-i18n="aucun_obs_rec">Aucune observation ni recommandation sur cette période.</span></div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if 'activites' in sections %}
+    <div class="section">
+        <h3><i data-lucide="activity" style="color:var(--green);"></i> <span data-i18n="activites_agents">Activités des agents</span> <span class="compte">{{ total }}</span></h3>
         {% if activites %}
         {% for a in activites %}
         <div class="activite">
@@ -264,8 +650,16 @@
                 <span><i data-lucide="map-pin" style="width:12px;height:12px;color:var(--text-3);"></i> {{ a.zone_visitee|default:'Zone non précisée' }}</span>
                 <span><i data-lucide="navigation" style="width:12px;height:12px;color:var(--text-3);"></i> {{ a.latitude|floatformat:5 }}, {{ a.longitude|floatformat:5 }}</span>
                 <span><i data-lucide="users" style="width:12px;height:12px;color:var(--text-3);"></i> {{ a.nombre_beneficiaires }} <span data-i18n="beneficiaires">bénéficiaires</span></span>
+                {% if 'beneficiaires' in sections %}
+                <span><i data-lucide="user-round" style="width:12px;height:12px;color:var(--text-3);"></i> <span data-i18n="hommes">H</span>: {{ a.hommes|default:0 }} · <span data-i18n="femmes">F</span>: {{ a.femmes|default:0 }} · <span data-i18n="enfants">E</span>: {{ a.enfants|default:0 }} · <span data-i18n="menages">M</span>: {{ a.menages|default:0 }}</span>
+                {% endif %}
             </div>
+            {% if a.objectif %}<div class="texte" style="margin-bottom:6px;"><b data-i18n="objectif_activite">Objectif</b><br>{{ a.objectif }}</div>{% endif %}
             <div class="texte">{{ a.rapport|linebreaksbr }}</div>
+            {% if a.resultats %}<div class="texte" style="margin-top:6px;"><b data-i18n="resultats_activite">Résultats obtenus</b><br>{{ a.resultats }}</div>{% endif %}
+            {% if a.difficultes %}<div class="texte" style="margin-top:6px;"><b data-i18n="difficultes_activite">Difficultés rencontrées</b><br>{{ a.difficultes }}</div>{% endif %}
+            {% if a.recommandations %}<div class="texte" style="margin-top:6px;"><b data-i18n="recommandations_activite">Recommandations</b><br>{{ a.recommandations }}</div>{% endif %}
+            {% if a.observations %}<div class="texte" style="margin-top:6px;"><b data-i18n="observations">Observations</b><br>{{ a.observations }}</div>{% endif %}
             {% if a.photos.all %}
             <div class="photos">
                 {% for ph in a.photos.all|slice:":8" %}
@@ -279,8 +673,10 @@
         <div class="vide"><i data-lucide="activity"></i><span data-i18n="aucune_activite_periode">Aucune activité enregistrée sur cette période.</span></div>
         {% endif %}
     </div>
+    {% endif %}
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script>
 const theme = localStorage.getItem('theme') || 'dark';
@@ -291,6 +687,104 @@ document.getElementById('btn-theme').addEventListener('click', () => {
     localStorage.setItem('theme', t);
     location.reload();
 });
+
+// ── Assistant (étapes) ──────────────────────────────────────────
+const etapes = [1, 2, 3, 4, 5, 6];
+let etapeCourante = parseInt(document.getElementById('input-etape').value || '1', 10) || 1;
+if (etapeCourante === 6) etapeCourante = 1;
+
+function afficherEtape(n) {
+    etapeCourante = n;
+    document.getElementById('input-etape').value = n;
+    document.querySelectorAll('.etape-panneau').forEach(p => p.classList.remove('visible'));
+    document.getElementById('panneau-' + n).classList.add('visible');
+    document.querySelectorAll('#stepper .etape-pastille').forEach(el => {
+        el.classList.toggle('actif', parseInt(el.dataset.eta, 10) === n);
+    });
+    document.getElementById('btn-prev').style.visibility = n === 1 ? 'hidden' : 'visible';
+    document.getElementById('btn-next').style.display = n === 6 ? 'none' : 'inline-flex';
+    document.getElementById('btn-generer').style.display = n === 6 ? 'inline-flex' : 'none';
+}
+document.querySelectorAll('#stepper .etape-pastille').forEach(el => {
+    el.addEventListener('click', () => afficherEtape(parseInt(el.dataset.eta, 10)));
+});
+document.getElementById('btn-prev').addEventListener('click', () => afficherEtape(Math.max(1, etapeCourante - 1)));
+document.getElementById('btn-next').addEventListener('click', () => afficherEtape(Math.min(6, etapeCourante + 1)));
+
+// Personnalisé → dates
+const radios = document.querySelectorAll('input[name="type"]');
+const zonePerso = document.getElementById('zone-personnalise');
+radios.forEach(r => r.addEventListener('change', () => {
+    zonePerso.style.display = r.value === 'personnalise' ? 'grid' : 'none';
+    document.querySelectorAll('.choix-carte').forEach(c => c.classList.toggle('sel', c.querySelector('input').checked));
+}));
+
+// Toutes les activités ↔ sélection
+const actToutes = document.getElementById('act-toutes');
+if (actToutes) {
+    actToutes.addEventListener('change', () => {
+        document.querySelectorAll('#liste-activites input').forEach(i => {
+            i.checked = !actToutes.checked;
+            i.disabled = actToutes.checked;
+        });
+    });
+    if (actToutes.checked) {
+        document.querySelectorAll('#liste-activites input').forEach(i => i.disabled = true);
+    }
+}
+
+// Sections : surbrillance des cases
+document.querySelectorAll('#panneau-5 .grille-check input').forEach(i => {
+    i.addEventListener('change', () => i.closest('label').classList.toggle('checked', i.checked));
+});
+
+// ── Graphiques ──────────────────────────────────────────────────
+if (window.echarts) {
+    const ETHEME = theme === 'dark' ? {bg:'#171a2e', text:'#a3a9d0', titre:'#eef0ff', bord:'#2a2f52'} : {bg:'#ffffff', text:'#4b5278', titre:'#1a1f36', bord:'#e3e5f2'};
+    const baseText = {color: ETHEME.text, fontFamily:'Inter'};
+    const tooltip = {backgroundColor: ETHEME.bg, borderColor: ETHEME.bord, textStyle: {color: ETHEME.titre}};
+
+    const gActivites = {{ graph_activites|safe }};
+    const gBenef = {{ graph_benef|safe }};
+    const gZones = {{ graph_zones|safe }};
+    const gCats = {{ graph_categories|safe }};
+
+    const catCouleurs = {Hôpital:'#ef4444',École:'#3b82f6',Église:'#8b5cf6',Police:'#1d4ed8',Marché:'#f59e0b',Projet:'#10b981',Incident:'#dc2626',Village:'#84cc16',Ville:'#0ea5e9',Pont:'#64748b',Route:'#a16207',Entreprise:'#6366f1','Zone rouge':'#b91c1c','Zone verte':'#16a34a','Zone orange':'#ea580c',Autre:'#78716c'};
+
+    const zoneCouleurs = {Dangereuse:'#ef4444',Sécurisée:'#22c55e',Indisponible:'#eab308'};
+    if (gZones.labels[0]) zoneCouleurs[gZones.labels[0]] = '#ef4444';
+    if (gZones.labels[1]) zoneCouleurs[gZones.labels[1]] = '#22c55e';
+    if (gZones.labels[2]) zoneCouleurs[gZones.labels[2]] = '#eab308';
+
+    echarts.init(document.getElementById('chart-activites'), null, {renderer:'canvas'}).setOption({
+        tooltip, grid:{left:40, right:16, top:24, bottom:60},
+        xAxis:{type:'category', data: gActivites.labels, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:9, rotate:25}, axisLine:{lineStyle:{color:ETHEME.bord}}},
+        yAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+        series:[{type:'bar', data: gActivites.values, itemStyle:{color:'#3b82f6', borderRadius:[6,6,0,0]}, barWidth:'45%'}]
+    });
+
+    echarts.init(document.getElementById('chart-benef'), null, {renderer:'canvas'}).setOption({
+        tooltip, grid:{left:40, right:16, top:24, bottom:60},
+        xAxis:{type:'category', data: gBenef.labels, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:9, rotate:25}, axisLine:{lineStyle:{color:ETHEME.bord}}},
+        yAxis:{type:'value', splitLine:{lineStyle:{color:ETHEME.bord}}, axisLabel:{color:ETHEME.text, fontFamily:'Inter', fontSize:10}},
+        series:[{type:'bar', data: gBenef.values, itemStyle:{color:'#f59e0b', borderRadius:[6,6,0,0]}, barWidth:'45%'}]
+    });
+
+    echarts.init(document.getElementById('chart-zones'), null, {renderer:'canvas'}).setOption({
+        tooltip, legend:{textStyle:baseText, bottom:0},
+        series:[{type:'pie', radius:'68%', itemStyle:{borderRadius:8, borderColor:ETHEME.bg, borderWidth:3},
+            data: gZones.labels.map((nom, i) => ({name: nom, value: gZones.values[i]})).filter(x => x.value > 0),
+            label:{color:ETHEME.titre, fontFamily:'Inter', fontSize:11}}]
+    });
+
+    echarts.init(document.getElementById('chart-categories'), null, {renderer:'canvas'}).setOption({
+        tooltip, legend:{textStyle:baseText, bottom:0},
+        series:[{type:'pie', radius:'68%', itemStyle:{borderRadius:8, borderColor:ETHEME.bg, borderWidth:3},
+            data: gCats.labels.map((nom, i) => ({name: nom, value: gCats.values[i], itemStyle:{color: catCouleurs[nom] || '#6d5df6'}})).filter(x => x.value > 0),
+            label:{color:ETHEME.titre, fontFamily:'Inter', fontSize:11}}]
+    });
+}
+
 if (window.lucide) lucide.createIcons();
 </script>
 {% include 'cartographie/_i18n.html' %}

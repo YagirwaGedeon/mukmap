@@ -55,6 +55,7 @@ class Projet(models.Model):
         ('actif', 'Actif'), ('archive', 'Archivé'),
     ]
     nom = models.CharField(max_length=200, verbose_name="Nom du projet")
+    code = models.CharField(max_length=20, blank=True, default='', verbose_name="Code / référence du projet")
     description = models.TextField(blank=True, verbose_name="Description du projet")
     but = models.TextField(blank=True, verbose_name="But de l'activité")
     statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='actif', verbose_name="Statut")
@@ -65,6 +66,14 @@ class Projet(models.Model):
         ordering = ['-date_creation']
         verbose_name = "Projet"
         verbose_name_plural = "Projets"
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            super().save(*args, **kwargs)
+            self.code = f"P-{self.pk:04d}"
+            super().save(update_fields=['code'])
+        else:
+            super().save(*args, **kwargs)
 
     def __str__(self):
         return self.nom
@@ -99,8 +108,16 @@ class Activite(models.Model):
     description = models.TextField(blank=True, verbose_name="Description de l'activité")
     agent = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='activites', verbose_name="Agent")
     rapport = models.TextField(verbose_name="Rapport d'activité")
+    objectif = models.TextField(blank=True, default='', verbose_name="Objectif de l'activité")
+    resultats = models.TextField(blank=True, default='', verbose_name="Résultats obtenus")
+    difficultes = models.TextField(blank=True, default='', verbose_name="Difficultés rencontrées")
+    recommandations = models.TextField(blank=True, default='', verbose_name="Recommandations")
     observations = models.TextField(blank=True, verbose_name="Observations")
     nombre_beneficiaires = models.PositiveIntegerField(default=0, verbose_name="Nombre de bénéficiaires")
+    hommes = models.PositiveIntegerField(null=True, blank=True, verbose_name="Nombre d'hommes")
+    femmes = models.PositiveIntegerField(null=True, blank=True, verbose_name="Nombre de femmes")
+    enfants = models.PositiveIntegerField(null=True, blank=True, verbose_name="Nombre d'enfants")
+    menages = models.PositiveIntegerField(null=True, blank=True, verbose_name="Nombre de ménages concernés")
     latitude = models.FloatField(verbose_name="Latitude")
     longitude = models.FloatField(verbose_name="Longitude")
     zone_visitee = models.CharField(max_length=200, blank=True, verbose_name="Zone visitée")
@@ -951,3 +968,11 @@ class SessionTravail(models.Model):
         if self.fin:
             return (self.fin - self.debut).total_seconds() / 60
         return None
+
+    @property
+    def duree_display(self):
+        d = self.duree()
+        if d is None:
+            return ''
+        mins = int(d)
+        return f"{mins // 60}h{mins % 60:02d}"
