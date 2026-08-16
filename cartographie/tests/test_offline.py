@@ -17,9 +17,14 @@ from .base import BaseCartographieTest
 
 
 def _fichier_png(nom='photo.png'):
-    """Fausse image PNG (octets arbitraires ; aucun EXIF)."""
-    return InMemoryUploadedFile(io.BytesIO(b'\x89PNG\r\n\x1a\n0123456789'),
-                                'fichier', nom, 'image/png', 14, None)
+    """Petit PNG réel (généré avec PIL), sans EXIF."""
+    from PIL import Image
+    buf = io.BytesIO()
+    img = Image.new('RGB', (4, 4), (30, 140, 90))
+    img.save(buf, 'PNG')
+    img.close()
+    return InMemoryUploadedFile(io.BytesIO(buf.getvalue()),
+                                'fichier', nom, 'image/png', buf.tell(), None)
 
 
 class TestSync(BaseCartographieTest):

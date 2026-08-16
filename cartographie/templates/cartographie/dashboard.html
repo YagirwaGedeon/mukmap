@@ -81,7 +81,7 @@
         .filtres select { min-width: 200px; padding: 9px 12px; border-radius: 10px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); outline: none; font-size: .83rem; }
 
         .grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
-        .carte-chart { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; }
+        .carte-chart { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; min-width: 0; overflow-x: auto; }
         .carte-chart h3 { font-size: .85rem; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
         .chart { height: 300px; }
         .chart-petit { height: 260px; }
@@ -126,7 +126,7 @@
         {% include 'cartographie/_selecteur_langue.html' %}
         <div class="horloge" id="horloge" title="Date et heure" data-i18n-title="date_heure">--/--/---- --:--:--</div>
         <button class="btn btn-icon" id="btn-theme" title="Thème" data-i18n-title="theme"><i data-lucide="moon"></i></button>
-        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+        <form method="post" action="{% url 'deconnexion' %}" style="display:inline">{% csrf_token %}<button type="submit" class="btn btn-primary"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></button></form>
     </div>
 </header>
 

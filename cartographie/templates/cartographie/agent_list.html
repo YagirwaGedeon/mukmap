@@ -7,7 +7,7 @@
 <div class="topbar"><h1 data-i18n="gestion_agents">Gestion des agents</h1><nav><a href="{% url 'dashboard' %}"><span data-i18n="tableau_de_bord">Dashboard</span></a><a href="{% url 'index_cartographie' %}"><span data-i18n="carte">Carte</span></a><a href="{% url 'agent_create' %}">+ <span data-i18n="nouvel_agent">Nouvel agent</span></a></nav></div>
 <div class="container">
     {% if messages %}{% for m in messages %}
-        <div class="alert">{{ m|safe }}</div>
+        <div class="alert">{{ m }}</div>
     {% endfor %}{% endif %}
 
     <a href="{% url 'agent_create' %}" class="btn-add">+ <span data-i18n="creer_compte_agent">Créer un compte agent</span></a>

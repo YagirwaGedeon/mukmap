@@ -99,7 +99,7 @@
     <div class="droite">
         {% include 'cartographie/_selecteur_langue.html' %}
         <button class="btn btn-icon" id="btn-theme" title="Thème" data-i18n-title="theme"><i data-lucide="moon"></i></button>
-        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+        <form method="post" action="{% url 'deconnexion' %}" style="display:inline">{% csrf_token %}<button type="submit" class="btn btn-primary"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></button></form>
     </div>
 </header>
 

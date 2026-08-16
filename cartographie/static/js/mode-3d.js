@@ -341,7 +341,7 @@
             try {
                 if (!map || !map.loaded()) return;
                 if (!document.getElementById('btn-vue-3d')) map.addControl(ControleVue3D, 'top-right');
-                if (!document.getElementById('panneau-3d-cadre')) map.addControl(creerPanneau(map), 'top-right');
+                if (!document.getElementById('panneau-3d-cadre') && map.getContainer()) map.getContainer().appendChild(creerPanneau(map));
                 map.on('error', function (e) {
                     if (!e || e.sourceId !== ID_SOURCE_DEM || basculeDEMArmee) return;
                     basculeDEMArmee = true;

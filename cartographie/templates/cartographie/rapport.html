@@ -74,7 +74,7 @@
         @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
         .etape-panneau h3 { font-size: .95rem; font-weight: 800; margin-bottom: 4px; display: flex; align-items: center; gap: 9px; }
         .etape-panneau .aide { font-size: .76rem; color: var(--text-3); margin-bottom: 16px; }
-        .nav-etapes { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; }
+        .nav-etapes { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
 
         .choix-cartes { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
         .choix-carte {
@@ -201,7 +201,7 @@
     <div class="droite">
         {% include 'cartographie/_selecteur_langue.html' %}
         <button class="btn btn-icon" id="btn-theme" title="Thème" data-i18n-title="theme"><i data-lucide="moon"></i></button>
-        <a class="btn btn-primary" href="{% url 'deconnexion' %}"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></a>
+        <form method="post" action="{% url 'deconnexion' %}" style="display:inline">{% csrf_token %}<button type="submit" class="btn btn-primary"><i data-lucide="log-out"></i> <span data-i18n="deconnexion">Déconnexion</span></button></form>
     </div>
 </header>
 

@@ -52,8 +52,31 @@ def _float_ou_nul(valeur):
         return None
 
 
+def _valider_coordonnees_wgs84(lat, lon):
+    """Valide des coordonnées WGS84. Retourne (lat, lon) flottants ou (None, None)."""
+    lat = _float_ou_nul(lat)
+    lon = _float_ou_nul(lon)
+    if lat is None or lon is None:
+        return None, None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None, None
+    return lat, lon
+
+
 def _est_admin(user):
     return user.is_authenticated and user.is_superuser
+
+
+def _json_script(donnees):
+    """JSON sûr pour injection inline dans un bloc <script> (échappe <, >, & et U+2028/29).
+
+    json.dumps n'échappe pas ces caractères : une valeur utilisateur contenant
+    « </script> » briserait le bloc et permettrait du XSS stocké.
+    """
+    return json.dumps(donnees, ensure_ascii=False) \
+        .replace('<', '\\u003c').replace('>', '\\u003e') \
+        .replace('&', '\\u0026') \
+        .replace('\u2028', '\\u2028').replace('\u2029', '\\u2029')
 
 
 def _est_admin_principal(user):
@@ -136,16 +159,58 @@ def _analyser_itineraire(coords_list):
 # ─── AUTH ──────────────────────────────────────────────────────
 
 
+_NB_TENTATIVES_MAX = 5
+_DELAI_BLOCAGE_S = 900  # 15 minutes
+
+
+def _cle_blocage(identifiant, ip):
+    return 'mukmap:blocage:{0}:{1}'.format((identifiant or '').strip().lower(), ip or '')
+
+
+def _est_bloque(identifiant, ip):
+    from django.core.cache import cache
+    return cache.get(_cle_blocage(identifiant, ip)) or 0
+
+
+def _incrementer_echec(identifiant, ip):
+    from django.core.cache import cache
+    cle = _cle_blocage(identifiant, ip)
+    compteur = (cache.get(cle) or 0) + 1
+    cache.set(cle, compteur, _DELAI_BLOCAGE_S)
+    return compteur
+
+
+def _reinitialiser_echecs(identifiant, ip):
+    from django.core.cache import cache
+    cache.delete(_cle_blocage(identifiant, ip))
+
+
 def connexion(request):
     if request.method == "POST":
         username = request.POST.get('username')
         password = request.POST.get('password')
         type_login = request.POST.get('type', 'agent')
         remember = request.POST.get('remember') == 'on'
+        ip = request.META.get('REMOTE_ADDR', '')
+
+        if _est_bloque(username, ip) >= _NB_TENTATIVES_MAX:
+            messages.error(request, "Trop de tentatives échouées. Réessayez dans 15 minutes.")
+            return render(request, 'cartographie/connexion.html')
+
         user = authenticate(request, username=username, password=password)
 
         if user is None:
+            _incrementer_echec(username, ip)
             messages.error(request, "Identifiants invalides.")
+            return render(request, 'cartographie/connexion.html')
+
+        _reinitialiser_echecs(username, ip)
+
+        if password in settings.PASSWORDS_DEFAUT_SUPERADMIN:
+            _audit(request, "Connexion refusée (mot de passe par défaut)",
+                   f"Compte « {username} »")
+            messages.error(request, "Votre mot de passe est encore celui par défaut. "
+                                    "Contactez l'administrateur pour le réinitialiser.")
             return render(request, 'cartographie/connexion.html')
 
         if hasattr(user, 'profil') and user.profil.est_bloque:
@@ -173,8 +238,6 @@ def connexion(request):
         request.session['session_travail_id'] = session_travail.pk
 
         if user.is_superuser:
-            if password in settings.PASSWORDS_DEFAUT_SUPERADMIN:
-                messages.warning(request, "Veuillez changer votre mot de passe dès que possible.")
             return redirect('index_cartographie')
 
         if hasattr(user, 'profil'):
@@ -185,6 +248,8 @@ def connexion(request):
 
 
 def deconnexion(request):
+    if request.method != "POST":
+        return redirect('connexion')
     observations = request.POST.get('observations', '').strip()[:1000]
     session_travail = None
     sid = request.session.get('session_travail_id')
@@ -291,6 +356,8 @@ def _extraire_exif(fichier):
 
 
 def _creer_medias_point(point, fichiers, utilisateur=None, commentaire='', date_prise_defaut=None):
+    from django.conf import settings as _settings
+    taille_max = getattr(_settings, 'MEDIA_TAILLE_MAX_OCTETS', 25 * 1024 * 1024)
     for f in fichiers or []:
         ext = (f.name or '').rsplit('.', 1)[-1].lower() if '.' in (f.name or '') else ''
         if ext in ('png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'):
@@ -303,6 +370,20 @@ def _creer_medias_point(point, fichiers, utilisateur=None, commentaire='', date_
             type_media = 'audio'
         else:
             type_media = 'photo'
+        if f.size and f.size > taille_max:
+            continue
+        if type_media == 'photo':
+            try:
+                from PIL import Image as _ImgVerif
+                f.seek(0)
+                _image = _ImgVerif.open(f)
+                _image.verify()
+                f.seek(0)
+                _image = _ImgVerif.open(f)
+                _image.load()
+                f.seek(0)
+            except Exception:
+                continue
         date_prise, latitude, longitude = None, None, None
         if type_media == 'photo':
             date_prise, latitude, longitude = _extraire_exif(f)
@@ -344,7 +425,8 @@ def _serialiser_points_carte(points):
 
 def points_donnees(request):
     """JSON des points pour recharger la carte après un import AJAX."""
-    qs = PointGeographique.objects.select_related('auteur', 'projet').prefetch_related('medias')
+    qs = PointGeographique.objects.select_related('auteur', 'projet').prefetch_related('medias') \
+        .filter(supprime=False)
     projet_actif = _projet_actif(request)
     if projet_actif is not None:
         qs = qs.filter(projet=projet_actif)
@@ -369,10 +451,9 @@ def index_cartographie(request):
         if not all([nom, latitude, longitude]):
             messages.error(request, "Nom, latitude et longitude requis.")
             return redirect('index_cartographie')
-        try:
-            lat, lng = float(latitude), float(longitude)
-        except (ValueError, TypeError):
-            messages.error(request, "Coordonnées invalides.")
+        lat, lng = _valider_coordonnees_wgs84(latitude, longitude)
+        if lat is None:
+            messages.error(request, "Coordonnées invalides (hors plage WGS84).")
             return redirect('index_cartographie')
         activite_id = None
         if activite_actuelle.get('id'):
@@ -400,7 +481,8 @@ def index_cartographie(request):
         messages.success(request, f"Point « {nom} » enregistré.")
         return redirect('index_cartographie')
 
-    points_qs = PointGeographique.objects.select_related('auteur', 'projet').prefetch_related('medias')
+    points_qs = PointGeographique.objects.select_related('auteur', 'projet').prefetch_related('medias') \
+        .filter(supprime=False)
     activites_qs = Activite.objects.select_related('projet', 'agent').prefetch_related('photos')
     couches_qs = CoucheGeometrie.objects.all()
     zones_qs = ZoneSecurite.objects.all()
@@ -462,22 +544,22 @@ def index_cartographie(request):
     ]
 
     ctx = {
-        'points_json': json.dumps(points_liste),
-        'activites_json': json.dumps(activites_json),
-        'agents_json': json.dumps(agents_data),
+        'points_json': _json_script(points_liste),
+        'activites_json': _json_script(activites_json),
+        'agents_json': _json_script(agents_data),
         'couches': couches,
         'projets': projets,
-        'zones_json': json.dumps(zones_json),
+        'zones_json': _json_script(zones_json),
         'est_invite': est_invite,
         'est_admin': _est_admin(request.user),
         'projet_actif': projet_actif,
         'activite_actuelle': activite_actuelle,
         'activites_recentes': activites_qs.exclude(nom_activite='').values('nom_activite').distinct()[:8],
         'session_projet_id': request.session.get('projet_actif_id') or 0,
-        'rapport_import': json.dumps(request.session.pop('rapport_import', None)),
+        'rapport_import': _json_script(request.session.pop('rapport_import', None)),
         'couche_importee': request.GET.get('importe', ''),
         'est_admin_principal': _est_admin_principal(request.user),
-        'mode_json': json.dumps(_etat_mode(request)),
+        'mode_json': _json_script(_etat_mode(request)),
     }
     return render(request, 'cartographie/carte.html', ctx)
 
@@ -528,7 +610,7 @@ def dashboard(request):
         projet_id = projet_actif.pk if projet_actif is not None else ''
 
     activites = Activite.objects.select_related('projet', 'agent').prefetch_related('photos')
-    points_qs = PointGeographique.objects.all()
+    points_qs = PointGeographique.objects.filter(supprime=False)
     zones_qs = ZoneSecurite.objects.all()
     if projet_id:
         activites = activites.filter(projet_id=projet_id)
@@ -597,12 +679,12 @@ def dashboard(request):
         'total_zones': total_zones,
         'zones': zones_qs.select_related('auteur').order_by('-date_declaration')[:8],
         'total_points': total_points,
-        'points_categories_json': json.dumps(points_categories),
-        'points_par_statut_json': json.dumps(points_par_statut),
-        'points_par_province_json': json.dumps(points_par_province),
-        'points_par_mois_json': json.dumps(points_par_mois),
-        'activites_par_projet_json': json.dumps(activites_par_projet),
-        'benef_par_mois_json': json.dumps(benef_par_mois),
+        'points_categories_json': _json_script(points_categories),
+        'points_par_statut_json': _json_script(points_par_statut),
+        'points_par_province_json': _json_script(points_par_province),
+        'points_par_mois_json': _json_script(points_par_mois),
+        'activites_par_projet_json': _json_script(activites_par_projet),
+        'benef_par_mois_json': _json_script(benef_par_mois),
     }
     _audit(request, "Consultation du tableau de bord")
     return render(request, 'cartographie/dashboard.html', ctx)
@@ -926,12 +1008,12 @@ def adduction_dashboard(request):
         'aucun_projet': False,
         'maintenant': timezone.now(),
         'kpis': kpis,
-        'types_chart_json': json.dumps(types_chart, ensure_ascii=False),
-        'villages_chart_json': json.dumps(villages_chart, ensure_ascii=False),
-        'conduites_chart_json': json.dumps(conduites_chart, ensure_ascii=False),
-        'statuts_chart_json': json.dumps(statuts_chart, ensure_ascii=False),
-        'mois_chart_json': json.dumps(mois_chart, ensure_ascii=False),
-        'qualite_chart_json': json.dumps(qualite_chart, ensure_ascii=False),
+        'types_chart_json': _json_script(types_chart),
+        'villages_chart_json': _json_script(villages_chart),
+        'conduites_chart_json': _json_script(conduites_chart),
+        'statuts_chart_json': _json_script(statuts_chart),
+        'mois_chart_json': _json_script(mois_chart),
+        'qualite_chart_json': _json_script(qualite_chart),
     }
     _audit(request, "Consultation du tableau de bord adduction",
            f"Projet #{projet.pk} - {projet.nom}")
@@ -1347,12 +1429,15 @@ def importer_fichier(request):
     for p in points:
         try:
             proprietes = p.get('proprietes') or {}
+            lat, lng = _valider_coordonnees_wgs84(p.get('latitude'), p.get('longitude'))
+            if lat is None:
+                continue
             source_format = nom_fichier.rsplit('.', 1)[-1].upper() if '.' in nom_fichier else ''
             PointGeographique.objects.create(
                 nom=(p.get('nom') or 'Sans nom')[:200],
                 description=p.get('description', ''),
-                latitude=float(p['latitude']),
-                longitude=float(p['longitude']),
+                latitude=lat,
+                longitude=lng,
                 donnees=proprietes,
                 source_fichier=fichier.name,
                 source_format=source_format,
@@ -1732,6 +1817,14 @@ def agent_create(request):
             messages.error(request, "Tous les champs obligatoires doivent être remplis.")
             return render(request, 'cartographie/agent_form.html')
 
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as _ValErr
+        try:
+            validate_password(password, user=None)
+        except _ValErr as e:
+            messages.error(request, "Mot de passe trop faible : " + " ".join(e.messages))
+            return render(request, 'cartographie/agent_form.html')
+
         if User.objects.filter(username=username).exists():
             messages.error(request, f"L'identifiant « {username} » est déjà utilisé.")
             return render(request, 'cartographie/agent_form.html')
@@ -1761,9 +1854,7 @@ def agent_create(request):
         _audit(request, "Création de compte agent", f"Agent {nom_complet} ({username})")
         messages.success(
             request,
-            f"Agent « {nom_complet} » créé avec succès.<br>"
-            f"<b>Identifiant :</b> {username}",
-            extra_tags='safe'
+            f"Agent « {nom_complet} » créé avec succès. Identifiant : {username}"
         )
         return redirect('agent_list')
 
@@ -1999,10 +2090,10 @@ def _donnees_rapport_v2(f):
         'par_projet': par_projet, 'par_categorie': par_categorie,
         'nb_photos': nb_photos,
         'meteo_par_activite': meteo_par_activite,
-        'graph_activites': json.dumps(graph_activites),
-        'graph_benef': json.dumps(graph_benef),
-        'graph_zones': json.dumps(graph_zones),
-        'graph_categories': json.dumps(graph_categories),
+        'graph_activites': _json_script(graph_activites),
+        'graph_benef': _json_script(graph_benef),
+        'graph_zones': _json_script(graph_zones),
+        'graph_categories': _json_script(graph_categories),
         'nom_fichier': nom_fichier,
         'intitule_projet': intitule_projet,
     }
@@ -2017,7 +2108,7 @@ def rapport_generer(request):
     t = lambda cle: traduire(lang, cle)
     gz = json.loads(ctx['graph_zones'])
     gz['labels'] = [t('zone_dangereuse'), t('zone_securisee'), t('zone_indisponible')]
-    ctx['graph_zones'] = json.dumps(gz)
+    ctx['graph_zones'] = _json_script(gz)
     if not ctx['intitule_projet']:
         ctx['intitule_projet'] = t('tous_projets')
     ctx['type_choices'] = [(c, t('rapport_' + c)) for c in ('journalier', 'hebdomadaire', 'mensuel', 'annuel', 'personnalise')]
@@ -4208,12 +4299,14 @@ def point_edit(request, pk):
         point.province = request.POST.get('province', '')
         point.commune = request.POST.get('commune', '')
         point.quartier = request.POST.get('quartier', '')
-        try:
-            point.latitude = float(request.POST.get('latitude', point.latitude))
-            point.longitude = float(request.POST.get('longitude', point.longitude))
-        except (ValueError, TypeError):
-            messages.error(request, "Coordonnées invalides.")
+        lat, lng = _valider_coordonnees_wgs84(
+            request.POST.get('latitude', point.latitude),
+            request.POST.get('longitude', point.longitude))
+        if lat is None:
+            messages.error(request, "Coordonnées invalides (hors plage WGS84).")
             return redirect('point_edit', pk=pk)
+        point.latitude = lat
+        point.longitude = lng
         if request.FILES.get('photo'):
             point.photo = request.FILES['photo']
         point.save()
@@ -4394,7 +4487,7 @@ def table_attributaire(request):
 
 @login_required
 def export_points(request, format):
-    points = PointGeographique.objects.select_related('auteur')
+    points = PointGeographique.objects.select_related('auteur').filter(supprime=False)
     projet_actif = _projet_actif(request)
     if projet_actif is not None:
         points = points.filter(projet=projet_actif)

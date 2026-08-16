@@ -117,6 +117,23 @@ LOGIN_REDIRECT_URL = '/'
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 
+# Taille maximale d'un média rattaché à un point (photos, vidéos, PDF).
+MEDIA_TAILLE_MAX_OCTETS = 25 * 1024 * 1024
+
+# Sécurité transport : activés en production (DJANGO_DEBUG=False) par défaut.
+_DEBUG = DEBUG
+SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SESSION_COOKIE_SECURE', 'auto') == 'auto' and not _DEBUG or os.environ.get('DJANGO_SESSION_COOKIE_SECURE') == '1'
+CSRF_COOKIE_SECURE = os.environ.get('DJANGO_CSRF_COOKIE_SECURE', 'auto') == 'auto' and not _DEBUG or os.environ.get('DJANGO_CSRF_COOKIE_SECURE') == '1'
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+if not _DEBUG:
+    SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = False
+    SECURE_SSL_REDIRECT = False  # redirection gérée par le serveur (PythonAnywhere)
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Mots de passe par défaut connus à signaler aux superadmins pour qu'ils les

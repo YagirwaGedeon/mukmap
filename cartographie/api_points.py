@@ -14,7 +14,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 
 from .models import PointGeographique
-from .views import _projet_actif, _audit
+from .views import _projet_actif, _audit, _valider_coordonnees_wgs84
 
 
 def _float_ou_nul(valeur):
@@ -52,6 +52,16 @@ CHOIX_STATUT = dict(PointGeographique.STATUT_CHOICES)
 MAX_PAGE = 200
 MAX_EXPORT = 5000
 MAX_SCAN_COLONNES = 3000
+
+# Champs triables directement en SQL (ordre SQL équivalent au tri Python).
+ORDRE_SQL = {
+    'nom': 'nom', 'description': 'description',
+    'latitude': 'latitude', 'longitude': 'longitude',
+    'categorie': 'categorie', 'statut': 'statut',
+    'province': 'province', 'commune': 'commune', 'quartier': 'quartier',
+    'date_creation': 'date_creation',
+    'source_fichier': 'source_fichier', 'source_format': 'source_format',
+}
 
 
 # ─── Helpers ─────────────────────────────────────────────────────
@@ -264,11 +274,13 @@ def _evaluer_filtre(p, f):
     return _comparer_op(_valeur_ligne(p, champ), op, attendu)
 
 
-def _lignes_filtrees(request):
+def _lignes_filtrees(request, tri_champ=None, tri_dir='desc'):
     """Retourne la liste de points conforme à : q, bbox, filtres (AND/OR).
 
     Les champs du modèle passent par SQL (rapide) ; en mode OU avec filtres
     JSON mélangés, tout est évalué en Python pour garantir l'union exacte.
+    Le tri SQL est appliqué pour les champs du modèle (ORDRE_SQL) — le tri
+    JSON reste en Python (côté vue).
     """
     q = request.GET.get('q', '').strip()
     bbox = None
@@ -293,6 +305,9 @@ def _lignes_filtrees(request):
         for f in liste_filtres)
 
     qs = PointGeographique.objects.select_related('projet', 'activite', 'auteur').all()
+
+    if tri_champ in ORDRE_SQL:
+        qs = qs.order_by(('-' if tri_dir == 'desc' else '') + ORDRE_SQL[tri_champ])
 
     # Hors connexion / synchronisation : masquer les points supprimés,
     # sauf demande explicite (pulls de synchronisation).
@@ -529,20 +544,22 @@ def api_points_lister(request):
     tri_dir = 'desc' if request.GET.get('direction', 'desc') == 'desc' else 'asc'
     q = request.GET.get('q', '').strip()
 
-    lignes = _lignes_filtrees(request)
+    lignes = _lignes_filtrees(request, tri_champ, tri_dir)
 
-    # Tri (Python — identique pour champs modèle et JSON)
-    if tri_champ.startswith('d:'):
-        def _cle_tri(p):
-            return str((p.donnees or {}).get(tri_champ[2:], '') or '')
-        lignes.sort(key=_cle_tri, reverse=(tri_dir == 'desc'))
-    elif tri_champ in ('latitude', 'longitude'):
-        lignes.sort(key=lambda p: (getattr(p, tri_champ) or 0), reverse=(tri_dir == 'desc'))
-    elif tri_champ == 'date_creation':
-        lignes.sort(key=lambda p: p.date_creation, reverse=(tri_dir == 'desc'))
-    else:
-        lignes.sort(key=lambda p: str(_valeur_ligne(p, tri_champ)).lower(),
-                    reverse=(tri_dir == 'desc'))
+    # Tri Python — réservé aux champs JSON (d:...) et aux clés étrangères
+    # (projet, activite, auteur) dont le tri SQL ne reproduit pas l'ordre exact.
+    if tri_champ not in ORDRE_SQL:
+        if tri_champ.startswith('d:'):
+            def _cle_tri(p):
+                return str((p.donnees or {}).get(tri_champ[2:], '') or '')
+            lignes.sort(key=_cle_tri, reverse=(tri_dir == 'desc'))
+        elif tri_champ in ('latitude', 'longitude'):
+            lignes.sort(key=lambda p: (getattr(p, tri_champ) or 0), reverse=(tri_dir == 'desc'))
+        elif tri_champ == 'date_creation':
+            lignes.sort(key=lambda p: p.date_creation, reverse=(tri_dir == 'desc'))
+        else:
+            lignes.sort(key=lambda p: str(_valeur_ligne(p, tri_champ)).lower(),
+                        reverse=(tri_dir == 'desc'))
 
     total = len(lignes)
     pages = max(1, math.ceil(total / page_size)) if total else 1
@@ -575,11 +592,9 @@ def api_points_creer(request):
     except ValueError:
         data = {}
     nom = str(data.get('nom') or '').strip()
-    try:
-        lat = float(data.get('latitude'))
-        lng = float(data.get('longitude'))
-    except (TypeError, ValueError):
-        return JsonResponse({'erreur': 'Latitude et longitude numériques requises.'}, status=400)
+    lat, lng = _valider_coordonnees_wgs84(data.get('latitude'), data.get('longitude'))
+    if lat is None:
+        return JsonResponse({'erreur': 'Latitude et longitude numériques requises (WGS84 : lat -90 à 90, lon -180 à 180).'}, status=400)
     if not nom:
         return JsonResponse({'erreur': 'Le nom est obligatoire.'}, status=400)
 
@@ -631,9 +646,15 @@ def api_point_modifier(request, pk):
     for champ in ('latitude', 'longitude'):
         if champ in data:
             try:
-                setattr(p, champ, float(data[champ]))
+                valeur = float(data[champ])
             except (TypeError, ValueError):
                 return JsonResponse({'erreur': f'Valeur invalide pour {champ}.'}, status=400)
+            if champ == 'latitude':
+                if not (-90 <= valeur <= 90):
+                    return JsonResponse({'erreur': 'Latitude hors plage WGS84 (-90 à 90).'}, status=400)
+            elif not (-180 <= valeur <= 180):
+                return JsonResponse({'erreur': 'Longitude hors plage WGS84 (-180 à 180).'}, status=400)
+            setattr(p, champ, valeur)
     if 'precision_gps_m' in data:
         p.precision_gps_m = _float_ou_nul(data['precision_gps_m'])
     if isinstance(data.get('donnees'), dict):

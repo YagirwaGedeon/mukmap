@@ -27,7 +27,7 @@ class SessionsTravailTest(TestCase):
         self.client.post('/connexion/', {
             'username': 'agent2', 'password': 'mdp123', 'remember': ''})
         session = SessionTravail.objects.get(utilisateur=user)
-        r = self.client.get('/deconnexion/')
+        r = self.client.post('/deconnexion/', {'observations': ''})
         self.assertEqual(r.status_code, 302)
         session.refresh_from_db()
         self.assertIsNotNone(session.fin)

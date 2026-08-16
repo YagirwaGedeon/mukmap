@@ -26,7 +26,6 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from .models import PointGeographique, ProjetAdduction, TraceAdduction
@@ -57,6 +56,10 @@ def _appliquer_edition(p, data):
     for champ in ('latitude', 'longitude'):
         valeur = _champ_obligatoire(data, champ, float)
         if valeur is not None:
+            if champ == 'latitude' and not (-90 <= valeur <= 90):
+                continue
+            if champ == 'longitude' and not (-180 <= valeur <= 180):
+                continue
             setattr(p, champ, valeur)
     precision = _champ_obligatoire(data, 'precision_gps_m', float)
     if precision is not None:
@@ -120,6 +123,10 @@ def api_sync(request):
             if not nom or lat is None or lng is None:
                 en_erreur.append({'id': op.get('id'), 'type': 'cree',
                                   'raison': 'nom, latitude et longitude requis'})
+                continue
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                en_erreur.append({'id': op.get('id'), 'type': 'cree',
+                                  'raison': 'coordonnées hors plage WGS84'})
                 continue
             existant = None
             if synchro_id:
@@ -377,7 +384,6 @@ def api_traces_sync(request):
 # ─── Photos rattachées à un point (collecte hors connexion) ────────
 
 
-@csrf_exempt
 @require_POST
 @login_required
 def api_photo_upload(request):

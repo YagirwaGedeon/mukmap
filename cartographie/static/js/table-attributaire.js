@@ -243,6 +243,7 @@
         var root = racine;
         var elements = {};
         var requeteSeq = 0;
+        var majSeq = 0;
         var chargement = false;
         var blocScroll = false;
 
@@ -272,6 +273,18 @@
                 .then(function (data) {
                     if (seq !== requeteSeq) return;
                     U.donnees = data;
+                    if (data.stats) {
+                        var s = data.stats;
+                        U.donnees.stats = {
+                            total: s.total,
+                            parCategorie: s.par_categorie || {},
+                            parStatut: s.par_statut || {},
+                            parProvince: s.par_province || {},
+                            numeriques: s.numeriques || {},
+                            dateMin: s.date_min,
+                            dateMax: s.date_max
+                        };
+                    }
                     U.apercuCharges = true;
                     if (!U.colonnesVisibles) initialiserColonnes();
                     rendre();
@@ -720,7 +733,7 @@
 
         function majCarte() {
             if (!U.carte || !U.cartePrete) return;
-            var seq = ++requeteSeq;
+            var seq = ++majSeq;
             var params = CORE.assemblerParams(U.etat, {});
             params.page_size = 1000;
             delete params.page;
@@ -732,7 +745,7 @@
             fetch(URL_API + '?' + qs.toString(), {headers: {'X-Requested-With': 'XMLHttpRequest'}})
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
-                    if (seq !== requeteSeq || !data) return;
+                    if (seq !== majSeq || !data) return;
                     var src = U.carte.getSource('table-points');
                     if (!src) return;
                     src.setData({
@@ -1137,7 +1150,7 @@
                 localStorage.removeItem('mukmap_ta_filtres');
                 charger();
             });
-            elements.btnCSVComplet.addEventListener('click', function () { exporter('csv'); });
+            if (elements.btnCSVComplet) elements.btnCSVComplet.addEventListener('click', function () { exporter('csv'); });
         }
 
         function debounce(fn, delai) {

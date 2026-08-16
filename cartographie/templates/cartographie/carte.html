@@ -1289,7 +1289,7 @@ async function chargerEmoji(id, e) {
 function chargerTousEmojis() {
     const attentes = Object.keys(CATS).map(c => chargerEmoji('emoji-' + c, CATS[c].emoji));
     attentes.push(chargerEmoji('emoji-agent', '👤'), chargerEmoji('emoji-activite', '📋'));
-    return Promise.all(attentes);
+    return Promise.allSettled(attentes);
 }
 
 // ─── FONDS DE CARTE ───────────────────────────────────────────
@@ -1485,7 +1485,14 @@ function styleMinimap() {
 const sourcePoints = {type:'geojson', data:{type:'FeatureCollection', features:[]}, cluster:true, clusterMaxZoom:13, clusterRadius:46};
 
 map.on('load', () => {
-    chargerTousEmojis();
+    const emojisPret = chargerTousEmojis().catch(() => {});
+    Promise.race([emojisPret, new Promise((res) => setTimeout(res, 12000))]).then(() => majSourcePoints());
+    map.on('styleimagemissing', (e) => {
+        if (!e || !e.id) return;
+        const cle = String(e.id).replace(/^emoji-/, '');
+        const emoji = CATS[cle] ? CATS[cle].emoji : (cle === 'agent' ? '👤' : cle === 'activite' ? '📋' : null);
+        if (emoji) chargerEmoji(e.id, emoji);
+    });
     // Points avec clusters
     map.addSource('points', sourcePoints);
     map.addLayer({id:'clusters', type:'circle', source:'points', filter:['has','point_count'], paint:{
@@ -1558,7 +1565,6 @@ map.on('load', () => {
     map.addLayer({id:'identify-hl-point', type:'circle', source:'identify-highlight', paint:{'circle-color':'#f59e0b','circle-radius':13,'circle-stroke-color':'#ffffff','circle-stroke-width':3}});
     map.addControl(ControleIdentifier, 'top-right');
 
-    majSourcePoints();
     peuplerFiltres();
     construireLegende();
     initMiniMap();

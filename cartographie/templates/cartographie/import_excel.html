@@ -148,7 +148,7 @@
     </nav>
     <div class="droite">
         {% include 'cartographie/_selecteur_langue.html' %}
-        <a class="btn" href="{% url 'deconnexion' %}"><span data-i18n="deconnexion">Déconnexion</span></a>
+        <form method="post" action="{% url 'deconnexion' %}" style="display:inline">{% csrf_token %}<button type="submit" class="btn"><span data-i18n="deconnexion">Déconnexion</span></button></form>
     </div>
 </header>
 
