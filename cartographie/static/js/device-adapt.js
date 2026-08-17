@@ -106,7 +106,6 @@
         var barre = document.createElement('div');
         barre.id = 'muk-recherche-barre';
         document.body.appendChild(barre);
-        barre.appendChild(wrap);
         btn.addEventListener('click', function () {
             var visible = barre.classList.toggle('visible');
             if (visible) {
@@ -117,7 +116,12 @@
         function maj() {
             var mobile = window.innerWidth <= 768;
             btn.style.display = mobile ? 'flex' : 'none';
-            if (!mobile) { barre.classList.remove('visible'); }
+            if (mobile) {
+                if (wrap.parentNode !== barre) { barre.appendChild(wrap); }
+            } else {
+                barre.classList.remove('visible');
+                if (barre.contains(wrap)) { topbar.insertBefore(wrap, droite); }
+            }
         }
         maj();
         window.addEventListener('resize', maj);
