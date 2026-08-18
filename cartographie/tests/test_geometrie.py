@@ -92,6 +92,33 @@ class TestsCoordonnees(BaseCartographieTest):
         self.assertEqual(gs[1].coordonnees, [24.512, -0.145, 420])
         self.assertIn('"dimension": "3D"', self.rapport_rendu())
 
+    def test_shapefile_zip(self):
+        import os
+        import tempfile
+        import zipfile
+
+        import shapefile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            w = shapefile.Writer(os.path.join(tmp, 'pts'))
+            w.field('nom', 'C', 30)
+            w.field('type', 'C', 30)
+            w.point(24.456, -0.123)
+            w.record('S1', 'marche')
+            w.point(24.512, -0.145)
+            w.record('S2', 'puits')
+            w.close()
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+                for ext in ('shp', 'shx', 'dbf'):
+                    z.write(os.path.join(tmp, f'pts.{ext}'), f'pts.{ext}')
+            _, ids = self.importer_geometrie('SHP ZIP', 'pts.zip', buf.getvalue())
+        gs = list(CoucheGeometrie.objects.get(pk=list(ids)[0]).geometries.all())
+        self.assertEqual(len(gs), 2)
+        self.assertEqual(gs[0].coordonnees, [24.456, -0.123])
+        self.assertEqual(gs[0].proprietes.get('nom'), 'S1')
+        self.assertEqual(gs[1].proprietes.get('type'), 'puits')
+
     def test_gpx_waypoints(self):
         gpx = b'''<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">

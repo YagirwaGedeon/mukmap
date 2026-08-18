@@ -3772,13 +3772,15 @@ def _importer_shapefile(nom_couche, contenu, nom_fichier):
             shp_files = [n for n in z.namelist() if n.endswith('.shp')]
             if not shp_files:
                 raise ValueError("Aucun fichier .shp trouvé dans le ZIP.")
-            memoire = {}
-            for name in z.namelist():
-                ext = name.rsplit('.', 1)[-1] if '.' in name else ''
-                base = name.rsplit('.', 1)[0] if '.' in name else name
-                if ext in ('shp', 'shx', 'dbf', 'prj'):
-                    memoire[f'{base}.{ext}'] = z.read(name)
-            with shapefile.Reader(shp=memoire) as reader:
+            base = shp_files[0].rsplit('.', 1)[0]
+
+            def _lire_composant(ext):
+                nom = f'{base}.{ext}'
+                if nom in z.namelist():
+                    return io.BytesIO(z.read(nom))
+                return None
+
+            with shapefile.Reader(shp=_lire_composant('shp'), shx=_lire_composant('shx'), dbf=_lire_composant('dbf')) as reader:
                 geometries = _lire_shapefile_reader(reader)
     elif nom_fichier.endswith('.shp'):
         raise ValueError("Pour un Shapefile, veuillez fournir un dossier ZIP contenant .shp, .shx, .dbf.")
