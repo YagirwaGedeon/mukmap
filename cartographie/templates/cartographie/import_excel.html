@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="fr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
@@ -286,8 +287,8 @@
     </div>
 </main>
 
-<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js" defer></script>
+<script src="{% static 'js/vendor/xlsx.full.min.js' %}?v=1" defer></script>
+<script src="{% static 'js/vendor/shp.min.js' %}?v=1" defer></script>
 <script>
 'use strict';
 const CSRF = '{{ csrf_token }}';
@@ -372,18 +373,20 @@ function lireFichier(f, en) {
         const r = new FileReader();
         r.onload = () => res(r.result);
         r.onerror = () => rej(r.error || new Error('Lecture impossible'));
-        f[en](r);
+        r[en](f);
     });
 }
 function csvEnLignes(texte) {
     const corps = (texte || '').replace(/^\uFEFF/, '');
-    let sep = ';';
     const premiere = (corps.split(/\r?\n/, 1)[0] || '');
+    let sep = ';';
     if (premiere.includes(';') && !premiere.includes(',')) sep = ';';
     else if (premiere.includes('\t')) sep = '\t';
     else sep = ',';
     const lignes = [];
-    let cur = '', entreQuotes = false;
+    let ligne = [], cur = '', entreQuotes = false;
+    const cloreCellule = () => { ligne.push(cur); cur = ''; };
+    const cloreLigne = () => { cloreCellule(); if (ligne.length > 1 || String(ligne[0]).trim() !== '') lignes.push(ligne); ligne = []; };
     for (let i = 0; i < corps.length; i++) {
         const c = corps[i];
         if (entreQuotes) {
@@ -392,23 +395,13 @@ function csvEnLignes(texte) {
                 else entreQuotes = false;
             } else cur += c;
         } else if (c === '"') entreQuotes = true;
-        else if (c === sep) { lignes.push(cur); cur = ''; }
-        else if (c === '\n') { lignes.push(cur); cur = ''; }
-        else if (c !== '\r') cur += c;
+        else if (c === sep) cloreCellule();
+        else if (c === '\n') cloreLigne();
+        else if (c === '\r') { if (corps[i + 1] === '\n') i++; cloreLigne(); }
+        else cur += c;
     }
-    lignes.push(cur);
-    const resultat = [];
-    for (let i = 0; i + 1 < lignes.length; i += 2) {
-        const n = parseInt(lignes[i], 10);
-        if (isFinite(n) && n >= 0) {
-            let dec = lignes[i + 1] || '';
-            while (dec.startsWith(',')) dec = dec.slice(1);
-            resultat.push(dec);
-        }
-    }
-    if (resultat.length) return resultat;
-    const lignesBrutes = corps.split(/\r?\n/).filter(l => l.trim() !== '');
-    return lignesBrutes;
+    if (cur !== '' || ligne.length) cloreLigne();
+    return lignes;
 }
 function analyserPoints(csvLignes) {
     const entetes = normalizeEntetes(csvLignes[0] || []);
@@ -436,8 +429,7 @@ async function analyserFichier(entree) {
             let lignes;
             if (ext === '.csv') {
                 const texte = await lireFichier(entree.file, 'readAsText');
-                const lignesBrutes = csvEnLignes(texte);
-                lignes = lignesBrutes.map(l => l.split(/[;\t,]/));
+                lignes = csvEnLignes(texte);
             } else {
                 const buf = await lireFichier(entree.file, 'readAsArrayBuffer');
                 const wb = XLSX.read(buf, { type: 'array' });
@@ -512,6 +504,32 @@ async function analyserFichier(entree) {
                 colonnes, valeursCat: {}, categoriesDispo: false
             };
             entree.etat = 'ok';
+        } else if (entree.type === 'sig' && (ext === '.zip' || ext === '.shp')) {
+            let sig = null;
+            if (ext === '.zip' && window.shp && typeof window.shp.parseZip === 'function') {
+                try {
+                    const buf = await lireFichier(entree.file, 'readAsArrayBuffer');
+                    const r = await window.shp.parseZip(buf);
+                    sig = Array.isArray(r) ? (r[0] || null) : r;
+                } catch (e) { sig = null; }
+            }
+            if (sig && sig.features && sig.features.length) {
+                const types = new Set(sig.features.map(f => f.geometry && f.geometry.type).filter(Boolean));
+                const geomType = [...types][0] || 'Point';
+                const props = sig.features.find(f => f.properties && typeof f.properties === 'object');
+                const colonnes = props ? Object.keys(props.properties || {}).filter(k => !k.startsWith('_')).slice(0, 30) : [];
+                entree.analyse = {
+                    type: 'sig', sigType: geomType, sigCount: sig.features.length,
+                    colonnes, valeursCat: {}, categoriesDispo: colonnes.length > 0, features: sig.features
+                };
+                entree.etat = 'ok';
+            } else {
+                entree.analyse = {
+                    type: 'sig', sigType: null, sigCount: null,
+                    colonnes: [], valeursCat: {}, categoriesDispo: false
+                };
+                entree.etat = 'ok';
+            }
         } else {
             entree.analyse = {
                 type: 'sig', sigType: null, sigCount: null,
@@ -522,6 +540,11 @@ async function analyserFichier(entree) {
     } catch (e) {
         entree.etat = 'erreur';
         entree.message = String(e && e.message || e);
+        const err1 = $('err-1');
+        if (err1) {
+            err1.textContent = `${entree.file.name} : ${entree.message}`;
+            err1.style.display = '';
+        }
     }
     renderListe();
 }
@@ -569,6 +592,11 @@ function renderEtape2() {
     const f = actif();
     if (!f) { goStep(1); return; }
     const a = f.analyse;
+    if (f.etat === 'erreur') {
+        $('err-2').textContent = f.message || t('fichier_invalide', 'Fichier invalide.');
+        $('err-2').style.display = '';
+        return;
+    }
     if (!a) { goStep(1); return; }
     if (a.type === 'points') {
         $('panneau-points').style.display = '';
@@ -826,6 +854,7 @@ function ajouterFichiers(liste) {
 }
 function initialiser() {
     const zone = $('zone-drop'), input = $('fichier');
+    $('err-1').style.display = 'none';
     zone.addEventListener('click', () => input.click());
     input.addEventListener('change', () => { ajouterFichiers([...input.files]); input.value = ''; });
     ['dragover', 'dragenter'].forEach(ev => zone.addEventListener(ev, (e) => {

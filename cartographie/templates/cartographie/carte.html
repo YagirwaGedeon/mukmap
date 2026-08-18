@@ -228,6 +228,18 @@
         .ligne-info .val { font-weight: 600; text-align: right; }
 
         #legende { display: flex; flex-direction: column; gap: 5px; max-height: 240px; overflow-y: auto; padding-right: 4px; }
+        .couche-item { display: flex; align-items: center; gap: 7px; font-size: .76rem; padding: 5px 7px; background: var(--bg-3); border-radius: 8px; border: 1px solid var(--border); }
+        .couche-item.off { opacity: .5; }
+        .couche-item .couche-lbl { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; cursor: pointer; }
+        .couche-item .couche-vis { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+        .couche-item .couche-puce { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .couche-item .couche-nom { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text); }
+        .couche-item .couche-meta { font-size: .62rem; color: var(--text-3); flex-shrink: 0; }
+        .couche-item .couche-del { border: none; background: transparent; color: var(--text-3); cursor: pointer; font-size: .78rem; line-height: 1; padding: 2px 4px; border-radius: 6px; flex-shrink: 0; }
+        .couche-item .couche-del:hover { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+        #liste-couches .couche-actions { display: flex; gap: 6px; margin-top: 2px; }
+        #liste-couches .couche-actions button { flex: 1; font-size: .66rem; padding: 4px 0; border-radius: 7px; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); cursor: pointer; }
+        #liste-couches .couche-actions button:hover { color: var(--accent); border-color: var(--accent); }
         .leg-item { display: flex; align-items: center; gap: 8px; font-size: .76rem; color: var(--text-2); padding: 4px 6px; border-radius: 7px; }
         .leg-item:hover { background: var(--bg-3); }
         .leg-item .puces { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
@@ -761,19 +773,11 @@
         </details>
         {% endif %}
 
-        {% if couches %}
         <hr class="separateur">
         <div class="titre-section" data-i18n="couches_chargees">Couches chargées</div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-        {% for c in couches %}
-            <div style="display:flex;align-items:center;gap:8px;font-size:.78rem;padding:6px 8px;background:var(--bg-3);border-radius:8px;">
-                <span style="width:10px;height:10px;border-radius:50%;background:{{ c.style_couleur }};flex-shrink:0;"></span>
-                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.nom }}</span>
-                <a href="{% url 'couche_delete' c.pk %}" style="color:var(--red);text-decoration:none;" title="Supprimer" data-i18n-title="supprimer">✕</a>
-            </div>
-        {% endfor %}
+        <div id="liste-couches" style="display:flex;flex-direction:column;gap:5px;">
+            <div class="couche-vide" style="font-size:.72rem;color:var(--text-3);padding:4px 6px;" data-i18n="aucune_couche">Aucune couche — importez un GeoJSON, SHP, KML, GPX…</div>
         </div>
-        {% endif %}
 
         <hr class="separateur">
         <details class="groupe-outils">
@@ -1061,7 +1065,7 @@
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="{% static 'js/export-carte.js' %}?v=27"></script>
 <script src="{% static 'js/mode-avance.js' %}?v=27"></script>
-<script src="{% static 'js/mode-3d.js' %}?v=27"></script>
+<script src="{% static 'js/mode-3d.js' %}?v=28"></script>
 <script src="{% static 'js/topographie.js' %}?v=28"></script>
 <script src="{% static 'js/basemap-selector.js' %}?v=27"></script>
 <script src="{% static 'js/imagerie.js' %}?v=27"></script>
@@ -1575,6 +1579,14 @@ map.on('load', () => {
         const p = donneesPoints.find(x => String(x.id) === String(pidPoint));
         if (p) setTimeout(() => afficherPoint(p, true), 700);
     }
+    const tousPoints = new URLSearchParams(location.search).get('tous');
+    if (tousPoints === '1' && donneesPoints.length) {
+        setTimeout(() => {
+            const coords = donneesPoints.map(p => [p.longitude, p.latitude]).filter(c => isFinite(c[0]) && isFinite(c[1]));
+            if (coords.length === 1) map.flyTo({ center: coords[0], zoom: 16, duration: 900 });
+            else if (coords.length > 1) { try { map.fitBounds(turf.bbox(turf.multiPoint(coords)), { padding: 70, maxZoom: 16, duration: 900 }); } catch (e) {} }
+        }, 800);
+    }
 });
 
 let couchePointLayers = [];
@@ -1630,7 +1642,91 @@ function rechargerCouches() {
         remonterHighlight();
         initialiserCouchesClic();
         zoomerApresImport();
+        rendreListeCouches();
     }).catch(() => {});
+}
+
+/* ─── Couches : liste + visibilité (choisir quelle couche afficher) ── */
+function rendreListeCouches() {
+    const zone = document.getElementById('liste-couches');
+    if (!zone) return;
+    zone.innerHTML = '';
+    if (!couchesDonnees.length) {
+        zone.innerHTML = '<div class="couche-vide" style="font-size:.72rem;color:var(--text-3);padding:4px 6px;">' + ((mukmapT && mukmapT('aucune_couche', 'Aucune couche — importez un GeoJSON, SHP, KML, GPX…')) || 'Aucune couche — importez un GeoJSON, SHP, KML, GPX…') + '</div>';
+        return;
+    }
+    couchesDonnees.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'couche-item';
+        item.id = 'couche-item-' + c.id;
+        const lbl = document.createElement('label');
+        lbl.className = 'couche-lbl';
+        const vis = document.createElement('input');
+        vis.type = 'checkbox';
+        vis.className = 'couche-vis';
+        vis.checked = true;
+        vis.dataset.id = String(c.id);
+        vis.addEventListener('change', () => visibiliteCouche(c.id, vis.checked));
+        const puce = document.createElement('span');
+        puce.className = 'couche-puce';
+        puce.style.background = c.couleur || '#3388ff';
+        const nom = document.createElement('span');
+        nom.className = 'couche-nom';
+        nom.textContent = c.nom || 'Couche ' + c.id;
+        nom.title = c.nom || '';
+        lbl.appendChild(vis);
+        lbl.appendChild(puce);
+        lbl.appendChild(nom);
+        const meta = document.createElement('span');
+        meta.className = 'couche-meta';
+        meta.textContent = (c.type || '?') + ' · ' + (c.nb_geometries || 0);
+        const del = document.createElement('button');
+        del.className = 'couche-del';
+        del.type = 'button';
+        del.title = (mukmapT && mukmapT('supprimer', 'Supprimer')) || 'Supprimer';
+        del.textContent = '✕';
+        del.addEventListener('click', () => supprimerCouche(c.id));
+        item.appendChild(lbl);
+        item.appendChild(meta);
+        item.appendChild(del);
+        zone.appendChild(item);
+    });
+    const actions = document.createElement('div');
+    actions.className = 'couche-actions';
+    const toutA = document.createElement('button');
+    toutA.type = 'button';
+    toutA.textContent = (mukmapT && mukmapT('tout_afficher', 'Tout afficher')) || 'Tout afficher';
+    toutA.addEventListener('click', () => {
+        couchesDonnees.forEach(c => { visibiliteCouche(c.id, true); const v = document.querySelector('#couche-item-' + c.id + ' .couche-vis'); if (v) { v.checked = true; } });
+    });
+    const toutM = document.createElement('button');
+    toutM.type = 'button';
+    toutM.textContent = (mukmapT && mukmapT('tout_masquer', 'Tout masquer')) || 'Tout masquer';
+    toutM.addEventListener('click', () => {
+        couchesDonnees.forEach(c => { visibiliteCouche(c.id, false); const v = document.querySelector('#couche-item-' + c.id + ' .couche-vis'); if (v) { v.checked = false; } });
+    });
+    actions.appendChild(toutA);
+    actions.appendChild(toutM);
+    zone.appendChild(actions);
+}
+function visibiliteCouche(id, visible) {
+    ['ligne', 'fill', 'point', 'glyphe', 'symbole'].forEach(t => {
+        const l = map.getLayer('couche-' + t + '-' + id);
+        if (l) {
+            try { map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none'); } catch (e) {}
+        }
+    });
+    const item = document.getElementById('couche-item-' + id);
+    if (item) item.classList.toggle('off', !visible);
+}
+function supprimerCouche(id) {
+    const c = couchesDonnees.find(x => String(x.id) === String(id));
+    const nom = c ? (c.nom || '') : id;
+    if (!confirm((mukmapT && mukmapT('confirmer_supprimer_couche', 'Supprimer la couche « ' + nom + ' » ?')) || ('Supprimer la couche « ' + nom + ' » ?'))) return;
+    fetch('{% url "couche_delete" 0 %}'.replace('/0/', '/' + id + '/'), {
+        method: 'POST',
+        headers: { 'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || CSRF }
+    }).then(() => rechargerCouches()).catch(() => rechargerCouches());
 }
 function zoomerApresImport() {
     if (!coucheImporteeCible) return;

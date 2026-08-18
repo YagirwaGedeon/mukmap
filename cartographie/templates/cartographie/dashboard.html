@@ -149,6 +149,7 @@
     </div>
     <div class="bse-actions">
         <a class="btn" href="{% url 'index_cartographie' %}"><i data-lucide="map"></i> <span data-i18n="ouvrir_carte">Ouvrir la carte</span></a>
+        <a class="btn btn-primary" href="{% url 'index_cartographie' %}?tous=1"><i data-lucide="map-pin"></i> <span data-i18n="voir_tous_points_carte">Voir tous les points</span></a>
         {% if est_admin %}<a class="btn" href="{% url 'projet_list' %}"><i data-lucide="folder-kanban"></i> <span data-i18n="projets">Projets</span></a>{% endif %}
         <a class="btn" href="{% url 'rapport_generer' %}"><i data-lucide="file-text"></i> <span data-i18n="rapports">Rapports</span></a>
     </div>
@@ -156,7 +157,7 @@
 
 <main class="conteneur">
     <div class="kpis">
-        <div class="kpi"><div class="ico violet">🗺️</div><div><div class="valeur">{{ total_points }}</div><div class="libelle" data-i18n="kpi_points">Points encodés</div></div></div>
+        <div class="kpi"><a href="{% url 'index_cartographie' %}?tous=1" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:12px;"><div class="ico violet">🗺️</div><div><div class="valeur">{{ total_points }}</div><div class="libelle" data-i18n="kpi_points">Points encodés — voir tous les points</div></div></a></div>
         <div class="kpi"><div class="ico bleu">📋</div><div><div class="valeur">{{ total_activites }}</div><div class="libelle" data-i18n="kpi_activites">Activités</div></div></div>
         <div class="kpi"><div class="ico vert">👥</div><div><div class="valeur">{{ total_beneficiaires }}</div><div class="libelle" data-i18n="kpi_beneficiaires">Bénéficiaires</div></div></div>
         <div class="kpi"><div class="ico rouge">⚠️</div><div><div class="valeur">{{ zones_dangereuses }}</div><div class="libelle" data-i18n="kpi_zones_dangereuses">Zones dangereuses</div></div></div>

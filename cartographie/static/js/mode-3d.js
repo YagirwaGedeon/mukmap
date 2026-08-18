@@ -31,6 +31,8 @@
     var indexDEM = 0;
     var basculeDEMArmee = false;
     var EnTransition = false;
+    var panneauMinimise = false;
+    var PILL_ID = 'p3d-rouvrir';
 
     function trad(cle, defaut) {
         if (typeof window !== 'undefined' && window.mukmapT) {
@@ -93,10 +95,17 @@
             '#btn-vue-3d.active { background: linear-gradient(135deg, #f43f5e, #fb7185); box-shadow: 0 4px 16px rgba(244,63,94,.4); }' +
             '#btn-vue-3d [data-lucide] { width: 15px; height: 15px; }' +
             '#btn-vue-3d-cadre.maplibregl-ctrl { background: transparent; padding: 0; }' +
-            'body.mukmap-3d #panneau-3d-cadre { position: fixed; top: 158px; right: 14px; z-index: 1300; }' +
+            'body.mukmap-3d #panneau-3d-cadre { position: fixed; left: 14px; bottom: 16px; top: auto; width: 224px; z-index: 1300; }' +
             'body.mukmap-3d #panneau-3d-cadre .maplibregl-ctrl { background: transparent; }' +
             'body.mukmap-3d #btn-vue-3d-cadre { position: relative; z-index: 1400; }' +
-            'body.mukmap-3d #mesure-barre, body.mukmap-3d #coords-barre, body.mukmap-3d #minimap { display: none !important; }';
+            'body.mukmap-3d #mesure-barre, body.mukmap-3d #coords-barre, body.mukmap-3d #minimap { display: none !important; }' +
+            'body.mukmap-3d .maplibregl-ctrl-bottom-right { top: auto; bottom: 14px; }' +
+            '.panneau-3d .p3d-fermer { margin-left: auto; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); cursor: pointer; line-height: 1; flex-shrink: 0; }' +
+            '.panneau-3d .p3d-fermer:hover { color: var(--text); border-color: var(--accent); }' +
+            '.panneau-3d .p3d-fermer [data-lucide] { width: 12px; height: 12px; }' +
+            '#p3d-rouvrir { display: none; position: fixed; left: 14px; bottom: 16px; z-index: 1300; align-items: center; gap: 6px; padding: 8px 12px; font-size: .72rem; font-weight: 700; border-radius: 999px; background: var(--bg-2); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow); cursor: pointer; white-space: nowrap; }' +
+            '#p3d-rouvrir:hover { border-color: var(--accent); color: var(--accent); }' +
+            '#p3d-rouvrir [data-lucide] { width: 12px; height: 12px; }';
         document.head.appendChild(st);
     }
 
@@ -135,6 +144,40 @@
         assurerTerrain(mapActuelle);
     }
 
+    function deplacerZoom(map, versBas) {
+        if (!map) return;
+        try {
+            var btn = document.querySelector('.maplibregl-ctrl-zoom-in');
+            if (!btn) return;
+            var grp = btn.closest('.maplibregl-ctrl-group, .maplibregl-ctrl');
+            if (!grp) return;
+            var dest = versBas
+                ? document.querySelector('.maplibregl-ctrl-bottom-right')
+                : document.querySelector('.maplibregl-ctrl-top-right');
+            if (!dest || grp.parentNode === dest) return;
+            if (versBas) {
+                dest.appendChild(grp);
+            } else {
+                dest.insertBefore(grp, dest.firstChild);
+            }
+        } catch (e) {}
+    }
+
+    /* En 3D, place le bouton « Vue 3D » en tête de la colonne droite
+     * (les autres outils se retrouvent dessous, jamais au-dessus). */
+    function deplacerBouton3D(versHaut) {
+        try {
+            var c = document.getElementById('btn-vue-3d-cadre');
+            var dest = document.querySelector('.maplibregl-ctrl-top-right');
+            if (!c || !dest) return;
+            if (versHaut) {
+                if (dest.firstChild !== c) dest.insertBefore(c, dest.firstChild);
+            } else {
+                if (dest.lastChild !== c) dest.appendChild(c);
+            }
+        } catch (e) {}
+    }
+
     function activer(map) {
         if (actif || EnTransition || !map) return;
         if (window.OutilsTopo && typeof window.OutilsTopo.modeActif === 'function' &&
@@ -147,6 +190,8 @@
         actif = true;
         EnTransition = true;
         majUI();
+        deplacerZoom(map, true);
+        deplacerBouton3D(true);
         assurerTerrain(map);
         try { map.stop(); } catch (e) {}
         try {
@@ -165,6 +210,8 @@
         actif = false;
         EnTransition = true;
         majUI();
+        deplacerZoom(m, false);
+        deplacerBouton3D(false);
         if (m) {
             try { m.stop(); } catch (e) {}
             try {
@@ -213,7 +260,22 @@
         var lbl = document.getElementById('btn-vue-3d-label');
         if (lbl) lbl.textContent = trad(actif ? 'vue3d_retour' : 'vue3d_bouton', actif ? 'Quitter la vue 3D' : 'Vue 3D');
         var panneau = document.getElementById('panneau-3d');
-        if (panneau) panneau.style.display = actif ? 'block' : 'none';
+        if (panneau) panneau.style.display = (actif && !panneauMinimise) ? 'block' : 'none';
+        var pill = document.getElementById(PILL_ID);
+        if (pill) pill.style.display = (actif && panneauMinimise) ? 'flex' : 'none';
+    }
+
+    function creerPillRouvrir() {
+        var b = document.createElement('button');
+        b.id = PILL_ID;
+        b.type = 'button';
+        b.innerHTML = '<span data-lucide="mountain-snow"></span> ' + trad('vue3d_exageration', 'Exagération verticale');
+        b.addEventListener('click', function () {
+            panneauMinimise = false;
+            majUI();
+            if (window.lucide) window.lucide.createIcons();
+        });
+        return b;
     }
 
     var ControleVue3D = {
@@ -246,6 +308,18 @@
         titre.className = 'p3d-titre';
         titre.innerHTML = '<span data-lucide="mountain-snow"></span>';
         titre.appendChild(document.createTextNode(trad('vue3d_exageration', 'Exagération verticale')));
+
+        var fermer = document.createElement('button');
+        fermer.type = 'button';
+        fermer.className = 'p3d-fermer';
+        fermer.title = trad('vue3d_minimiser', 'Réduire le panneau');
+        fermer.innerHTML = '<span data-lucide="chevron-down"></span>';
+        fermer.addEventListener('click', function () {
+            panneauMinimise = true;
+            majUI();
+            if (window.lucide) window.lucide.createIcons();
+        });
+        titre.appendChild(fermer);
 
         var slider = document.createElement('input');
         slider.type = 'range';
@@ -342,6 +416,7 @@
                 if (!map || !map.loaded()) return;
                 if (!document.getElementById('btn-vue-3d')) map.addControl(ControleVue3D, 'top-right');
                 if (!document.getElementById('panneau-3d-cadre') && map.getContainer()) map.getContainer().appendChild(creerPanneau(map));
+                if (!document.getElementById(PILL_ID) && document.body) document.body.appendChild(creerPillRouvrir());
                 map.on('error', function (e) {
                     if (!e || e.sourceId !== ID_SOURCE_DEM || basculeDEMArmee) return;
                     basculeDEMArmee = true;

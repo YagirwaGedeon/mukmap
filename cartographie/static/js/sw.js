@@ -1,5 +1,5 @@
 /* MUKMAP — Service Worker v1.0 */
-const VERSION = 'mukmap-v1.0.30';
+const VERSION = 'mukmap-v1.0.31';
 const PRECACHE = ['/', '/manifest.webmanifest'];
 /* Cache statique versionné : chaque déploiement crée un nouveau cache,
  * les anciens sont purgés à l'activation → jamais de JS périmé. */
