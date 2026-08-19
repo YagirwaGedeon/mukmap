@@ -521,13 +521,15 @@
         function majBoutonCarteSelection() {
             var b = elements.btnCarteSelection;
             if (!b) return;
+            if (U.etat.carteSelection && !U.etat.selection.length && !U.etat.toutFiltre) U.etat.carteSelection = false;
             b.classList.toggle('actif', U.etat.carteSelection);
+            b.classList.toggle('attention', !U.etat.carteSelection && U.etat.selection.length > 0);
             if (U.etat.carteSelection) {
                 var n = U.etat.toutFiltre ? (U.donnees.count || 0) : U.etat.selection.length;
                 b.innerHTML = '✅ Points sélectionnés (' + n + ')';
                 b.title = 'Afficher tous les points sur la carte (cliquez pour revenir à tous les points)';
             } else {
-                b.innerHTML = '📍 Tous les points';
+                b.innerHTML = '📍 Afficher sur la carte';
                 b.title = 'Afficher sur la carte uniquement les points sélectionnés (cliquez sur les cases à cocher pour choisir)';
             }
         }

@@ -163,12 +163,12 @@
 
     <div class="card" id="etape-1">
         <h2>📥 <span data-i18n="etape1_titre">1. Choisissez vos fichiers</span></h2>
-        <p class="sous" data-i18n="formats_supportes">Formats supportés : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (points) · <b>.zip</b>/<b>.shp</b> (Shapefile) · <b>.geojson</b>, <b>.kml</b>, <b>.kmz</b>, <b>.gpx</b> (couches SIG).</p>
+        <p class="sous" data-i18n="formats_supportes">Formats supportés : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (points) · <b>.zip</b> ou <b>.shp</b> + <b>.shx</b>/<b>.dbf</b>/<b>.prj</b>/<b>.cpg</b>/<b>.qmd</b> (Shapefile — déposez tous les fichiers ensemble) · <b>.geojson</b>, <b>.kml</b>, <b>.kmz</b>, <b>.gpx</b> (couches SIG).</p>
         <div class="zone-drop" id="zone-drop">
             <div class="grand">📂</div>
             <div><span data-i18n="glissez_deposez"><b>Glissez-déposez</b> vos fichiers ici ou cliquez pour parcourir</span></div>
             <div style="font-size:.75rem;margin-top:6px;opacity:.8;" data-i18n="aide_shapefile">Plusieurs fichiers possibles — la nature de chaque fichier est détectée automatiquement.</div>
-            <input type="file" id="fichier" accept=".xlsx,.xls,.csv,.zip,.shp,.dbf,.geojson,.json,.kml,.kmz,.gpx" multiple hidden>
+            <input type="file" id="fichier" accept=".xlsx,.xls,.csv,.zip,.shp,.shx,.dbf,.prj,.cpg,.qmd,.geojson,.json,.kml,.kmz,.gpx" multiple hidden>
         </div>
         <div id="liste-fichiers"></div>
         <div class="alerte err" id="err-1"></div>
@@ -298,6 +298,7 @@ const URL_CARTE = '{% url "index_cartographie" %}';
 const t = (cle, defaut) => (window.mukmapT ? window.mukmapT(cle, defaut) : (defaut || cle));
 const EXT_POINTS = ['.xlsx', '.xls', '.csv'];
 const EXT_SIG = ['.zip', '.shp', '.geojson', '.json', '.kml', '.kmz', '.gpx'];
+const EXT_SIDECARS = ['.cpg', '.dbf', '.prj', '.qmd', '.shx', '.shpx'];
 const PALETTE = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#ec4899'];
 const PRESETS = ['#3388ff', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#14b8a6'];
 const CATS_LEGENDE = {
@@ -316,6 +317,7 @@ const NOMS_COLS = {
 let fichiers = [];
 let idSuivant = 1;
 let fichierActif = 0;
+const sidecars = {};
 const $ = (id) => document.getElementById(id);
 
 function extDe(nom) {
@@ -330,6 +332,7 @@ function tailleLisible(o) {
 function typeFichier(ext) {
     if (EXT_POINTS.includes(ext)) return 'points';
     if (EXT_SIG.includes(ext)) return 'sig';
+    if (EXT_SIDECARS.includes(ext)) return 'sidecar';
     return null;
 }
 function normalizeEntetes(liste) {
@@ -512,6 +515,22 @@ async function analyserFichier(entree) {
                     const r = await window.shp.parseZip(buf);
                     sig = Array.isArray(r) ? (r[0] || null) : r;
                 } catch (e) { sig = null; }
+            } else if (ext === '.shp' && window.shp && typeof window.shp.parseShp === 'function') {
+                try {
+                    const buf = await lireFichier(entree.file, 'readAsArrayBuffer');
+                    const geom = await window.shp.parseShp(buf);
+                    const comp = entree.composants || {};
+                    let props = null;
+                    if (comp['.dbf'] && window.shp.parseDbf) {
+                        const dbuf = await lireFichier(comp['.dbf'], 'readAsArrayBuffer');
+                        props = await window.shp.parseDbf(dbuf);
+                    }
+                    const feats = (geom || []).map((g, i) => ({
+                        type: 'Feature', geometry: g,
+                        properties: props && props[i] ? props[i] : {}
+                    }));
+                    sig = { features: feats };
+                } catch (e) { sig = null; }
             }
             if (sig && sig.features && sig.features.length) {
                 const types = new Set(sig.features.map(f => f.geometry && f.geometry.type).filter(Boolean));
@@ -552,14 +571,20 @@ const ICO_ETAT = { ok: '✅', erreur: '⚠️', analyse: '⏳' };
 function renderListe() {
     const zone = $('liste-fichiers');
     if (!fichiers.length) { zone.innerHTML = ''; return; }
-    zone.innerHTML = fichiers.map((f, i) => `
+    zone.innerHTML = fichiers.map((f, i) => {
+        const badge = f.type === 'points' ? t('badge_points', 'Points') : f.type === 'sidecar' ? t('badge_composant', 'Composant') : t('badge_sig', 'Couche SIG');
+        const comps = (f.type === 'sig' && f.composants && Object.keys(f.composants).length)
+            ? ` · <span style="opacity:.7">${Object.keys(f.composants).length} ${t('badge_composants', 'composant(s)')}</span>` : '';
+        const titre = f.file.name + (f.type === 'sig' && f.composants ? ' + ' + Object.keys(f.composants).join(' ') : '');
+        return `
         <div class="fichier-ligne ${i === fichierActif ? 'actif' : ''}" data-idx="${i}">
             <span>${ICO_ETAT[f.etat] || '📄'}</span>
-            <div class="fichier-nom" title="${f.file.name}">${f.file.name}</div>
-            <span class="badge ${f.type || ''}">${f.type === 'points' ? t('badge_points', 'Points') : t('badge_sig', 'Couche SIG')}</span>
+            <div class="fichier-nom" title="${titre}">${f.file.name}${comps}</div>
+            <span class="badge ${f.type || ''}">${badge}</span>
             <span class="fichier-taille">${tailleLisible(f.file.size)}</span>
             <button class="btn btn-ico" data-retirer="${i}">🗑️</button>
-        </div>`).join('');
+        </div>`;
+    }).join('');
     zone.querySelectorAll('[data-idx]').forEach(l => l.addEventListener('click', (ev) => {
         if (ev.target.closest('[data-retirer]')) return;
         fichierActif = parseInt(l.dataset.idx, 10);
@@ -766,6 +791,9 @@ async function importerCouche(f) {
     const nom = $('sig-nom-couche').value.trim() || f.file.name;
     const fd = new FormData();
     fd.append('fichier_geom', f.file);
+    if (f.ext === '.shp' && f.composants) {
+        Object.keys(f.composants).forEach(ext => fd.append('fichier_aux', f.composants[ext]));
+    }
     fd.append('nom_couche', nom);
     fd.append('ajax', '1');
     fd.append('style_options', JSON.stringify(styleCourant()));
@@ -834,10 +862,22 @@ async function lancerImport() {
     </div>`;
     r.style.display = '';
 }
+function stemDe(nom) {
+    return nom.replace(/\.(shp|shx|shpx|dbf|prj|cpg|qmd)$/i, '').toLowerCase();
+}
 function ajouterFichiers(liste) {
+    const nouveaux = [];
+    let sidecarAjoute = false;
     for (const fichier of liste) {
         const ext = extDe(fichier.name);
         const type = typeFichier(ext);
+        if (type === 'sidecar') {
+            const stem = stemDe(fichier.name);
+            sidecars[stem] = sidecars[stem] || {};
+            sidecars[stem][ext] = fichier;
+            sidecarAjoute = true;
+            continue;
+        }
         const entree = {
             id: idSuivant++, file: fichier, ext, type,
             etat: type ? 'attente' : 'erreur',
@@ -845,11 +885,39 @@ function ajouterFichiers(liste) {
             analyse: null
         };
         fichiers.push(entree);
+        nouveaux.push(entree);
     }
+    const stemsShp = {};
+    fichiers.forEach(e => { if (e.type === 'sig' && e.ext === '.shp') stemsShp[stemDe(e.file.name)] = e; });
+    fichiers.forEach(e => {
+        if (e.type === 'sidecar') {
+            if (stemsShp[stemDe(e.file.name)]) e.retirer = true;
+        } else if (e.type === 'sig' && e.ext === '.shp') {
+            e.composants = sidecars[stemDe(e.file.name)] || {};
+        }
+    });
+    for (let i = fichiers.length - 1; i >= 0; i--) {
+        if (fichiers[i].retirer) fichiers.splice(i, 1);
+    }
+    const sansShp = Object.keys(sidecars).filter(stem => !stemsShp[stem]);
+    sansShp.forEach(stem => {
+        const fichier = sidecars[stem][Object.keys(sidecars[stem])[0]];
+        fichiers.push({
+            id: idSuivant++, file: fichier, ext: extDe(fichier.name), type: 'sidecar',
+            etat: 'erreur',
+            message: t('composant_sans_shp', 'Fichier .shp manquant pour ce composant — déposez tous les fichiers du Shapefile ensemble (même nom de base).'),
+            analyse: null
+        });
+    });
     if (fichiers.length) {
         fichierActif = fichiers.length - 1;
         renderListe();
-        fichiers.forEach(entree => { if (entree.type) analyserFichier(entree); });
+        nouveaux.forEach(entree => { if (entree.type) analyserFichier(entree); });
+        if (sidecarAjoute) {
+            fichiers.forEach(e => {
+                if (e.type === 'sig' && e.ext === '.shp' && e.etat === 'ok' && e.analyse && (!e.analyse.features || !e.analyse.features.length)) analyserFichier(e);
+            });
+        }
     }
 }
 function initialiser() {

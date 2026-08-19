@@ -50,6 +50,8 @@
         .ta-outil { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 10px; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); font-size: .78rem; font-weight: 600; transition: all .18s; }
         .ta-outil:hover { border-color: var(--accent); color: var(--text); }
         .ta-outil.actif { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
+        .ta-outil.attention { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 3px rgba(79,70,229,.18); animation: ta-pulse 1.6s infinite; }
+        @keyframes ta-pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(79,70,229,.18); } 50% { box-shadow: 0 0 0 6px rgba(79,70,229,.06); } }
         .ta-outil-primaire { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
         .ta-outil-primaire:hover { color: #fff; box-shadow: 0 4px 16px rgba(79,70,229,.4); }
         .ta-stats-badge { display: flex; align-items: center; }
@@ -209,7 +211,7 @@
         <div class="ta-sep"></div>
         <button class="ta-outil ta-outil-primaire" data-outil="ajout">＋ Ajouter</button>
         <button class="ta-outil" data-outil="tout-selectionner">☑ Tout sélectionner</button>
-        <button class="ta-outil" data-outil="carte-selection" title="Afficher sur la carte uniquement les points sélectionnés (cliquez sur les cases à cocher pour choisir)">📍 Tous les points</button>
+        <button class="ta-outil" data-outil="carte-selection" title="Afficher sur la carte uniquement les points sélectionnés (cliquez sur les cases à cocher pour choisir)">📍 Afficher sur la carte</button>
         <button class="ta-outil" data-outil="selection-filtre">🔁 Appliquer les filtres sauvegardés</button>
         <button class="ta-outil" data-outil="reinitialiser">↺ Réinitialiser</button>
         <div class="ta-sep"></div>

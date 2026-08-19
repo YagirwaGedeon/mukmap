@@ -119,6 +119,84 @@ class TestsCoordonnees(BaseCartographieTest):
         self.assertEqual(gs[0].proprietes.get('nom'), 'S1')
         self.assertEqual(gs[1].proprietes.get('type'), 'puits')
 
+    def test_shapefile_fichiers_separes(self):
+        import os
+        import tempfile
+
+        import shapefile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            w = shapefile.Writer(os.path.join(tmp, 'routes'))
+            w.field('nom', 'C', 30)
+            w.line([[[24.45, -0.12], [24.50, -0.14], [24.55, -0.16]]])
+            w.record('R1')
+            w.close()
+            with open(os.path.join(tmp, 'routes.prj'), 'w') as f:
+                f.write('GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]')
+            with open(os.path.join(tmp, 'routes.cpg'), 'w') as f:
+                f.write('UTF-8')
+            with open(os.path.join(tmp, 'routes.qmd'), 'w') as f:
+                f.write('<?xml version="1.0"?><qgisMetadata/>')
+            comps = []
+            for ext in ('shp', 'shx', 'dbf', 'prj', 'cpg', 'qmd'):
+                with open(os.path.join(tmp, f'routes.{ext}'), 'rb') as f:
+                    comps.append((f'routes.{ext}', f.read()))
+        _, ids = self.importer_geometrie('SHP Ouvert', 'routes.shp', comps[0][1], auxiliaires=comps[1:])
+        gs = list(CoucheGeometrie.objects.get(pk=list(ids)[0]).geometries.all())
+        self.assertEqual(len(gs), 1)
+        self.assertEqual(gs[0].type, 'LineString')
+        self.assertEqual(gs[0].coordonnees, [[24.45, -0.12], [24.50, -0.14], [24.55, -0.16]])
+        self.assertEqual(gs[0].proprietes.get('nom'), 'R1')
+
+    def test_shapefile_shpx_accepte_comme_index(self):
+        import os
+        import tempfile
+
+        import shapefile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            w = shapefile.Writer(os.path.join(tmp, 'villes'))
+            w.field('nom', 'C', 30)
+            w.point(24.456, -0.123)
+            w.record('V1')
+            w.close()
+            comps = {}
+            for ext in ('shp', 'shx', 'dbf'):
+                with open(os.path.join(tmp, f'villes.{ext}'), 'rb') as f:
+                    comps[ext] = f.read()
+        _, ids = self.importer_geometrie(
+            'SHP shpx', 'villes.shp', comps['shp'],
+            auxiliaires=[('villes.shpx', comps['shx']), ('villes.dbf', comps['dbf'])])
+        gs = list(CoucheGeometrie.objects.get(pk=list(ids)[0]).geometries.all())
+        self.assertEqual(len(gs), 1)
+        self.assertEqual(gs[0].coordonnees, [24.456, -0.123])
+        self.assertEqual(gs[0].proprietes.get('nom'), 'V1')
+
+    def test_shapefile_sans_composants_erreur_claire(self):
+        import os
+        import tempfile
+
+        import shapefile
+        from django.core.files.uploadedfile import InMemoryUploadedFile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            w = shapefile.Writer(os.path.join(tmp, 'seul'))
+            w.field('nom', 'C', 30)
+            w.point(24.456, -0.123)
+            w.record('A')
+            w.close()
+            with open(os.path.join(tmp, 'seul.shp'), 'rb') as f:
+                contenu = f.read()
+        fich = InMemoryUploadedFile(
+            io.BytesIO(contenu), 'fichier_geom', 'seul.shp',
+            'application/octet-stream', len(contenu), None)
+        r = self.client.post('/geometrie/importer/', {'nom_couche': 'SHP Seul', 'fichier_geom': fich, 'ajax': '1'})
+        self.assertEqual(r.status_code, 400)
+        corps = r.content.decode('utf-8', errors='replace')
+        self.assertIn('.shx', corps)
+        self.assertIn('.dbf', corps)
+        self.assertEqual(CoucheGeometrie.objects.count(), 0, 'aucune couche créée sans composants')
+
     def test_gpx_waypoints(self):
         gpx = b'''<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">

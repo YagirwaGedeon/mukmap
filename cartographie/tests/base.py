@@ -25,13 +25,22 @@ class BaseCartographieTest(TestCase):
         s['projet_actif_id'] = self.projet.pk
         s.save()
 
-    def importer_geometrie(self, nom_couche, nom_fichier, contenu):
-        """POST un fichier sur /geometrie/importer/ et renvoie (réponse, pks des couches créées)."""
+    def importer_geometrie(self, nom_couche, nom_fichier, contenu, auxiliaires=None):
+        """POST un fichier sur /geometrie/importer/ et renvoie (réponse, pks des couches créées).
+        `auxiliaires` : liste de (nom, contenu) envoyée comme fichiers fichier_aux (composants Shapefile)."""
         avant = set(CoucheGeometrie.objects.values_list('pk', flat=True))
         fich = InMemoryUploadedFile(
             io.BytesIO(contenu), 'fichier_geom', nom_fichier,
             'application/octet-stream', len(contenu), None)
-        r = self.client.post('/geometrie/importer/', {'nom_couche': nom_couche, 'fichier_geom': fich})
+        donnees = {'nom_couche': nom_couche, 'fichier_geom': fich}
+        aux = []
+        for nom_aux, contenu_aux in (auxiliaires or []):
+            aux.append(InMemoryUploadedFile(
+                io.BytesIO(contenu_aux), 'fichier_aux', nom_aux,
+                'application/octet-stream', len(contenu_aux), None))
+        if aux:
+            donnees['fichier_aux'] = aux
+        r = self.client.post('/geometrie/importer/', donnees)
         nouvelles = set(CoucheGeometrie.objects.values_list('pk', flat=True)) - avant
         return r, nouvelles
 

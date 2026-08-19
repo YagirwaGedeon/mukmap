@@ -3336,6 +3336,7 @@ def importer_geometrie(request):
     est_ajax = request.POST.get('ajax') == '1' or request.GET.get('ajax') == '1'
 
     fichier = request.FILES.get('fichier_geom')
+    auxiliaires = request.FILES.getlist('fichier_aux')
     nom_couche = request.POST.get('nom_couche', '').strip()
     if not fichier or not nom_couche:
         if est_ajax:
@@ -3352,15 +3353,15 @@ def importer_geometrie(request):
         elif nom_fichier.endswith('.gpx'):
             couche = _importer_gpx(nom_couche, contenu, nom_fichier)
         elif nom_fichier.endswith('.zip') or nom_fichier.endswith('.shp'):
-            couche = _importer_shapefile(nom_couche, contenu, nom_fichier)
+            couche = _importer_shapefile(nom_couche, contenu, nom_fichier, auxiliaires)
         elif nom_fichier.endswith('.geojson') or nom_fichier.endswith('.json'):
             couche = _importer_geojson(nom_couche, contenu, nom_fichier)
         elif nom_fichier.endswith('.csv'):
             couche = _importer_csv(nom_couche, contenu, nom_fichier)
         else:
             if est_ajax:
-                return JsonResponse({'ok': False, 'erreur': "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp/.zip"}, status=400)
-            messages.error(request, "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp/.zip")
+                return JsonResponse({'ok': False, 'erreur': "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp (avec .shx, .dbf, .prj, .cpg, .qmd)/.zip"}, status=400)
+            messages.error(request, "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp (avec .shx, .dbf, .prj, .cpg, .qmd)/.zip")
             return redirect('index_cartographie')
     except AmbiguiteCoordonnees as e:
         if est_ajax:
@@ -3764,7 +3765,7 @@ def _importer_gpx(nom_couche, contenu, nom_fichier='fichier.gpx'):
     return couche
 
 
-def _importer_shapefile(nom_couche, contenu, nom_fichier):
+def _importer_shapefile(nom_couche, contenu, nom_fichier, auxiliaires=None):
     import shapefile
 
     if nom_fichier.endswith('.zip'):
@@ -3783,7 +3784,25 @@ def _importer_shapefile(nom_couche, contenu, nom_fichier):
             with shapefile.Reader(shp=_lire_composant('shp'), shx=_lire_composant('shx'), dbf=_lire_composant('dbf')) as reader:
                 geometries = _lire_shapefile_reader(reader)
     elif nom_fichier.endswith('.shp'):
-        raise ValueError("Pour un Shapefile, veuillez fournir un dossier ZIP contenant .shp, .shx, .dbf.")
+        base = nom_fichier.rsplit('.', 1)[0].lower()
+        par_ext = {}
+        for aux in (auxiliaires or []):
+            nom_aux = (aux.name or '').lower().rsplit('/', 1)[-1]
+            if not nom_aux.startswith(base + '.'):
+                continue
+            ext_aux = nom_aux.rsplit('.', 1)[-1]
+            if ext_aux in ('shx', 'shpx'):
+                par_ext['shx'] = io.BytesIO(aux.read())
+            else:
+                par_ext[ext_aux] = io.BytesIO(aux.read())
+        manquants = [e for e in ('shx', 'dbf') if e not in par_ext]
+        if manquants:
+            raise ValueError(
+                "Pour un Shapefile, fournissez aussi les fichiers "
+                + ', '.join(f'.{e}' for e in manquants)
+                + f" (même nom que {nom_fichier}).")
+        with shapefile.Reader(shp=io.BytesIO(contenu), shx=par_ext['shx'], dbf=par_ext['dbf']) as reader:
+            geometries = _lire_shapefile_reader(reader)
     else:
         raise ValueError("Format non supporté.")
 
