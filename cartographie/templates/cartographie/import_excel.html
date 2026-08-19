@@ -822,7 +822,7 @@ async function lancerImport() {
     $('progression').style.display = 'none';
     const r = $('resultat');
     const lignes = [];
-    if (res.points > 0) lignes.push(`📍 <b>${res.points}</b> ${t('points_importes', 'point(s) importé(s)')}${res.doublons ? ` · ${res.doublons} ${t('doublons', 'doublon(s)')}` : ''}${res.invalides ? ` · ${res.invalides} ${t('invalides', 'invalide(s)')}` : ''}`);
+    if (res.points > 0) lignes.push(t('points_importes', '✅ {n} point(s) importé(s) avec succès').replace('{n}', res.points) + `${res.doublons ? ` · ${res.doublons} ${t('doublons', 'doublon(s)')}` : ''}${res.invalides ? ` · ${res.invalides} ${t('invalides', 'invalide(s)')}` : ''}`);
     if (res.couches.length) lignes.push(`🗺️ <b>${res.couches.length}</b> ${t('couches_importees', 'couche(s) créée(s)')} : ${res.couches.join(', ')}`);
     if (res.erreurs.length) lignes.push(`<div style="color:var(--red);margin-top:6px;">${t('erreurs_import', 'Erreurs')} : ${res.erreurs.join(' · ')}</div>`);
     if (!lignes.length) lignes.push(`<div style="color:var(--red);">${t('aucun_import', 'Aucune donnée importée.')}</div>`);
