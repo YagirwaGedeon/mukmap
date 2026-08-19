@@ -233,7 +233,7 @@
                 q: '', page: 1, pageSize: opts.pageSize || 50,
                 tri: {champ: 'date_creation', direction: 'desc'},
                 filtres: [], logique: 'et', bbox: null,
-                ids: null, selection: [], toutFiltre: false
+                ids: null, selection: [], toutFiltre: false, carteSelection: false
             },
             donnees: {colonnes: [], facettes: {}, stats: null, results: [], count: 0, pages: 1},
             colonnesVisibles: null,
@@ -509,12 +509,27 @@
                     '<button class="ta-lien" data-act="tout-desel">Désélectionner</button></span>';
             }
             barre.innerHTML = html;
+            majBoutonCarteSelection();
             if (nbSel === 0) return;
             barre.querySelector('[data-act="zoom-sel"]').addEventListener('click', zoomerSelection);
             barre.querySelector('[data-act="del-sel"]').addEventListener('click', function () {
                 confirmerSuppression(selectionIds());
             });
             barre.querySelector('[data-act="tout-desel"]').addEventListener('click', desactiverTout);
+        }
+
+        function majBoutonCarteSelection() {
+            var b = elements.btnCarteSelection;
+            if (!b) return;
+            b.classList.toggle('actif', U.etat.carteSelection);
+            if (U.etat.carteSelection) {
+                var n = U.etat.toutFiltre ? (U.donnees.count || 0) : U.etat.selection.length;
+                b.innerHTML = '✅ Points sélectionnés (' + n + ')';
+                b.title = 'Afficher tous les points sur la carte (cliquez pour revenir à tous les points)';
+            } else {
+                b.innerHTML = '📍 Tous les points';
+                b.title = 'Afficher sur la carte uniquement les points sélectionnés (cliquez sur les cases à cocher pour choisir)';
+            }
         }
 
         function rendreStatsBadge() {
@@ -629,6 +644,7 @@
                 var tr = chercher('tr[data-id="' + p.id + '"]');
                 if (tr) tr.classList.toggle('sel', U.etat.selection.indexOf(p.id) !== -1);
             });
+            majSourceCarteFiltree();
         }
 
         var derniereLigneId = null;
@@ -674,6 +690,7 @@
             rendreEntetes();
             rendreCorps();
             effacerSurlignageCarte();
+            majSourceCarteFiltree();
         }
 
         function majCheckTout() {
@@ -748,21 +765,38 @@
                     if (seq !== majSeq || !data) return;
                     var src = U.carte.getSource('table-points');
                     if (!src) return;
-                    src.setData({
-                        type: 'FeatureCollection',
-                        features: (data.results || []).map(function (p) {
-                            return {
-                                type: 'Feature', id: p.id,
-                                properties: {
-                                    ta_id: p.id,
-                                    ta_sel: U.etat.toutFiltre ? true : (U.etat.selection.indexOf(p.id) !== -1)
-                                },
-                                geometry: {type: 'Point', coordinates: [p.longitude, p.latitude]}
-                            };
-                        })
+                    var features = (data.results || []).map(function (p) {
+                        return {
+                            type: 'Feature', id: p.id,
+                            properties: {
+                                ta_id: p.id,
+                                ta_sel: U.etat.toutFiltre ? true : (U.etat.selection.indexOf(p.id) !== -1)
+                            },
+                            geometry: {type: 'Point', coordinates: [p.longitude, p.latitude]}
+                        };
                     });
+                    src._complet = features;
+                    src.setData({type: 'FeatureCollection', features: filtrerCarteSelection(features)});
                 })
                 .catch(function () { /* silencieux */ });
+        }
+
+        function filtrerCarteSelection(features) {
+            if (!U.etat.carteSelection) return features;
+            if (U.etat.toutFiltre) return features;
+            return (features || []).filter(function (f) {
+                return f.properties && f.properties.ta_sel;
+            });
+        }
+
+        function majSourceCarteFiltree() {
+            if (!U.carte || !U.cartePrete) return;
+            var src = U.carte.getSource('table-points');
+            if (!src || !src._complet) return;
+            src._complet.forEach(function (f) {
+                if (f.properties) f.properties.ta_sel = U.etat.toutFiltre ? true : (U.etat.selection.indexOf(f.id) !== -1);
+            });
+            src.setData({type: 'FeatureCollection', features: filtrerCarteSelection(src._complet)});
         }
 
         function zoomerVers(id) {
@@ -809,6 +843,7 @@
             rendreBarre();
             rendreEntetes();
             rendreCorps();
+            majSourceCarteFiltree();
             var tr = chercher('tr[data-id="' + id + '"]');
             if (tr && !blocScroll) {
                 blocScroll = true;
@@ -1109,6 +1144,7 @@
                     rendreBarre();
                     rendreEntetes();
                     rendreCorps();
+                    majSourceCarteFiltree();
                 }
             });
             elements.btnAjout.addEventListener('click', ouvrirAjout);
@@ -1130,6 +1166,13 @@
                 rendreEntetes();
                 majCarte();
             });
+            if (elements.btnCarteSelection) {
+                elements.btnCarteSelection.addEventListener('click', function () {
+                    U.etat.carteSelection = !U.etat.carteSelection;
+                    majBoutonCarteSelection();
+                    majSourceCarteFiltree();
+                });
+            }
             elements.btnSelectionFiltre.addEventListener('click', function () {
                 var f = JSON.parse(localStorage.getItem('mukmap_ta_filtres') || 'null') || [];
                 U.etat.filtres = f;
@@ -1141,11 +1184,13 @@
             elements.btnReinit.addEventListener('click', function () {
                 U.etat = Object.assign(U.etat, {
                     q: '', page: 1, filtres: [], logique: 'et', bbox: null,
-                    ids: null, selection: [], toutFiltre: false,
+ids: null, selection: [], toutFiltre: false, carteSelection: false,
                     tri: {champ: 'date_creation', direction: 'desc'}
                 });
                 elements.recherche.value = '';
                 if (elements.filtreSpatial) elements.filtreSpatial.classList.remove('actif');
+                majBoutonCarteSelection();
+                majSourceCarteFiltree();
                 if (U.carte && U.cartePrete) U.carte.off('moveend', onDeplacementCarte);
                 localStorage.removeItem('mukmap_ta_filtres');
                 charger();
@@ -1256,6 +1301,7 @@
                 btnColonnes: chercher('[data-outil="colonnes"]'),
                 btnStats: chercher('[data-outil="stats"]'),
                 btnToutSelectionner: chercher('[data-outil="tout-selectionner"]'),
+                btnCarteSelection: chercher('[data-outil="carte-selection"]'),
                 btnSelectionFiltre: chercher('[data-outil="selection-filtre"]'),
                 btnReinit: chercher('[data-outil="reinitialiser"]'),
                 btnCSVComplet: chercher('[data-outil="export-csv-complet"]'),

@@ -209,6 +209,7 @@
         <div class="ta-sep"></div>
         <button class="ta-outil ta-outil-primaire" data-outil="ajout">＋ Ajouter</button>
         <button class="ta-outil" data-outil="tout-selectionner">☑ Tout sélectionner</button>
+        <button class="ta-outil" data-outil="carte-selection" title="Afficher sur la carte uniquement les points sélectionnés (cliquez sur les cases à cocher pour choisir)">📍 Tous les points</button>
         <button class="ta-outil" data-outil="selection-filtre">🔁 Appliquer les filtres sauvegardés</button>
         <button class="ta-outil" data-outil="reinitialiser">↺ Réinitialiser</button>
         <div class="ta-sep"></div>
@@ -280,7 +281,7 @@
     var token = '';
     var inp = document.querySelector('input[name="csrfmiddlewaretoken"]');
     if (inp) token = inp.value;
-    TableAttributaire.demarrer({
+    window.TaApp = TableAttributaire.demarrer({
         racine: document.body,
         urlApi: '{% url "api_table_points" %}',
         csrf: token,
