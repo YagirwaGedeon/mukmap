@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Import de donnÃƒÂ©es Ã¢â‚¬â€ MUKMAP v1.0</title>
+    <title>Import de données — MUKMAP v1.0</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
@@ -49,7 +49,7 @@
         .card h2 { font-size: 1.05rem; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
         .card .sous { color: var(--text-3); font-size: .8rem; margin-bottom: 16px; }
 
-        /* Ã¢â€â‚¬Ã¢â€â‚¬ Stepper Ã¢â€â‚¬Ã¢â€â‚¬ */
+        /* ── Stepper ── */
         .stepper { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
         .step { flex: 1; min-width: 150px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--border); color: var(--text-3); font-weight: 600; font-size: .8rem; opacity: .7; }
         .step .num { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .75rem; flex: none; }
@@ -65,7 +65,7 @@
         .zone-drop:hover, .zone-drop.survol { border-color: var(--accent); color: var(--accent); background: rgba(109,93,246,.06); transform: translateY(-1px); }
         .zone-drop .grand { font-size: 2rem; }
 
-        /* Ã¢â€â‚¬Ã¢â€â‚¬ Liste des fichiers Ã¢â€â‚¬Ã¢â€â‚¬ */
+        /* ── Liste des fichiers ── */
         .fichier-ligne { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--border); margin-top: 8px; }
         .fichier-ligne.actif { border-color: var(--accent); }
         .fichier-nom { flex: 1; font-weight: 600; font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -157,18 +157,18 @@
     <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
     <div>
         <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
-        <div class="sous-titre" data-i18n="import_donnees_intelligent">Import de donnÃƒÂ©es intelligent</div>
+        <div class="sous-titre" data-i18n="import_donnees_intelligent">Import de données intelligent</div>
     </div>
     <nav>
-        <a href="{% url 'dashboard' %}"><i>Ã°Å¸â€œÅ </i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
-        <a href="{% url 'index_cartographie' %}"><i>Ã°Å¸â€”ÂºÃ¯Â¸Â</i> <span data-i18n="cartographie">Cartographie</span></a>
-        <a href="{% url 'points_liste' %}"><i>Ã°Å¸â€œÂ</i> <span data-i18n="tous_points">Tous les points</span></a>
-        <a href="{% url 'import_page' %}" class="actif"><i>Ã°Å¸â€œÂ¥</i> <span data-i18n="import_donnees">Import de donnÃƒÂ©es</span></a>
-        <a href="{% url 'rapport_generer' %}"><i>Ã°Å¸â€œâ€ž</i> <span data-i18n="rapports">Rapports</span></a>
+        <a href="{% url 'dashboard' %}"><i>📊</i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i>🗺️</i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'points_liste' %}"><i>📍</i> <span data-i18n="tous_points">Tous les points</span></a>
+        <a href="{% url 'import_page' %}" class="actif"><i>📥</i> <span data-i18n="import_donnees">Import de données</span></a>
+        <a href="{% url 'rapport_generer' %}"><i>📄</i> <span data-i18n="rapports">Rapports</span></a>
     </nav>
     <div class="droite">
         {% include 'cartographie/_selecteur_langue.html' %}
-        <form method="post" action="{% url 'deconnexion' %}" style="display:inline">{% csrf_token %}<button type="submit" class="btn"><span data-i18n="deconnexion">DÃƒÂ©connexion</span></button></form>
+        <form method="post" action="{% url 'deconnexion' %}" style="display:inline">{% csrf_token %}<button type="submit" class="btn"><span data-i18n="deconnexion">Déconnexion</span></button></form>
     </div>
 </header>
 
@@ -177,19 +177,19 @@
         <div class="step actif" data-etape="1"><span class="num">1</span><span data-i18n="etape_importer">Importer</span></div>
         <div class="step" data-etape="2"><span class="num">2</span><span data-i18n="etape_analyser">Analyser</span></div>
         <div class="step" data-etape="3"><span class="num">3</span><span data-i18n="etape_valider">Valider</span></div>
-        <div class="step" data-etape="4"><span class="num">4</span><span data-i18n="etape_afficher">AperÃƒÂ§u</span></div>
+        <div class="step" data-etape="4"><span class="num">4</span><span data-i18n="etape_afficher">Aperçu</span></div>
         <div class="step" data-etape="5"><span class="num">5</span><span data-i18n="etape_configurer">Configurer</span></div>
         <div class="step" data-etape="6"><span class="num">6</span><span data-i18n="etape_enregistrer">Enregistrer</span></div>
-        <div class="step" data-etape="7"><span class="num">7</span><span data-i18n="etape_resultat">RÃƒÂ©sultat</span></div>
+        <div class="step" data-etape="7"><span class="num">7</span><span data-i18n="etape_resultat">Résultat</span></div>
     </div>
 
     <div class="card" id="etape-1">
-        <h2>Ã°Å¸â€œÂ¥ <span data-i18n="etape1_titre">1. Choisissez vos fichiers</span></h2>
-        <p class="sous" data-i18n="formats_supportes">Formats supportÃƒÂ©s : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (points) Ã‚Â· <b>.zip</b> ou <b>.shp</b> + <b>.shx</b>/<b>.dbf</b>/<b>.prj</b>/<b>.cpg</b>/<b>.qmd</b> (Shapefile Ã¢â‚¬â€ dÃƒÂ©posez tous les fichiers ensemble) Ã‚Â· <b>.geojson</b>, <b>.kml</b>, <b>.kmz</b>, <b>.gpx</b> (couches SIG).</p>
+        <h2>📥 <span data-i18n="etape1_titre">1. Choisissez vos fichiers</span></h2>
+        <p class="sous" data-i18n="formats_supportes">Formats supportés : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (points) · <b>.zip</b> ou <b>.shp</b> + <b>.shx</b>/<b>.dbf</b>/<b>.prj</b>/<b>.cpg</b>/<b>.qmd</b> (Shapefile — déposez tous les fichiers ensemble) · <b>.geojson</b>, <b>.kml</b>, <b>.kmz</b>, <b>.gpx</b> (couches SIG).</p>
         <div class="zone-drop" id="zone-drop">
-            <div class="grand">Ã°Å¸â€œâ€š</div>
-            <div><span data-i18n="glissez_deposez"><b>Glissez-dÃƒÂ©posez</b> vos fichiers ici ou cliquez pour parcourir</span></div>
-            <div style="font-size:.75rem;margin-top:6px;opacity:.8;" data-i18n="aide_shapefile">Plusieurs fichiers possibles Ã¢â‚¬â€ la nature de chaque fichier est dÃƒÂ©tectÃƒÂ©e automatiquement.</div>
+            <div class="grand">📂</div>
+            <div><span data-i18n="glissez_deposez"><b>Glissez-déposez</b> vos fichiers ici ou cliquez pour parcourir</span></div>
+            <div style="font-size:.75rem;margin-top:6px;opacity:.8;" data-i18n="aide_shapefile">Plusieurs fichiers possibles — la nature de chaque fichier est détectée automatiquement.</div>
             <input type="file" id="fichier" accept=".xlsx,.xls,.csv,.zip,.shp,.shx,.dbf,.prj,.cpg,.qmd,.geojson,.json,.kml,.kmz,.gpx" multiple hidden>
         </div>
         <div id="liste-fichiers"></div>
@@ -197,13 +197,13 @@
     </div>
 
     <div class="card" id="etape-2" style="display:none;">
-        <h2>Ã°Å¸â€Å½ <span data-i18n="etape2_titre">2. Analyse</span></h2>
+        <h2>🔎 <span data-i18n="etape2_titre">2. Analyse</span></h2>
         <p class="sous" id="etape2-sous"></p>
         <div id="structure-fichiers" style="display:none;margin-bottom:10px;"></div>
         <div id="panneau-points" style="display:none;">
             <div class="mapping" id="mapping"></div>
             <div class="stat">
-                <span class="pill" id="stat-lignes">Ã¢â‚¬â€</span>
+                <span class="pill" id="stat-lignes">—</span>
                 <span class="pill" id="stat-nom"></span>
                 <span class="pill" id="stat-lat"></span>
                 <span class="pill" id="stat-lng"></span>
@@ -219,53 +219,53 @@
                 <span class="pill" id="sig-enc"></span>
             </div>
             <div style="margin-top:10px;">
-                <div style="font-size:.72rem;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;" data-i18n="colonnes_detectees">Colonnes / attributs dÃƒÂ©tectÃƒÂ©s</div>
+                <div style="font-size:.72rem;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;" data-i18n="colonnes_detectees">Colonnes / attributs détectés</div>
                 <div class="chips" id="sig-colonnes"></div>
             </div>
             <div class="alerte warn" id="sig-avertissements" style="display:none;margin-top:10px;"></div>
         </div>
         <div class="alerte err" id="err-2"></div>
         <div class="actions">
-            <button class="btn" id="retour-2">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
-            <button class="btn btn-primary" id="suivant-3"><span data-i18n="suivant">Suivant</span> Ã¢â€ â€™</button>
+            <button class="btn" id="retour-2">← <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="suivant-3"><span data-i18n="suivant">Suivant</span> →</button>
         </div>
     </div>
 
     <div class="card" id="etape-3" style="display:none;">
-        <h2>Ã¢Å“â€¦ <span data-i18n="etape3_titre">3. Validation</span></h2>
+        <h2>✅ <span data-i18n="etape3_titre">3. Validation</span></h2>
         <p class="sous" id="etape3-sous"></p>
         <div id="resume-validation"></div>
         <label data-i18n="nom_couche_label">Nom de la couche</label>
         <input id="val-nom-couche" placeholder="Ma couche">
         <label data-i18n="source_label">Source / provenance</label>
-        <input id="val-source" placeholder="Ex. : relevÃƒÂ© terrain 2026, ministÃƒÂ¨reÃ¢â‚¬Â¦" style="margin-bottom:8px;">
+        <input id="val-source" placeholder="Ex. : relevé terrain 2026, ministère…" style="margin-bottom:8px;">
         <label data-i18n="description_label">Description (facultatif)</label>
-        <textarea id="val-description" rows="2" placeholder="DÃƒÂ©crivez le contenu de la coucheÃ¢â‚¬Â¦"></textarea>
+        <textarea id="val-description" rows="2" placeholder="Décrivez le contenu de la couche…"></textarea>
         <div class="alerte err" id="err-3"></div>
         <div class="actions">
-            <button class="btn" id="retour-3b">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
-            <button class="btn btn-primary" id="btn-valider">Ã¢Å“â€¦ <span data-i18n="valider_importer_couche">Valider et importer la couche</span></button>
+            <button class="btn" id="retour-3b">← <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="btn-valider">✅ <span data-i18n="valider_importer_couche">Valider et importer la couche</span></button>
         </div>
     </div>
 
     <div class="card" id="etape-4" style="display:none;">
-        <h2>Ã°Å¸â€”ÂºÃ¯Â¸Â <span data-i18n="etape4_titre">4. AperÃƒÂ§u sur la carte</span></h2>
+        <h2>🗺️ <span data-i18n="etape4_titre">4. Aperçu sur la carte</span></h2>
         <p class="sous" id="etape4-sous"></p>
         <div style="position:relative;height:340px;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px;">
             <div id="apercu-carte" style="position:absolute;inset:0;"></div>
-            <div style="position:absolute;left:10px;bottom:10px;background:rgba(15,23,42,.8);color:#fff;font-size:.7rem;padding:5px 9px;border-radius:8px;backdrop-filter:blur(4px);z-index:2;" data-i18n="apercu_aide_carte">Ã°Å¸â€“Â±Ã¯Â¸Â DÃƒÂ©placez la carte, molette pour zoomer Ã¢â‚¬â€ cliquez une entitÃƒÂ© pour consulter ses attributs.</div>
+            <div style="position:absolute;left:10px;bottom:10px;background:rgba(15,23,42,.8);color:#fff;font-size:.7rem;padding:5px 9px;border-radius:8px;backdrop-filter:blur(4px);z-index:2;" data-i18n="apercu_aide_carte">🖱️ Déplacez la carte, molette pour zoomer — cliquez une entité pour consulter ses attributs.</div>
         </div>
         <div style="font-size:.72rem;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;" data-i18n="apercu_attributs_titre">Tableau des attributs</div>
         <div class="apercu" id="apercu-table" style="max-height:220px;overflow:auto;"></div>
         <div class="alerte err" id="err-4"></div>
         <div class="actions">
-            <button class="btn" id="retour-4">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
-            <button class="btn btn-primary" id="suivant-5"><span data-i18n="suivant">Suivant</span> Ã¢â€ â€™</button>
+            <button class="btn" id="retour-4">← <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="suivant-5"><span data-i18n="suivant">Suivant</span> →</button>
         </div>
     </div>
 
     <div class="card" id="etape-5" style="display:none;">
-        <h2>Ã°Å¸Å½Â¨ <span data-i18n="etape5_titre">5. Configurez le style</span></h2>
+        <h2>🎨 <span data-i18n="etape5_titre">5. Configurez le style</span></h2>
         <p class="sous" id="etape5-sous"></p>
 
         <div id="panneau-style-sig" style="display:none;">
@@ -280,13 +280,13 @@
                 <div>
                     <label data-i18n="style_symbole_lib">Symbole</label>
                     <select id="style-symbole">
-                        <option value="cercle">Ã¢â€”Â Cercle</option>
-                        <option value="carre">Ã¢â€“Â  CarrÃƒÂ©</option>
-                        <option value="triangle">Ã¢â€“Â² Triangle</option>
-                        <option value="losange">Ã¢â€”â€  Losange</option>
-                        <option value="croix">Ã¢Å“Å¡ Croix</option>
-                        <option value="etoile">Ã¢Ëœâ€¦ Ãƒâ€°toile</option>
-                        <option value="point">Ã¢â‚¬Â¢ Point</option>
+                        <option value="cercle">● Cercle</option>
+                        <option value="carre">■ Carré</option>
+                        <option value="triangle">▲ Triangle</option>
+                        <option value="losange">◆ Losange</option>
+                        <option value="croix">✚ Croix</option>
+                        <option value="etoile">★ Étoile</option>
+                        <option value="point">• Point</option>
                     </select>
                 </div>
             </div>
@@ -303,19 +303,19 @@
                 </div>
             </div>
             <div>
-                <label data-i18n="style_etiquette_lib">Ãƒâ€°tiquette affichÃƒÂ©e</label>
+                <label data-i18n="style_etiquette_lib">Étiquette affichée</label>
                 <select id="style-etiquette"></select>
             </div>
             <div>
-                <label class="cb"><input type="checkbox" id="style-cat-active"> <span data-i18n="style_categorisation_lib">CatÃƒÂ©gorisation (couleur par valeur)</span></label>
+                <label class="cb"><input type="checkbox" id="style-cat-active"> <span data-i18n="style_categorisation_lib">Catégorisation (couleur par valeur)</span></label>
                 <div id="panneau-cat" style="display:none;">
                     <div class="style-2col">
                         <div>
-                            <label data-i18n="style_champ_cat_lib">Colonne de catÃƒÂ©gorisation</label>
+                            <label data-i18n="style_champ_cat_lib">Colonne de catégorisation</label>
                             <select id="cat-champ"></select>
                         </div>
                         <div style="display:flex;align-items:flex-end;padding-bottom:2px;">
-                            <button class="btn btn-ico" id="btn-regenerer" style="width:100%;">Ã°Å¸â€â€ž <span data-i18n="style_regenerer">RÃƒÂ©gÃƒÂ©nÃƒÂ©rer les couleurs</span></button>
+                            <button class="btn btn-ico" id="btn-regenerer" style="width:100%;">🔄 <span data-i18n="style_regenerer">Régénérer les couleurs</span></button>
                         </div>
                     </div>
                     <div id="classes-cat"></div>
@@ -324,34 +324,34 @@
         </div>
 
         <div id="panneau-style-points" style="display:none;">
-            <p class="sous" data-i18n="points_colores_categorie">Les points sont colorÃƒÂ©s automatiquement selon leur catÃƒÂ©gorie sur la carte.</p>
+            <p class="sous" data-i18n="points_colores_categorie">Les points sont colorés automatiquement selon leur catégorie sur la carte.</p>
             <div class="legende-preview" id="legende-preview"></div>
         </div>
         <div class="alerte err" id="err-5"></div>
         <div class="actions">
-            <button class="btn" id="retour-5">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
-            <button class="btn btn-primary" id="suivant-6"><span data-i18n="suivant">Suivant</span> Ã¢â€ â€™</button>
+            <button class="btn" id="retour-5">← <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="suivant-6"><span data-i18n="suivant">Suivant</span> →</button>
         </div>
     </div>
 
     <div class="card" id="etape-6" style="display:none;">
-        <h2>Ã°Å¸â€™Â¾ <span data-i18n="etape6_titre">6. Enregistrement</span></h2>
+        <h2>💾 <span data-i18n="etape6_titre">6. Enregistrement</span></h2>
         <p class="sous" id="etape6-sous"></p>
         <div id="resume-enregistrement"></div>
         <div id="progression" style="display:none;">
             <div class="spin"></div>
-            <div data-i18n="import_en_cours">Import en coursÃ¢â‚¬Â¦ analyse et dÃƒÂ©duplication des donnÃƒÂ©es.</div>
+            <div data-i18n="import_en_cours">Import en cours… analyse et déduplication des données.</div>
         </div>
         <div class="alerte err" id="err-6"></div>
         <div class="actions">
-            <button class="btn" id="retour-6">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
-            <button class="btn btn-primary" id="btn-importer">Ã°Å¸Å¡â‚¬ <span data-i18n="valider_importer">Valider et importer</span></button>
+            <button class="btn" id="retour-6">← <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="btn-importer">🚀 <span data-i18n="valider_importer">Valider et importer</span></button>
         </div>
     </div>
 
     <div class="card" id="etape-7" style="display:none;">
-        <h2>Ã¢Å“â€¦ <span data-i18n="etape7_titre">7. RÃƒÂ©sultat</span></h2>
-        <p class="sous" data-i18n="import_termine">Import terminÃƒÂ©</p>
+        <h2>✅ <span data-i18n="etape7_titre">7. Résultat</span></h2>
+        <p class="sous" data-i18n="import_termine">Import terminé</p>
         <div id="resultat"></div>
     </div>
 </main>
@@ -375,14 +375,14 @@ const CATS_LEGENDE = {
     'activite': '#ef4444', 'ecole': '#3b82f6', 'hopital': '#22c55e', 'riverain': '#f59e0b', 'service': '#8b5cf6', 'autre': '#64748b'
 };
 const NOMS_COLS = {
-    nom: ['nom', 'name', 'libelle', 'libellÃ©', 'designation', 'dÃ©signation', 'titre', 'intitule'],
+    nom: ['nom', 'name', 'libelle', 'libellé', 'designation', 'désignation', 'titre', 'intitule'],
     latitude: ['latitude', 'lat', 'lat_deg', 'latitude_deg', 'y', 'latitud'],
     longitude: ['longitude', 'lon', 'lng', 'long', 'long_deg', 'lng_deg', 'x', 'longitud'],
-    categorie: ['categorie', 'catÃ©gorie', 'type', 'nature', 'category', 'classe'],
-    statut: ['statut', 'status', 'etat', 'Ã©tat', 'fonctionnel', 'fonctionnel?'],
-    description: ['description', 'desc', 'details', 'dÃ©tails', 'commentaire', 'remarque', 'notes', 'note'],
-    province: ['province', 'region', 'rÃ©gion', 'division', 'province/region'],
-    commune: ['commune', 'territoire', 'village', 'localite', 'localitÃ©', 'ville']
+    categorie: ['categorie', 'catégorie', 'type', 'nature', 'category', 'classe'],
+    statut: ['statut', 'status', 'etat', 'état', 'fonctionnel', 'fonctionnel?'],
+    description: ['description', 'desc', 'details', 'détails', 'commentaire', 'remarque', 'notes', 'note'],
+    province: ['province', 'region', 'région', 'division', 'province/region'],
+    commune: ['commune', 'territoire', 'village', 'localite', 'localité', 'ville']
 };
 let fichiers = [];
 let idSuivant = 1;
@@ -513,7 +513,7 @@ function structureDe(entree) {
     const comps = entree.composants || {};
     if (entree.ext === '.shp') {
         return [
-            { fichier: entree.file.name, present: true, obligatoire: true, recommande: false, role: 'GÃ©omÃ©tries' },
+            { fichier: entree.file.name, present: true, obligatoire: true, recommande: false, role: 'Géométries' },
             { fichier: stem + '.shx', present: !!comps['.shx'], obligatoire: true, recommande: false, role: 'Index' },
             { fichier: stem + '.dbf', present: !!comps['.dbf'], obligatoire: true, recommande: false, role: 'Attributs' },
             { fichier: stem + '.prj', present: !!comps['.prj'], obligatoire: false, recommande: true, role: 'Projection' },
@@ -546,7 +546,7 @@ async function analyserFichier(entree) {
             entree.etat = 'ok';
             if (!entree.analyse.stats.latValides && !entree.analyse.stats.lngValides) {
                 entree.etat = 'erreur';
-                entree.message = t('erreur_aucune_coordonnee', 'Aucune coordonnÃ©e valide dÃ©tectÃ©e dans ce fichier.');
+                entree.message = t('erreur_aucune_coordonnee', 'Aucune coordonnée valide détectée dans ce fichier.');
             }
         } else if (entree.type === 'sig' && (ext === '.geojson' || ext === '.json')) {
             const buf = await lireFichier(entree.file, 'readAsArrayBuffer');
@@ -682,22 +682,22 @@ async function analyserFichier(entree) {
     }
     renderListe();
 }
-const ICO_ETAT = { ok: 'âœ…', erreur: 'âš ï¸', analyse: 'â³' };
+const ICO_ETAT = { ok: '✅', erreur: '⚠️', analyse: '⏳' };
 function renderListe() {
     const zone = $('liste-fichiers');
     if (!fichiers.length) { zone.innerHTML = ''; return; }
     zone.innerHTML = fichiers.map((f, i) => {
         const badge = f.type === 'points' ? t('badge_points', 'Points') : f.type === 'sidecar' ? t('badge_composant', 'Composant') : t('badge_sig', 'Couche SIG');
         const comps = (f.type === 'sig' && f.composants && Object.keys(f.composants).length)
-            ? ` Â· <span style="opacity:.7">${Object.keys(f.composants).length} ${t('badge_composants', 'composant(s)')}</span>` : '';
+            ? ` · <span style="opacity:.7">${Object.keys(f.composants).length} ${t('badge_composants', 'composant(s)')}</span>` : '';
         const titre = f.file.name + (f.type === 'sig' && f.composants ? ' + ' + Object.keys(f.composants).join(' ') : '');
         return `
         <div class="fichier-ligne ${i === fichierActif ? 'actif' : ''}" data-idx="${i}">
-            <span>${ICO_ETAT[f.etat] || 'ðŸ“„'}</span>
+            <span>${ICO_ETAT[f.etat] || '📄'}</span>
             <div class="fichier-nom" title="${titre}">${f.file.name}${comps}</div>
             <span class="badge ${f.type || ''}">${badge}</span>
             <span class="fichier-taille">${tailleLisible(f.file.size)}</span>
-            <button class="btn btn-ico" data-retirer="${i}">ðŸ—‘ï¸</button>
+            <button class="btn btn-ico" data-retirer="${i}">🗑️</button>
         </div>`;
     }).join('');
     zone.querySelectorAll('[data-idx]').forEach(l => l.addEventListener('click', (ev) => {
@@ -738,7 +738,7 @@ function renderStructure(f) {
     sf.style.display = structure.length ? '' : 'none';
     sf.innerHTML = structure.map(s => `
         <div class="rv-fich ${s.present ? 'ok' : (s.obligatoire ? 'non' : 'warn')}">
-            <span>${s.present ? 'âœ“' : (s.obligatoire ? 'âœ—' : 'âš ï¸')}</span> ${s.fichier} <em>${s.role}</em>
+            <span>${s.present ? '✓' : (s.obligatoire ? '✗' : '⚠️')}</span> ${s.fichier} <em>${s.role}</em>
         </div>`).join('');
 }
 function renderAvertissements(f) {
@@ -747,15 +747,15 @@ function renderAvertissements(f) {
     const warns = [];
     if (Array.isArray(f.structure)) {
         const prj = f.structure.find(s => s.recommande);
-        if (prj && !prj.present) warns.push(t('avert_prj', "Le systÃ¨me de coordonnÃ©es n'a pas Ã©tÃ© fourni (.prj) : les coordonnÃ©es seront interprÃ©tÃ©es en WGS84. Fournissez idÃ©alement le fichier .prj."));
+        if (prj && !prj.present) warns.push(t('avert_prj', "Le système de coordonnées n'a pas été fourni (.prj) : les coordonnées seront interprétées en WGS84. Fournissez idéalement le fichier .prj."));
         const cpg = f.structure.find(s => s.role === 'Encodage');
-        if (cpg && !cpg.present) warns.push(t('avert_cpg', "Le fichier .cpg (encodage) n'a pas Ã©tÃ© fourni : l'encodage UTF-8 par dÃ©faut sera utilisÃ©."));
+        if (cpg && !cpg.present) warns.push(t('avert_cpg', "Le fichier .cpg (encodage) n'a pas été fourni : l'encodage UTF-8 par défaut sera utilisé."));
         const qmd = f.structure.find(s => s.role === 'Style QGIS');
-        if (qmd && !qmd.present) warns.push(t('avert_qmd', "Le fichier .qmd n'a pas Ã©tÃ© fourni : le style sera dÃ©fini dans l'Ã©tape suivante."));
-        if (qmd && qmd.present) warns.push(t('info_qmd', "Le fichier .qmd a Ã©tÃ© dÃ©tectÃ© : les couleurs et symboles seront importÃ©s automatiquement quand c'est possible."));
+        if (qmd && !qmd.present) warns.push(t('avert_qmd', "Le fichier .qmd n'a pas été fourni : le style sera défini dans l'étape suivante."));
+        if (qmd && qmd.present) warns.push(t('info_qmd', "Le fichier .qmd a été détecté : les couleurs et symboles seront importés automatiquement quand c'est possible."));
     }
     av.style.display = warns.length ? '' : 'none';
-    av.innerHTML = warns.map(w => `<div>âš ï¸ ${w}</div>`).join('');
+    av.innerHTML = warns.map(w => `<div>⚠️ ${w}</div>`).join('');
 }
 function renderEtape2() {
     const f = actif();
@@ -775,16 +775,16 @@ function renderEtape2() {
         const m = a.mapping;
         $('stat-lignes').textContent = `${a.stats.lignes} ${t('lignes', 'lignes')}`;
         $('stat-nom').textContent = a.stats.nom ? `${t('col_nom', 'Nom')}: ${a.stats.nom}` : t('col_nom_manquante', 'Colonne nom manquante');
-        $('stat-lat').textContent = a.stats.lat ? `${t('col_lat', 'Latitude')}: ${a.stats.lat} âœ“` : t('col_lat_manquante', 'Latitude manquante');
-        $('stat-lng').textContent = a.stats.lng ? `${t('col_lng', 'Longitude')}: ${a.stats.lng} âœ“` : t('col_lng_manquante', 'Longitude manquante');
+        $('stat-lat').textContent = a.stats.lat ? `${t('col_lat', 'Latitude')}: ${a.stats.lat} ✓` : t('col_lat_manquante', 'Latitude manquante');
+        $('stat-lng').textContent = a.stats.lng ? `${t('col_lng', 'Longitude')}: ${a.stats.lng} ✓` : t('col_lng_manquante', 'Longitude manquante');
         const notes = $('stat-notes');
         notes.style.display = a.stats.notes ? '' : 'none';
-        notes.textContent = a.stats.notes ? t('notes_detectees', 'Notes/description dÃ©tectÃ©es') : '';
+        notes.textContent = a.stats.notes ? t('notes_detectees', 'Notes/description détectées') : '';
         const mappingEl = $('mapping');
         mappingEl.innerHTML = '';
         const champs = [
             ['nom', t('col_nom', 'Nom')], ['latitude', t('col_lat', 'Latitude')],
-            ['longitude', t('col_lng', 'Longitude')], ['categorie', t('col_categorie', 'CatÃ©gorie')],
+            ['longitude', t('col_lng', 'Longitude')], ['categorie', t('col_categorie', 'Catégorie')],
             ['statut', t('col_statut', 'Statut')], ['description', t('col_notes', 'Notes/Description')],
             ['province', t('col_province', 'Province')], ['commune', t('col_commune', 'Commune')]
         ];
@@ -794,7 +794,7 @@ function renderEtape2() {
             lab.textContent = lib;
             const sel = document.createElement('select');
             sel.dataset.cle = cle;
-            sel.innerHTML = `<option value="">â€” ${t('non_importe', 'non importÃ©')} â€”</option>` +
+            sel.innerHTML = `<option value="">— ${t('non_importe', 'non importé')} —</option>` +
                 a.entetes.map((h, i) => `<option value="${i}" ${i === m[cle] ? 'selected' : ''}>${h}</option>`).join('');
             if (m[cle] != null) sel.classList.add('auto');
             sel.addEventListener('change', () => {
@@ -815,10 +815,10 @@ function renderEtape2() {
         $('etape2-sous').textContent = f.file.name;
         renderStructure(f);
         $('sig-type').textContent = a.sigType ? (TYPES_SIG[a.sigType] || a.sigType) : t('type_inconnu', 'Type inconnu');
-        $('sig-count').textContent = a.sigCount != null ? `${a.sigCount} ${t('geometries', 'gÃ©omÃ©trie(s)')}` : t('analyse_serveur', 'Analyse cÃ´tÃ© serveur');
-        $('sig-proj').textContent = f.epsg ? `Projection : EPSG:${f.epsg} âœ“` : t('projection_non_fournie', 'Projection : âš ï¸ non fournie');
-        $('sig-enc').textContent = f.encodage ? `Encodage : ${f.encodage} âœ“` : t('encodage_defaut', 'Encodage : UTF-8 par dÃ©faut');
-        $('sig-colonnes').innerHTML = a.colonnes.length ? a.colonnes.map(c => `<span class="chip">${c}</span>`).join('') : `<span class="chip">${t('aucune_colonne', 'aucun attribut dÃ©tectÃ©')}</span>`;
+        $('sig-count').textContent = a.sigCount != null ? `${a.sigCount} ${t('geometries', 'géométrie(s)')}` : t('analyse_serveur', 'Analyse côté serveur');
+        $('sig-proj').textContent = f.epsg ? `Projection : EPSG:${f.epsg} ✓` : t('projection_non_fournie', 'Projection : ⚠️ non fournie');
+        $('sig-enc').textContent = f.encodage ? `Encodage : ${f.encodage} ✓` : t('encodage_defaut', 'Encodage : UTF-8 par défaut');
+        $('sig-colonnes').innerHTML = a.colonnes.length ? a.colonnes.map(c => `<span class="chip">${c}</span>`).join('') : `<span class="chip">${t('aucune_colonne', 'aucun attribut détecté')}</span>`;
         renderAvertissements(f);
     }
     $('err-2').style.display = 'none';
@@ -839,19 +839,19 @@ function renderEtape3() {
         const m = a.mapping;
         r.innerHTML = `<div class="resume-grille">
             <div class="rv-item"><b>${a.stats.lignes}</b><span>${t('lignes', 'lignes')}</span></div>
-            <div class="rv-item"><b>${m.latitude != null ? 'âœ“' : 'âœ—'}</b><span>${t('col_lat', 'Latitude')} : ${m.latitude != null ? a.entetes[m.latitude] : t('col_lat_manquante', 'manquante')}</span></div>
-            <div class="rv-item"><b>${m.longitude != null ? 'âœ“' : 'âœ—'}</b><span>${t('col_lng', 'Longitude')} : ${m.longitude != null ? a.entetes[m.longitude] : t('col_lng_manquante', 'manquante')}</span></div>
-            <div class="rv-item"><b>${m.nom != null ? a.entetes[m.nom] : 'â€”'}</b><span>${t('col_nom', 'Nom')}</span></div>
+            <div class="rv-item"><b>${m.latitude != null ? '✓' : '✗'}</b><span>${t('col_lat', 'Latitude')} : ${m.latitude != null ? a.entetes[m.latitude] : t('col_lat_manquante', 'manquante')}</span></div>
+            <div class="rv-item"><b>${m.longitude != null ? '✓' : '✗'}</b><span>${t('col_lng', 'Longitude')} : ${m.longitude != null ? a.entetes[m.longitude] : t('col_lng_manquante', 'manquante')}</span></div>
+            <div class="rv-item"><b>${m.nom != null ? a.entetes[m.nom] : '—'}</b><span>${t('col_nom', 'Nom')}</span></div>
         </div>`;
     } else {
         const fichListe = (f.structure || []).map(s => `
             <div class="rv-fich ${s.present ? 'ok' : (s.obligatoire ? 'non' : 'warn')}">
-                <span>${s.present ? 'âœ“' : (s.obligatoire ? 'âœ—' : 'âš ï¸')}</span> ${s.fichier} <em>${s.role}</em>
+                <span>${s.present ? '✓' : (s.obligatoire ? '✗' : '⚠️')}</span> ${s.fichier} <em>${s.role}</em>
             </div>`).join('');
         r.innerHTML = `<div class="resume-grille">
-            <div class="rv-item"><b>${TYPES_SIG[a.sigType] || a.sigType || '?'}</b><span>${t('type_geometrie', 'Type de gÃ©omÃ©trie')}</span></div>
-            <div class="rv-item"><b>${a.sigCount != null ? a.sigCount : 'â€”'}</b><span>${t('geometries', 'gÃ©omÃ©trie(s)')}</span></div>
-            <div class="rv-item"><b>${f.epsg ? 'EPSG:' + f.epsg : 'âš ï¸ ' + t('projection_inconnue', 'non fournie')}</b><span>${t('projection', 'Projection')}</span></div>
+            <div class="rv-item"><b>${TYPES_SIG[a.sigType] || a.sigType || '?'}</b><span>${t('type_geometrie', 'Type de géométrie')}</span></div>
+            <div class="rv-item"><b>${a.sigCount != null ? a.sigCount : '—'}</b><span>${t('geometries', 'géométrie(s)')}</span></div>
+            <div class="rv-item"><b>${f.epsg ? 'EPSG:' + f.epsg : '⚠️ ' + t('projection_inconnue', 'non fournie')}</b><span>${t('projection', 'Projection')}</span></div>
             <div class="rv-item"><b>${f.encodage || 'UTF-8'}</b><span>${t('encodage', 'Encodage')}</span></div>
             <div class="rv-item"><b>${tailleLisible(f.file.size)}</b><span>${t('taille', 'Taille')}</span></div>
             <div class="rv-item"><b>${a.colonnes.length}</b><span>${t('colonnes', 'attribut(s)')}</span></div>
@@ -900,7 +900,7 @@ function styleApercu() {
     return {
         version: 8,
         sources: {
-            osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: 'Â© OpenStreetMap' }
+            osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' }
         },
         layers: [{ id: 'fond', type: 'raster', source: 'osm' }]
     };
@@ -919,13 +919,13 @@ function dessinerApercu(feats) {
         if (bb && bb[0][0] !== bb[1][0]) {
             m.fitBounds([[bb[0][0], bb[0][1]], [bb[1][0], bb[1][1]]], { padding: 60, maxZoom: 16, duration: 800 });
         }
-    } catch (e) { console.error('AperÃ§u carte :', e); }
+    } catch (e) { console.error('Aperçu carte :', e); }
 }
 function afficherTableApercu(feats) {
     const tab = $('apercu-table');
     if (!tab) return;
     if (!feats.length) {
-        tab.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text-3);">' + t('aucune_entite_apercu', 'Aucune entitÃ© Ã  afficher.') + '</div>';
+        tab.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text-3);">' + t('aucune_entite_apercu', 'Aucune entité à afficher.') + '</div>';
         return;
     }
     const vues = new Map();
@@ -1018,7 +1018,7 @@ function renderEtape5() {
             sw.appendChild(s);
         });
         const etq = $('style-etiquette');
-        etq.innerHTML = `<option value="">${t('style_aucune_etiquette', 'â€” aucune Ã©tiquette â€”')}</option>` +
+        etq.innerHTML = `<option value="">${t('style_aucune_etiquette', '— aucune étiquette —')}</option>` +
             a.colonnes.map(c => `<option value="${c}">${c}</option>`).join('');
         const catChamp = $('cat-champ');
         catChamp.innerHTML = a.colonnes.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -1139,7 +1139,7 @@ function validerEtape2() {
     if (f.analyse && f.analyse.type === 'points') {
         const m = f.analyse.mapping;
         if (m.latitude == null || m.longitude == null) {
-            $('err-2').textContent = t('colonnes_requises', 'SÃ©lectionnez les colonnes Latitude et Longitude.');
+            $('err-2').textContent = t('colonnes_requises', 'Sélectionnez les colonnes Latitude et Longitude.');
             $('err-2').style.display = '';
             return false;
         }
@@ -1154,7 +1154,7 @@ function validerEtape3() {
     if (f.analyse.type === 'points') {
         const m = f.analyse.mapping;
         if (m.latitude == null || m.longitude == null) {
-            $('err-3').textContent = t('colonnes_requises', 'SÃ©lectionnez les colonnes Latitude et Longitude.');
+            $('err-3').textContent = t('colonnes_requises', 'Sélectionnez les colonnes Latitude et Longitude.');
             $('err-3').style.display = '';
             return false;
         }
@@ -1171,7 +1171,7 @@ async function lancerImport() {
         const f = fichiers[i];
         try {
             if (f.etat === 'erreur') { res.erreurs.push(`${f.file.name} : ${f.message || '?'}`); continue; }
-            if (!f.analyse) { res.erreurs.push(`${f.file.name} : non analysÃ©`); continue; }
+            if (!f.analyse) { res.erreurs.push(`${f.file.name} : non analysé`); continue; }
             if (f.analyse.type === 'points') {
                 const { ok, donnees } = await importerPoints(f);
                 if (ok && donnees.ok) {
@@ -1203,15 +1203,15 @@ async function lancerImport() {
     $('resume-enregistrement').style.display = '';
     const r = $('resultat');
     const lignes = [];
-    if (res.points > 0) lignes.push(t('points_importes', 'âœ… {n} point(s) importÃ©(s) avec succÃ¨s').replace('{n}', res.points) + `${res.doublons ? ` Â· ${res.doublons} ${t('doublons', 'doublon(s)')}` : ''}${res.invalides ? ` Â· ${res.invalides} ${t('invalides', 'invalide(s)')}` : ''}`);
-    if (res.couches.length) lignes.push(`ðŸ—ºï¸ <b>${res.couches.length}</b> ${t('couches_importees', 'couche(s) crÃ©Ã©e(s)')} : ${res.couches.join(', ')}`);
-    if (res.erreurs.length) lignes.push(`<div style="color:var(--red);margin-top:6px;">${t('erreurs_import', 'Erreurs')} : ${res.erreurs.join(' Â· ')}</div>`);
-    if (!lignes.length) lignes.push(`<div style="color:var(--red);">${t('aucun_import', 'Aucune donnÃ©e importÃ©e.')}</div>`);
+    if (res.points > 0) lignes.push(t('points_importes', '✅ {n} point(s) importé(s) avec succès').replace('{n}', res.points) + `${res.doublons ? ` · ${res.doublons} ${t('doublons', 'doublon(s)')}` : ''}${res.invalides ? ` · ${res.invalides} ${t('invalides', 'invalide(s)')}` : ''}`);
+    if (res.couches.length) lignes.push(`🗺️ <b>${res.couches.length}</b> ${t('couches_importees', 'couche(s) créée(s)')} : ${res.couches.join(', ')}`);
+    if (res.erreurs.length) lignes.push(`<div style="color:var(--red);margin-top:6px;">${t('erreurs_import', 'Erreurs')} : ${res.erreurs.join(' · ')}</div>`);
+    if (!lignes.length) lignes.push(`<div style="color:var(--red);">${t('aucun_import', 'Aucune donnée importée.')}</div>`);
     const okGlobal = !res.erreurs.length && (res.points > 0 || res.couches.length);
     r.className = okGlobal ? 'ok' : 'err';
     r.innerHTML = lignes.join('<br>') + `<div class="actions" style="justify-content:center;">
-        <a class="btn btn-primary" href="${URL_CARTE}${res.coucheIds.length ? '?importe=' + res.coucheIds[0] : ''}">ðŸ—ºï¸ ${t('voir_carte', 'Voir sur la carte')}</a>
-        <button class="btn" onclick="location.reload()">ðŸ“¥ ${t('importer_autres', 'Importer d\'autres fichiers')}</button>
+        <a class="btn btn-primary" href="${URL_CARTE}${res.coucheIds.length ? '?importe=' + res.coucheIds[0] : ''}">🗺️ ${t('voir_carte', 'Voir sur la carte')}</a>
+        <button class="btn" onclick="location.reload()">📥 ${t('importer_autres', 'Importer d\'autres fichiers')}</button>
     </div>`;
     r.style.display = '';
     goStep(7);
@@ -1232,7 +1232,7 @@ function ajouterFichiers(liste) {
         const entree = {
             id: idSuivant++, file: fichier, ext, type,
             etat: type ? 'attente' : 'erreur',
-            message: type ? '' : t('format_non_supporte', 'Format non supportÃ©.'),
+            message: type ? '' : t('format_non_supporte', 'Format non supporté.'),
             analyse: null
         };
         fichiers.push(entree);
@@ -1256,7 +1256,7 @@ function ajouterFichiers(liste) {
         fichiers.push({
             id: idSuivant++, file: fichier, ext: extDe(fichier.name), type: 'sidecar',
             etat: 'erreur',
-            message: t('composant_sans_shp', 'Fichier .shp manquant pour ce composant â€” dÃ©posez tous les fichiers du Shapefile ensemble (mÃªme nom de base).'),
+            message: t('composant_sans_shp', 'Fichier .shp manquant pour ce composant — déposez tous les fichiers du Shapefile ensemble (même nom de base).'),
             analyse: null
         });
     });
