@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Import de données — MUKMAP v1.0</title>
+    <title>Import de donnÃƒÂ©es Ã¢â‚¬â€ MUKMAP v1.0</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
     <style>
         :root {
             --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
@@ -48,7 +49,7 @@
         .card h2 { font-size: 1.05rem; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
         .card .sous { color: var(--text-3); font-size: .8rem; margin-bottom: 16px; }
 
-        /* ── Stepper ── */
+        /* Ã¢â€â‚¬Ã¢â€â‚¬ Stepper Ã¢â€â‚¬Ã¢â€â‚¬ */
         .stepper { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
         .step { flex: 1; min-width: 150px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--border); color: var(--text-3); font-weight: 600; font-size: .8rem; opacity: .7; }
         .step .num { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .75rem; flex: none; }
@@ -64,7 +65,7 @@
         .zone-drop:hover, .zone-drop.survol { border-color: var(--accent); color: var(--accent); background: rgba(109,93,246,.06); transform: translateY(-1px); }
         .zone-drop .grand { font-size: 2rem; }
 
-        /* ── Liste des fichiers ── */
+        /* Ã¢â€â‚¬Ã¢â€â‚¬ Liste des fichiers Ã¢â€â‚¬Ã¢â€â‚¬ */
         .fichier-ligne { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--border); margin-top: 8px; }
         .fichier-ligne.actif { border-color: var(--accent); }
         .fichier-nom { flex: 1; font-weight: 600; font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -129,6 +130,24 @@
 
         .alerte { display: none; margin-top: 12px; padding: 12px 14px; border-radius: 10px; font-size: .82rem; font-weight: 600; }
         .alerte.err { display: block; background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
+        .alerte.warn { display: block; background: rgba(245,158,11,.12); color: var(--orange); border: 1px solid rgba(245,158,11,.35); }
+        .alerte.warn div { padding: 2px 0; }
+        .rv-fich { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: .78rem; border: 1px solid var(--border); margin-bottom: 4px; background: var(--bg-2); }
+        .rv-fich em { margin-left: auto; font-style: normal; font-size: .68rem; color: var(--text-3); }
+        .rv-fich.ok span { color: var(--green); font-weight: 700; }
+        .rv-fich.warn span { color: var(--orange); font-weight: 700; }
+        .rv-fich.non span { color: var(--red); font-weight: 700; }
+        .rv-fich.warn { border-color: rgba(245,158,11,.35); }
+        .rv-fich.non { border-color: rgba(239,68,68,.35); }
+        .resume-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-bottom: 8px; }
+        .rv-item { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+        .rv-item b { display: block; font-size: .95rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rv-item span { font-size: .68rem; color: var(--text-3); text-transform: uppercase; letter-spacing: .4px; }
+        #apercu-table table { min-width: 100%; }
+        #apercu-table tr[data-feat] { cursor: pointer; }
+        #apercu-table tr[data-feat].sel td { background: rgba(109,93,246,.25); }
+        .maplibregl-popup-content { background: var(--bg-2) !important; color: var(--text) !important; border-radius: 12px !important; }
+        .maplibregl-popup-tip { border-top-color: var(--bg-2) !important; }
         .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
     </style>
 {% include 'cartographie/_pwa_head.html' %}
@@ -138,36 +157,39 @@
     <div class="pastille"><img src="{{ mukmap_logo }}" alt="MUKMAP" style="width:100%;height:100%;object-fit:cover;border-radius:11px;background:#fff"></div>
     <div>
         <div class="titre">MUK<span style="color:var(--accent);">MAP</span> <span style="font-size:.58rem;color:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:1px 6px;letter-spacing:1px;">v1.0</span></div>
-        <div class="sous-titre" data-i18n="import_donnees_intelligent">Import de données intelligent</div>
+        <div class="sous-titre" data-i18n="import_donnees_intelligent">Import de donnÃƒÂ©es intelligent</div>
     </div>
     <nav>
-        <a href="{% url 'dashboard' %}"><i>📊</i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
-        <a href="{% url 'index_cartographie' %}"><i>🗺️</i> <span data-i18n="cartographie">Cartographie</span></a>
-        <a href="{% url 'points_liste' %}"><i>📍</i> <span data-i18n="tous_points">Tous les points</span></a>
-        <a href="{% url 'import_page' %}" class="actif"><i>📥</i> <span data-i18n="import_donnees">Import de données</span></a>
-        <a href="{% url 'rapport_generer' %}"><i>📄</i> <span data-i18n="rapports">Rapports</span></a>
+        <a href="{% url 'dashboard' %}"><i>Ã°Å¸â€œÅ </i> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'index_cartographie' %}"><i>Ã°Å¸â€”ÂºÃ¯Â¸Â</i> <span data-i18n="cartographie">Cartographie</span></a>
+        <a href="{% url 'points_liste' %}"><i>Ã°Å¸â€œÂ</i> <span data-i18n="tous_points">Tous les points</span></a>
+        <a href="{% url 'import_page' %}" class="actif"><i>Ã°Å¸â€œÂ¥</i> <span data-i18n="import_donnees">Import de donnÃƒÂ©es</span></a>
+        <a href="{% url 'rapport_generer' %}"><i>Ã°Å¸â€œâ€ž</i> <span data-i18n="rapports">Rapports</span></a>
     </nav>
     <div class="droite">
         {% include 'cartographie/_selecteur_langue.html' %}
-        <form method="post" action="{% url 'deconnexion' %}" style="display:inline">{% csrf_token %}<button type="submit" class="btn"><span data-i18n="deconnexion">Déconnexion</span></button></form>
+        <form method="post" action="{% url 'deconnexion' %}" style="display:inline">{% csrf_token %}<button type="submit" class="btn"><span data-i18n="deconnexion">DÃƒÂ©connexion</span></button></form>
     </div>
 </header>
 
 <main class="conteneur">
     <div class="stepper" id="stepper">
         <div class="step actif" data-etape="1"><span class="num">1</span><span data-i18n="etape_importer">Importer</span></div>
-        <div class="step" data-etape="2"><span class="num">2</span><span data-i18n="etape_verifier">Vérifier</span></div>
-        <div class="step" data-etape="3"><span class="num">3</span><span data-i18n="etape_configurer">Configurer</span></div>
-        <div class="step" data-etape="4"><span class="num">4</span><span data-i18n="etape_afficher">Afficher</span></div>
+        <div class="step" data-etape="2"><span class="num">2</span><span data-i18n="etape_analyser">Analyser</span></div>
+        <div class="step" data-etape="3"><span class="num">3</span><span data-i18n="etape_valider">Valider</span></div>
+        <div class="step" data-etape="4"><span class="num">4</span><span data-i18n="etape_afficher">AperÃƒÂ§u</span></div>
+        <div class="step" data-etape="5"><span class="num">5</span><span data-i18n="etape_configurer">Configurer</span></div>
+        <div class="step" data-etape="6"><span class="num">6</span><span data-i18n="etape_enregistrer">Enregistrer</span></div>
+        <div class="step" data-etape="7"><span class="num">7</span><span data-i18n="etape_resultat">RÃƒÂ©sultat</span></div>
     </div>
 
     <div class="card" id="etape-1">
-        <h2>📥 <span data-i18n="etape1_titre">1. Choisissez vos fichiers</span></h2>
-        <p class="sous" data-i18n="formats_supportes">Formats supportés : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (points) · <b>.zip</b> ou <b>.shp</b> + <b>.shx</b>/<b>.dbf</b>/<b>.prj</b>/<b>.cpg</b>/<b>.qmd</b> (Shapefile — déposez tous les fichiers ensemble) · <b>.geojson</b>, <b>.kml</b>, <b>.kmz</b>, <b>.gpx</b> (couches SIG).</p>
+        <h2>Ã°Å¸â€œÂ¥ <span data-i18n="etape1_titre">1. Choisissez vos fichiers</span></h2>
+        <p class="sous" data-i18n="formats_supportes">Formats supportÃƒÂ©s : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (points) Ã‚Â· <b>.zip</b> ou <b>.shp</b> + <b>.shx</b>/<b>.dbf</b>/<b>.prj</b>/<b>.cpg</b>/<b>.qmd</b> (Shapefile Ã¢â‚¬â€ dÃƒÂ©posez tous les fichiers ensemble) Ã‚Â· <b>.geojson</b>, <b>.kml</b>, <b>.kmz</b>, <b>.gpx</b> (couches SIG).</p>
         <div class="zone-drop" id="zone-drop">
-            <div class="grand">📂</div>
-            <div><span data-i18n="glissez_deposez"><b>Glissez-déposez</b> vos fichiers ici ou cliquez pour parcourir</span></div>
-            <div style="font-size:.75rem;margin-top:6px;opacity:.8;" data-i18n="aide_shapefile">Plusieurs fichiers possibles — la nature de chaque fichier est détectée automatiquement.</div>
+            <div class="grand">Ã°Å¸â€œâ€š</div>
+            <div><span data-i18n="glissez_deposez"><b>Glissez-dÃƒÂ©posez</b> vos fichiers ici ou cliquez pour parcourir</span></div>
+            <div style="font-size:.75rem;margin-top:6px;opacity:.8;" data-i18n="aide_shapefile">Plusieurs fichiers possibles Ã¢â‚¬â€ la nature de chaque fichier est dÃƒÂ©tectÃƒÂ©e automatiquement.</div>
             <input type="file" id="fichier" accept=".xlsx,.xls,.csv,.zip,.shp,.shx,.dbf,.prj,.cpg,.qmd,.geojson,.json,.kml,.kmz,.gpx" multiple hidden>
         </div>
         <div id="liste-fichiers"></div>
@@ -175,12 +197,13 @@
     </div>
 
     <div class="card" id="etape-2" style="display:none;">
-        <h2>🧭 <span data-i18n="etape2_titre">2. Vérifiez vos données</span></h2>
+        <h2>Ã°Å¸â€Å½ <span data-i18n="etape2_titre">2. Analyse</span></h2>
         <p class="sous" id="etape2-sous"></p>
+        <div id="structure-fichiers" style="display:none;margin-bottom:10px;"></div>
         <div id="panneau-points" style="display:none;">
             <div class="mapping" id="mapping"></div>
             <div class="stat">
-                <span class="pill" id="stat-lignes">—</span>
+                <span class="pill" id="stat-lignes">Ã¢â‚¬â€</span>
                 <span class="pill" id="stat-nom"></span>
                 <span class="pill" id="stat-lat"></span>
                 <span class="pill" id="stat-lng"></span>
@@ -192,22 +215,58 @@
             <div class="stat">
                 <span class="pill verte" id="sig-type"></span>
                 <span class="pill" id="sig-count"></span>
+                <span class="pill" id="sig-proj"></span>
+                <span class="pill" id="sig-enc"></span>
             </div>
             <div style="margin-top:10px;">
-                <div style="font-size:.72rem;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;" data-i18n="colonnes_detectees">Colonnes / attributs détectés</div>
+                <div style="font-size:.72rem;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;" data-i18n="colonnes_detectees">Colonnes / attributs dÃƒÂ©tectÃƒÂ©s</div>
                 <div class="chips" id="sig-colonnes"></div>
             </div>
+            <div class="alerte warn" id="sig-avertissements" style="display:none;margin-top:10px;"></div>
         </div>
         <div class="alerte err" id="err-2"></div>
         <div class="actions">
-            <button class="btn" id="retour-2">← <span data-i18n="retour">Retour</span></button>
-            <button class="btn btn-primary" id="suivant-3"><span data-i18n="suivant">Suivant</span> →</button>
+            <button class="btn" id="retour-2">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="suivant-3"><span data-i18n="suivant">Suivant</span> Ã¢â€ â€™</button>
         </div>
     </div>
 
     <div class="card" id="etape-3" style="display:none;">
-        <h2>🎨 <span data-i18n="etape3_titre">3. Configurez le style</span></h2>
+        <h2>Ã¢Å“â€¦ <span data-i18n="etape3_titre">3. Validation</span></h2>
         <p class="sous" id="etape3-sous"></p>
+        <div id="resume-validation"></div>
+        <label data-i18n="nom_couche_label">Nom de la couche</label>
+        <input id="val-nom-couche" placeholder="Ma couche">
+        <label data-i18n="source_label">Source / provenance</label>
+        <input id="val-source" placeholder="Ex. : relevÃƒÂ© terrain 2026, ministÃƒÂ¨reÃ¢â‚¬Â¦" style="margin-bottom:8px;">
+        <label data-i18n="description_label">Description (facultatif)</label>
+        <textarea id="val-description" rows="2" placeholder="DÃƒÂ©crivez le contenu de la coucheÃ¢â‚¬Â¦"></textarea>
+        <div class="alerte err" id="err-3"></div>
+        <div class="actions">
+            <button class="btn" id="retour-3b">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="btn-valider">Ã¢Å“â€¦ <span data-i18n="valider_importer_couche">Valider et importer la couche</span></button>
+        </div>
+    </div>
+
+    <div class="card" id="etape-4" style="display:none;">
+        <h2>Ã°Å¸â€”ÂºÃ¯Â¸Â <span data-i18n="etape4_titre">4. AperÃƒÂ§u sur la carte</span></h2>
+        <p class="sous" id="etape4-sous"></p>
+        <div style="position:relative;height:340px;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px;">
+            <div id="apercu-carte" style="position:absolute;inset:0;"></div>
+            <div style="position:absolute;left:10px;bottom:10px;background:rgba(15,23,42,.8);color:#fff;font-size:.7rem;padding:5px 9px;border-radius:8px;backdrop-filter:blur(4px);z-index:2;" data-i18n="apercu_aide_carte">Ã°Å¸â€“Â±Ã¯Â¸Â DÃƒÂ©placez la carte, molette pour zoomer Ã¢â‚¬â€ cliquez une entitÃƒÂ© pour consulter ses attributs.</div>
+        </div>
+        <div style="font-size:.72rem;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;" data-i18n="apercu_attributs_titre">Tableau des attributs</div>
+        <div class="apercu" id="apercu-table" style="max-height:220px;overflow:auto;"></div>
+        <div class="alerte err" id="err-4"></div>
+        <div class="actions">
+            <button class="btn" id="retour-4">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="suivant-5"><span data-i18n="suivant">Suivant</span> Ã¢â€ â€™</button>
+        </div>
+    </div>
+
+    <div class="card" id="etape-5" style="display:none;">
+        <h2>Ã°Å¸Å½Â¨ <span data-i18n="etape5_titre">5. Configurez le style</span></h2>
+        <p class="sous" id="etape5-sous"></p>
 
         <div id="panneau-style-sig" style="display:none;">
             <label data-i18n="nom_couche_label">Nom de la couche</label>
@@ -221,13 +280,13 @@
                 <div>
                     <label data-i18n="style_symbole_lib">Symbole</label>
                     <select id="style-symbole">
-                        <option value="cercle">● Cercle</option>
-                        <option value="carre">■ Carré</option>
-                        <option value="triangle">▲ Triangle</option>
-                        <option value="losange">◆ Losange</option>
-                        <option value="croix">✚ Croix</option>
-                        <option value="etoile">★ Étoile</option>
-                        <option value="point">• Point</option>
+                        <option value="cercle">Ã¢â€”Â Cercle</option>
+                        <option value="carre">Ã¢â€“Â  CarrÃƒÂ©</option>
+                        <option value="triangle">Ã¢â€“Â² Triangle</option>
+                        <option value="losange">Ã¢â€”â€  Losange</option>
+                        <option value="croix">Ã¢Å“Å¡ Croix</option>
+                        <option value="etoile">Ã¢Ëœâ€¦ Ãƒâ€°toile</option>
+                        <option value="point">Ã¢â‚¬Â¢ Point</option>
                     </select>
                 </div>
             </div>
@@ -244,19 +303,19 @@
                 </div>
             </div>
             <div>
-                <label data-i18n="style_etiquette_lib">Étiquette affichée</label>
+                <label data-i18n="style_etiquette_lib">Ãƒâ€°tiquette affichÃƒÂ©e</label>
                 <select id="style-etiquette"></select>
             </div>
             <div>
-                <label class="cb"><input type="checkbox" id="style-cat-active"> <span data-i18n="style_categorisation_lib">Catégorisation (couleur par valeur)</span></label>
+                <label class="cb"><input type="checkbox" id="style-cat-active"> <span data-i18n="style_categorisation_lib">CatÃƒÂ©gorisation (couleur par valeur)</span></label>
                 <div id="panneau-cat" style="display:none;">
                     <div class="style-2col">
                         <div>
-                            <label data-i18n="style_champ_cat_lib">Colonne de catégorisation</label>
+                            <label data-i18n="style_champ_cat_lib">Colonne de catÃƒÂ©gorisation</label>
                             <select id="cat-champ"></select>
                         </div>
                         <div style="display:flex;align-items:flex-end;padding-bottom:2px;">
-                            <button class="btn btn-ico" id="btn-regenerer" style="width:100%;">🔄 <span data-i18n="style_regenerer">Régénérer les couleurs</span></button>
+                            <button class="btn btn-ico" id="btn-regenerer" style="width:100%;">Ã°Å¸â€â€ž <span data-i18n="style_regenerer">RÃƒÂ©gÃƒÂ©nÃƒÂ©rer les couleurs</span></button>
                         </div>
                     </div>
                     <div id="classes-cat"></div>
@@ -265,28 +324,39 @@
         </div>
 
         <div id="panneau-style-points" style="display:none;">
-            <p class="sous" data-i18n="points_colores_categorie">Les points sont colorés automatiquement selon leur catégorie sur la carte.</p>
+            <p class="sous" data-i18n="points_colores_categorie">Les points sont colorÃƒÂ©s automatiquement selon leur catÃƒÂ©gorie sur la carte.</p>
             <div class="legende-preview" id="legende-preview"></div>
         </div>
-
-        <div class="alerte err" id="err-3"></div>
+        <div class="alerte err" id="err-5"></div>
         <div class="actions">
-            <button class="btn" id="retour-3">← <span data-i18n="retour">Retour</span></button>
-            <button class="btn btn-primary" id="btn-importer">🚀 <span data-i18n="valider_importer">Valider et importer</span></button>
+            <button class="btn" id="retour-5">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="suivant-6"><span data-i18n="suivant">Suivant</span> Ã¢â€ â€™</button>
         </div>
     </div>
 
-    <div class="card" id="etape-4" style="display:none;">
-        <h2>✅ <span data-i18n="etape4_titre">4. Résultat</span></h2>
-        <p class="sous" data-i18n="import_termine">Import terminé</p>
-        <div id="progression">
+    <div class="card" id="etape-6" style="display:none;">
+        <h2>Ã°Å¸â€™Â¾ <span data-i18n="etape6_titre">6. Enregistrement</span></h2>
+        <p class="sous" id="etape6-sous"></p>
+        <div id="resume-enregistrement"></div>
+        <div id="progression" style="display:none;">
             <div class="spin"></div>
-            <div data-i18n="import_en_cours">Import en cours… analyse et déduplication des données.</div>
+            <div data-i18n="import_en_cours">Import en coursÃ¢â‚¬Â¦ analyse et dÃƒÂ©duplication des donnÃƒÂ©es.</div>
         </div>
+        <div class="alerte err" id="err-6"></div>
+        <div class="actions">
+            <button class="btn" id="retour-6">Ã¢â€ Â <span data-i18n="retour">Retour</span></button>
+            <button class="btn btn-primary" id="btn-importer">Ã°Å¸Å¡â‚¬ <span data-i18n="valider_importer">Valider et importer</span></button>
+        </div>
+    </div>
+
+    <div class="card" id="etape-7" style="display:none;">
+        <h2>Ã¢Å“â€¦ <span data-i18n="etape7_titre">7. RÃƒÂ©sultat</span></h2>
+        <p class="sous" data-i18n="import_termine">Import terminÃƒÂ©</p>
         <div id="resultat"></div>
     </div>
 </main>
 
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="{% static 'js/vendor/xlsx.full.min.js' %}?v=1" defer></script>
 <script src="{% static 'js/vendor/shp.min.js' %}?v=1" defer></script>
 <script>
@@ -305,14 +375,14 @@ const CATS_LEGENDE = {
     'activite': '#ef4444', 'ecole': '#3b82f6', 'hopital': '#22c55e', 'riverain': '#f59e0b', 'service': '#8b5cf6', 'autre': '#64748b'
 };
 const NOMS_COLS = {
-    nom: ['nom', 'name', 'libelle', 'libellé', 'designation', 'désignation', 'titre', 'intitule'],
+    nom: ['nom', 'name', 'libelle', 'libellÃ©', 'designation', 'dÃ©signation', 'titre', 'intitule'],
     latitude: ['latitude', 'lat', 'lat_deg', 'latitude_deg', 'y', 'latitud'],
     longitude: ['longitude', 'lon', 'lng', 'long', 'long_deg', 'lng_deg', 'x', 'longitud'],
-    categorie: ['categorie', 'catégorie', 'type', 'nature', 'category', 'classe'],
-    statut: ['statut', 'status', 'etat', 'état', 'fonctionnel', 'fonctionnel?'],
-    description: ['description', 'desc', 'details', 'détails', 'commentaire', 'remarque', 'notes', 'note'],
-    province: ['province', 'region', 'région', 'division', 'province/region'],
-    commune: ['commune', 'territoire', 'village', 'localite', 'localité', 'ville']
+    categorie: ['categorie', 'catÃ©gorie', 'type', 'nature', 'category', 'classe'],
+    statut: ['statut', 'status', 'etat', 'Ã©tat', 'fonctionnel', 'fonctionnel?'],
+    description: ['description', 'desc', 'details', 'dÃ©tails', 'commentaire', 'remarque', 'notes', 'note'],
+    province: ['province', 'region', 'rÃ©gion', 'division', 'province/region'],
+    commune: ['commune', 'territoire', 'village', 'localite', 'localitÃ©', 'ville']
 };
 let fichiers = [];
 let idSuivant = 1;
@@ -423,6 +493,39 @@ function analyserPoints(csvLignes) {
         }
     };
 }
+function stemDe(nom) {
+    return nom.replace(/\.(shp|shx|shpx|dbf|prj|cpg|qmd)$/i, '').toLowerCase();
+}
+function epsgDepuisPrj(texte) {
+    const m = /AUTHORITY\s*\[\s*"EPSG"\s*,\s*"(\d+)"\s*\]/.exec(texte || '');
+    if (m) return parseInt(m[1], 10);
+    const u = /UTM\s+zone\s+(\d+)\s*([NS])/i.exec(texte || '');
+    if (u) return 32600 + parseInt(u[1], 10) + (u[2].toUpperCase() === 'S' ? 100 : 0);
+    const um = /UTM_ZONE_(\d+)([NS])/i.exec(texte || '');
+    if (um) return 32600 + parseInt(um[1], 10) + (um[2].toUpperCase() === 'S' ? 100 : 0);
+const haut = (texte || '').toUpperCase();
+    if (haut.includes('WEB MERCATOR') || (haut.includes('MERCATOR') && haut.includes('PSEUDO'))) return 3857;
+    if (haut.includes('GEOGCS') && haut.includes('WGS 84')) return 4326;
+    return null;
+}
+function structureDe(entree) {
+    const stem = stemDe(entree.file.name);
+    const comps = entree.composants || {};
+    if (entree.ext === '.shp') {
+        return [
+            { fichier: entree.file.name, present: true, obligatoire: true, recommande: false, role: 'GÃ©omÃ©tries' },
+            { fichier: stem + '.shx', present: !!comps['.shx'], obligatoire: true, recommande: false, role: 'Index' },
+            { fichier: stem + '.dbf', present: !!comps['.dbf'], obligatoire: true, recommande: false, role: 'Attributs' },
+            { fichier: stem + '.prj', present: !!comps['.prj'], obligatoire: false, recommande: true, role: 'Projection' },
+            { fichier: stem + '.cpg', present: !!comps['.cpg'], obligatoire: false, recommande: false, role: 'Encodage' },
+            { fichier: stem + '.qmd', present: !!comps['.qmd'], obligatoire: false, recommande: false, role: 'Style QGIS' }
+        ];
+    }
+    if (entree.ext === '.zip') {
+        return [{ fichier: entree.file.name, present: true, obligatoire: true, recommande: false, role: 'Archive ZIP (une ou plusieurs couches)' }];
+    }
+    return [{ fichier: entree.file.name, present: true, obligatoire: true, recommande: false, role: 'Couche SIG' }];
+}
 async function analyserFichier(entree) {
     const ext = extDe(entree.file.name);
     entree.etat = 'analyse';
@@ -443,7 +546,7 @@ async function analyserFichier(entree) {
             entree.etat = 'ok';
             if (!entree.analyse.stats.latValides && !entree.analyse.stats.lngValides) {
                 entree.etat = 'erreur';
-                entree.message = t('erreur_aucune_coordonnee', 'Aucune coordonnée valide détectée dans ce fichier.');
+                entree.message = t('erreur_aucune_coordonnee', 'Aucune coordonnÃ©e valide dÃ©tectÃ©e dans ce fichier.');
             }
         } else if (entree.type === 'sig' && (ext === '.geojson' || ext === '.json')) {
             const buf = await lireFichier(entree.file, 'readAsArrayBuffer');
@@ -459,6 +562,7 @@ async function analyserFichier(entree) {
                 categoriesDispo: colonnes.length > 0,
                 features
             };
+            entree.structure = structureDe(entree);
             entree.etat = 'ok';
         } else if (entree.type === 'sig' && ext === '.kml') {
             const texte = await lireFichier(entree.file, 'readAsText');
@@ -485,6 +589,7 @@ async function analyserFichier(entree) {
                 type: 'sig', sigType: geomType, sigCount: placemarks.length,
                 colonnes, valeursCat: {}, categoriesDispo: false
             };
+            entree.structure = structureDe(entree);
             entree.etat = 'ok';
         } else if (entree.type === 'sig' && ext === '.gpx') {
             const texte = await lireFichier(entree.file, 'readAsText');
@@ -506,8 +611,10 @@ async function analyserFichier(entree) {
                 type: 'sig', sigType: geomType, sigCount: count,
                 colonnes, valeursCat: {}, categoriesDispo: false
             };
+            entree.structure = structureDe(entree);
             entree.etat = 'ok';
         } else if (entree.type === 'sig' && (ext === '.zip' || ext === '.shp')) {
+            entree.structure = structureDe(entree);
             let sig = null;
             if (ext === '.zip' && window.shp && typeof window.shp.parseZip === 'function') {
                 try {
@@ -530,6 +637,14 @@ async function analyserFichier(entree) {
                         properties: props && props[i] ? props[i] : {}
                     }));
                     sig = { features: feats };
+                    if (comp['.prj']) {
+                        const texte = await lireFichier(comp['.prj'], 'readAsText');
+                        entree.epsg = epsgDepuisPrj(texte);
+                    }
+                    if (comp['.cpg']) {
+                        const texte = await lireFichier(comp['.cpg'], 'readAsText');
+                        entree.encodage = (texte || '').trim() || 'UTF-8';
+                    }
                 } catch (e) { sig = null; }
             }
             if (sig && sig.features && sig.features.length) {
@@ -567,22 +682,22 @@ async function analyserFichier(entree) {
     }
     renderListe();
 }
-const ICO_ETAT = { ok: '✅', erreur: '⚠️', analyse: '⏳' };
+const ICO_ETAT = { ok: 'âœ…', erreur: 'âš ï¸', analyse: 'â³' };
 function renderListe() {
     const zone = $('liste-fichiers');
     if (!fichiers.length) { zone.innerHTML = ''; return; }
     zone.innerHTML = fichiers.map((f, i) => {
         const badge = f.type === 'points' ? t('badge_points', 'Points') : f.type === 'sidecar' ? t('badge_composant', 'Composant') : t('badge_sig', 'Couche SIG');
         const comps = (f.type === 'sig' && f.composants && Object.keys(f.composants).length)
-            ? ` · <span style="opacity:.7">${Object.keys(f.composants).length} ${t('badge_composants', 'composant(s)')}</span>` : '';
+            ? ` Â· <span style="opacity:.7">${Object.keys(f.composants).length} ${t('badge_composants', 'composant(s)')}</span>` : '';
         const titre = f.file.name + (f.type === 'sig' && f.composants ? ' + ' + Object.keys(f.composants).join(' ') : '');
         return `
         <div class="fichier-ligne ${i === fichierActif ? 'actif' : ''}" data-idx="${i}">
-            <span>${ICO_ETAT[f.etat] || '📄'}</span>
+            <span>${ICO_ETAT[f.etat] || 'ðŸ“„'}</span>
             <div class="fichier-nom" title="${titre}">${f.file.name}${comps}</div>
             <span class="badge ${f.type || ''}">${badge}</span>
             <span class="fichier-taille">${tailleLisible(f.file.size)}</span>
-            <button class="btn btn-ico" data-retirer="${i}">🗑️</button>
+            <button class="btn btn-ico" data-retirer="${i}">ðŸ—‘ï¸</button>
         </div>`;
     }).join('');
     zone.querySelectorAll('[data-idx]').forEach(l => l.addEventListener('click', (ev) => {
@@ -599,7 +714,7 @@ function renderListe() {
     }));
 }
 function goStep(n) {
-    [1, 2, 3, 4].forEach(i => {
+    [1, 2, 3, 4, 5, 6, 7].forEach(i => {
         const c = $('etape-' + i);
         if (c) c.style.display = i === n ? '' : 'none';
     });
@@ -610,9 +725,38 @@ function goStep(n) {
     });
     if (n === 2) renderEtape2();
     if (n === 3) renderEtape3();
+    if (n === 4) renderEtape4();
+    if (n === 5) renderEtape5();
+    if (n === 6) renderEtape6();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function actif() { return fichiers[fichierActif]; }
+const TYPES_SIG = { Point: 'Points', LineString: 'Lignes', Polygon: 'Polygones' };
+function renderStructure(f) {
+    const sf = $('structure-fichiers');
+    const structure = f.structure || [];
+    sf.style.display = structure.length ? '' : 'none';
+    sf.innerHTML = structure.map(s => `
+        <div class="rv-fich ${s.present ? 'ok' : (s.obligatoire ? 'non' : 'warn')}">
+            <span>${s.present ? 'âœ“' : (s.obligatoire ? 'âœ—' : 'âš ï¸')}</span> ${s.fichier} <em>${s.role}</em>
+        </div>`).join('');
+}
+function renderAvertissements(f) {
+    const av = $('sig-avertissements');
+    if (!av) return;
+    const warns = [];
+    if (Array.isArray(f.structure)) {
+        const prj = f.structure.find(s => s.recommande);
+        if (prj && !prj.present) warns.push(t('avert_prj', "Le systÃ¨me de coordonnÃ©es n'a pas Ã©tÃ© fourni (.prj) : les coordonnÃ©es seront interprÃ©tÃ©es en WGS84. Fournissez idÃ©alement le fichier .prj."));
+        const cpg = f.structure.find(s => s.role === 'Encodage');
+        if (cpg && !cpg.present) warns.push(t('avert_cpg', "Le fichier .cpg (encodage) n'a pas Ã©tÃ© fourni : l'encodage UTF-8 par dÃ©faut sera utilisÃ©."));
+        const qmd = f.structure.find(s => s.role === 'Style QGIS');
+        if (qmd && !qmd.present) warns.push(t('avert_qmd', "Le fichier .qmd n'a pas Ã©tÃ© fourni : le style sera dÃ©fini dans l'Ã©tape suivante."));
+        if (qmd && qmd.present) warns.push(t('info_qmd', "Le fichier .qmd a Ã©tÃ© dÃ©tectÃ© : les couleurs et symboles seront importÃ©s automatiquement quand c'est possible."));
+    }
+    av.style.display = warns.length ? '' : 'none';
+    av.innerHTML = warns.map(w => `<div>âš ï¸ ${w}</div>`).join('');
+}
 function renderEtape2() {
     const f = actif();
     if (!f) { goStep(1); return; }
@@ -626,20 +770,21 @@ function renderEtape2() {
     if (a.type === 'points') {
         $('panneau-points').style.display = '';
         $('panneau-sig').style.display = 'none';
+        $('structure-fichiers').style.display = 'none';
         $('etape2-sous').textContent = f.file.name;
         const m = a.mapping;
         $('stat-lignes').textContent = `${a.stats.lignes} ${t('lignes', 'lignes')}`;
         $('stat-nom').textContent = a.stats.nom ? `${t('col_nom', 'Nom')}: ${a.stats.nom}` : t('col_nom_manquante', 'Colonne nom manquante');
-        $('stat-lat').textContent = a.stats.lat ? `${t('col_lat', 'Latitude')}: ${a.stats.lat} ✓` : t('col_lat_manquante', 'Latitude manquante');
-        $('stat-lng').textContent = a.stats.lng ? `${t('col_lng', 'Longitude')}: ${a.stats.lng} ✓` : t('col_lng_manquante', 'Longitude manquante');
+        $('stat-lat').textContent = a.stats.lat ? `${t('col_lat', 'Latitude')}: ${a.stats.lat} âœ“` : t('col_lat_manquante', 'Latitude manquante');
+        $('stat-lng').textContent = a.stats.lng ? `${t('col_lng', 'Longitude')}: ${a.stats.lng} âœ“` : t('col_lng_manquante', 'Longitude manquante');
         const notes = $('stat-notes');
         notes.style.display = a.stats.notes ? '' : 'none';
-        notes.textContent = a.stats.notes ? t('notes_detectees', 'Notes/description détectées') : '';
+        notes.textContent = a.stats.notes ? t('notes_detectees', 'Notes/description dÃ©tectÃ©es') : '';
         const mappingEl = $('mapping');
         mappingEl.innerHTML = '';
         const champs = [
             ['nom', t('col_nom', 'Nom')], ['latitude', t('col_lat', 'Latitude')],
-            ['longitude', t('col_lng', 'Longitude')], ['categorie', t('col_categorie', 'Catégorie')],
+            ['longitude', t('col_lng', 'Longitude')], ['categorie', t('col_categorie', 'CatÃ©gorie')],
             ['statut', t('col_statut', 'Statut')], ['description', t('col_notes', 'Notes/Description')],
             ['province', t('col_province', 'Province')], ['commune', t('col_commune', 'Commune')]
         ];
@@ -649,7 +794,7 @@ function renderEtape2() {
             lab.textContent = lib;
             const sel = document.createElement('select');
             sel.dataset.cle = cle;
-            sel.innerHTML = `<option value="">— ${t('non_importe', 'non importé')} —</option>` +
+            sel.innerHTML = `<option value="">â€” ${t('non_importe', 'non importÃ©')} â€”</option>` +
                 a.entetes.map((h, i) => `<option value="${i}" ${i === m[cle] ? 'selected' : ''}>${h}</option>`).join('');
             if (m[cle] != null) sel.classList.add('auto');
             sel.addEventListener('change', () => {
@@ -668,10 +813,13 @@ function renderEtape2() {
         $('panneau-sig').style.display = '';
         $('panneau-points').style.display = 'none';
         $('etape2-sous').textContent = f.file.name;
-        const types = { Point: t('type_point', 'Points'), LineString: t('type_ligne', 'Lignes'), Polygon: t('type_polygone', 'Polygones') };
-        $('sig-type').textContent = a.sigType ? types[a.sigType] || a.sigType : t('type_inconnu', 'Type inconnu');
-        $('sig-count').textContent = a.sigCount != null ? `${a.sigCount} ${t('geometries', 'géométrie(s)')}` : t('analyse_serveur', 'Analyse côté serveur');
-        $('sig-colonnes').innerHTML = a.colonnes.length ? a.colonnes.map(c => `<span class="chip">${c}</span>`).join('') : `<span class="chip">${t('aucune_colonne', 'aucun attribut détecté')}</span>`;
+        renderStructure(f);
+        $('sig-type').textContent = a.sigType ? (TYPES_SIG[a.sigType] || a.sigType) : t('type_inconnu', 'Type inconnu');
+        $('sig-count').textContent = a.sigCount != null ? `${a.sigCount} ${t('geometries', 'gÃ©omÃ©trie(s)')}` : t('analyse_serveur', 'Analyse cÃ´tÃ© serveur');
+        $('sig-proj').textContent = f.epsg ? `Projection : EPSG:${f.epsg} âœ“` : t('projection_non_fournie', 'Projection : âš ï¸ non fournie');
+        $('sig-enc').textContent = f.encodage ? `Encodage : ${f.encodage} âœ“` : t('encodage_defaut', 'Encodage : UTF-8 par dÃ©faut');
+        $('sig-colonnes').innerHTML = a.colonnes.length ? a.colonnes.map(c => `<span class="chip">${c}</span>`).join('') : `<span class="chip">${t('aucune_colonne', 'aucun attribut dÃ©tectÃ©')}</span>`;
+        renderAvertissements(f);
     }
     $('err-2').style.display = 'none';
 }
@@ -679,6 +827,170 @@ function renderEtape3() {
     const f = actif();
     if (!f || !f.analyse) { goStep(2); return; }
     $('etape3-sous').textContent = f.file.name;
+    const a = f.analyse;
+    const nomDefaut = f.file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim();
+    const inp = $('val-nom-couche');
+    if (!inp.dataset.init) { inp.value = nomDefaut; inp.dataset.init = '1'; }
+    const btn = $('btn-valider');
+    const spanBtn = btn.querySelector('span');
+    if (spanBtn) spanBtn.textContent = a.type === 'points' ? t('valider_continuer', 'Valider et continuer') : t('valider_importer_couche', 'Valider et importer la couche');
+    const r = $('resume-validation');
+    if (a.type === 'points') {
+        const m = a.mapping;
+        r.innerHTML = `<div class="resume-grille">
+            <div class="rv-item"><b>${a.stats.lignes}</b><span>${t('lignes', 'lignes')}</span></div>
+            <div class="rv-item"><b>${m.latitude != null ? 'âœ“' : 'âœ—'}</b><span>${t('col_lat', 'Latitude')} : ${m.latitude != null ? a.entetes[m.latitude] : t('col_lat_manquante', 'manquante')}</span></div>
+            <div class="rv-item"><b>${m.longitude != null ? 'âœ“' : 'âœ—'}</b><span>${t('col_lng', 'Longitude')} : ${m.longitude != null ? a.entetes[m.longitude] : t('col_lng_manquante', 'manquante')}</span></div>
+            <div class="rv-item"><b>${m.nom != null ? a.entetes[m.nom] : 'â€”'}</b><span>${t('col_nom', 'Nom')}</span></div>
+        </div>`;
+    } else {
+        const fichListe = (f.structure || []).map(s => `
+            <div class="rv-fich ${s.present ? 'ok' : (s.obligatoire ? 'non' : 'warn')}">
+                <span>${s.present ? 'âœ“' : (s.obligatoire ? 'âœ—' : 'âš ï¸')}</span> ${s.fichier} <em>${s.role}</em>
+            </div>`).join('');
+        r.innerHTML = `<div class="resume-grille">
+            <div class="rv-item"><b>${TYPES_SIG[a.sigType] || a.sigType || '?'}</b><span>${t('type_geometrie', 'Type de gÃ©omÃ©trie')}</span></div>
+            <div class="rv-item"><b>${a.sigCount != null ? a.sigCount : 'â€”'}</b><span>${t('geometries', 'gÃ©omÃ©trie(s)')}</span></div>
+            <div class="rv-item"><b>${f.epsg ? 'EPSG:' + f.epsg : 'âš ï¸ ' + t('projection_inconnue', 'non fournie')}</b><span>${t('projection', 'Projection')}</span></div>
+            <div class="rv-item"><b>${f.encodage || 'UTF-8'}</b><span>${t('encodage', 'Encodage')}</span></div>
+            <div class="rv-item"><b>${tailleLisible(f.file.size)}</b><span>${t('taille', 'Taille')}</span></div>
+            <div class="rv-item"><b>${a.colonnes.length}</b><span>${t('colonnes', 'attribut(s)')}</span></div>
+        </div>
+        <div style="margin-top:12px;">${fichListe}</div>`;
+    }
+    $('err-3').style.display = 'none';
+}
+let carteApercu = null;
+let featuresApercuMemo = [];
+function featuresApercu() {
+    const f = actif();
+    const a = f && f.analyse;
+    if (!a) return [];
+    if (a.type === 'sig') return (a.features || []).slice(0, 2000);
+    const lignes = a.lignes || [];
+    const m = a.mapping || {};
+    const out = [];
+    for (let i = 0; i < lignes.length && out.length < 2000; i++) {
+        const l = lignes[i];
+        if (!estCoordonneeValide(l[m.latitude], true) || !estCoordonneeValide(l[m.longitude], false)) continue;
+        const props = {};
+        if (m.nom != null && l[m.nom] != null) props['nom'] = l[m.nom];
+        if (m.categorie != null && l[m.categorie] != null) props['categorie'] = l[m.categorie];
+        if (m.description != null && l[m.description] != null) props['description'] = l[m.description];
+        const lat = parseFloat(String(l[m.latitude]).replace(',', '.'));
+        const lng = parseFloat(String(l[m.longitude]).replace(',', '.'));
+        out.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: props, id: i });
+    }
+    return out;
+}
+function bboxFeatures(feats) {
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity, n = 0;
+    const visiter = (c) => {
+        if (Array.isArray(c[0])) c.forEach(visiter);
+        else if (isFinite(c[0]) && isFinite(c[1])) {
+            minx = Math.min(minx, c[0]); maxx = Math.max(maxx, c[0]);
+            miny = Math.min(miny, c[1]); maxy = Math.max(maxy, c[1]); n++;
+        }
+    };
+    feats.forEach(fe => fe && fe.geometry && visiter(fe.geometry.coordinates));
+    if (!n || !isFinite(minx) || !isFinite(maxy)) return null;
+    return [[minx, miny], [maxx, maxy]];
+}
+function styleApercu() {
+    return {
+        version: 8,
+        sources: {
+            osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: 'Â© OpenStreetMap' }
+        },
+        layers: [{ id: 'fond', type: 'raster', source: 'osm' }]
+    };
+}
+function dessinerApercu(feats) {
+    const m = carteApercu;
+    if (!m) return;
+    try {
+        if (m.getSource('apercu-src')) m.getSource('apercu-src').setData({ type: 'FeatureCollection', features: feats });
+        else m.addSource('apercu-src', { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
+        if (!m.getLayer('apercu-point')) m.addLayer({ id: 'apercu-point', type: 'circle', source: 'apercu-src', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': '#3388ff', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
+        if (!m.getLayer('apercu-line')) m.addLayer({ id: 'apercu-line', type: 'line', source: 'apercu-src', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#3388ff', 'line-width': 2.5 } });
+        if (!m.getLayer('apercu-fill')) m.addLayer({ id: 'apercu-fill', type: 'fill', source: 'apercu-src', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#3388ff', 'fill-opacity': 0.25 } });
+        if (!m.getLayer('apercu-fill-line')) m.addLayer({ id: 'apercu-fill-line', type: 'line', source: 'apercu-src', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'line-color': '#1d4ed8', 'line-width': 2 } });
+        const bb = bboxFeatures(feats);
+        if (bb && bb[0][0] !== bb[1][0]) {
+            m.fitBounds([[bb[0][0], bb[0][1]], [bb[1][0], bb[1][1]]], { padding: 60, maxZoom: 16, duration: 800 });
+        }
+    } catch (e) { console.error('AperÃ§u carte :', e); }
+}
+function afficherTableApercu(feats) {
+    const tab = $('apercu-table');
+    if (!tab) return;
+    if (!feats.length) {
+        tab.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text-3);">' + t('aucune_entite_apercu', 'Aucune entitÃ© Ã  afficher.') + '</div>';
+        return;
+    }
+    const vues = new Map();
+    feats.forEach(fe => { Object.keys(fe.properties || {}).forEach(k => { if (!vues.has(k)) vues.set(k, k); }); });
+    const cols = [...vues.keys()].slice(0, 12);
+    const lignes = feats.slice(0, 100);
+    let html = `<table><thead><tr><th>#</th>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+    lignes.forEach((fe, i) => {
+        html += `<tr data-feat="${i}" class="apercu-ligne"><td>${i + 1}</td>${cols.map(c => `<td>${fe.properties && fe.properties[c] != null ? fe.properties[c] : ''}</td>`).join('')}</tr>`;
+    });
+    html += '</tbody></table>';
+    tab.innerHTML = html;
+    tab.querySelectorAll('tr[data-feat]').forEach(tr => tr.addEventListener('click', () => {
+        tab.querySelectorAll('tr[data-feat]').forEach(x => x.classList.remove('sel'));
+        tr.classList.add('sel');
+        const fe = feats[parseInt(tr.dataset.feat, 10)];
+        if (carteApercu && fe && fe.geometry) {
+            try {
+                const c = fe.geometry.coordinates;
+                const p = fe.geometry.type === 'Point' ? c : c[0][0];
+                if (p && isFinite(p[0])) carteApercu.easeTo({ center: p, zoom: Math.max(carteApercu.getZoom(), 10), duration: 600 });
+            } catch (e) {}
+        }
+    }));
+}
+function renderEtape4() {
+    const f = actif();
+    if (!f || !f.analyse) { goStep(2); return; }
+    $('etape4-sous').textContent = f.file.name;
+    const feats = featuresApercu();
+    featuresApercuMemo = feats;
+    afficherTableApercu(feats);
+    if (!carteApercu) {
+        carteApercu = new maplibregl.Map({ container: 'apercu-carte', style: styleApercu(), center: [20, 0], zoom: 2, attributionControl: false });
+        carteApercu.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+        carteApercu.on('load', () => dessinerApercu(feats));
+        carteApercu.on('click', (e) => {
+            const trouves = carteApercu.queryRenderedFeatures(e.point, { layers: ['apercu-point', 'apercu-line', 'apercu-fill'] });
+            if (!trouves.length) return;
+            const fe = trouves[0];
+            const props = fe.properties || {};
+            const html = '<div style="max-height:220px;overflow:auto;min-width:160px;">' +
+                Object.keys(props).map(k => `<div style="display:flex;gap:8px;padding:2px 0;font-size:.75rem;border-bottom:1px solid rgba(128,128,128,.15);"><b style="min-width:80px;">${k}</b><span>${props[k] == null ? '' : props[k]}</span></div>`).join('') +
+                '</div>';
+            new maplibregl.Popup({ offset: 12, closeButton: true }).setLngLat(e.lngLat).setHTML(html).addTo(carteApercu);
+            if (fe.id != null) {
+                const tab = $('apercu-table');
+                if (tab) {
+                    tab.querySelectorAll('tr[data-feat]').forEach(x => x.classList.remove('sel'));
+                    const tr = tab.querySelector(`tr[data-feat="${fe.id}"]`);
+                    if (tr) { tr.classList.add('sel'); tr.scrollIntoView({ block: 'nearest' }); }
+                }
+            }
+        });
+    } else {
+        if (carteApercu.isStyleLoaded()) dessinerApercu(feats);
+        else carteApercu.once('load', () => dessinerApercu(feats));
+        try { carteApercu.resize(); } catch (e) {}
+    }
+    $('err-4').style.display = 'none';
+}
+function renderEtape5() {
+    const f = actif();
+    if (!f || !f.analyse) { goStep(4); return; }
+    $('etape5-sous').textContent = f.file.name;
     const a = f.analyse;
     if (a.type === 'points') {
         $('panneau-style-points').style.display = '';
@@ -694,7 +1006,8 @@ function renderEtape3() {
     } else {
         $('panneau-style-points').style.display = 'none';
         $('panneau-style-sig').style.display = '';
-        $('sig-nom-couche').value = f.file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim();
+        const valNom = $('val-nom-couche');
+        $('sig-nom-couche').value = (valNom && valNom.value.trim()) ? valNom.value.trim() : f.file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim();
         const sw = $('swatches');
         sw.innerHTML = '';
         PRESETS.forEach(c => {
@@ -705,7 +1018,7 @@ function renderEtape3() {
             sw.appendChild(s);
         });
         const etq = $('style-etiquette');
-        etq.innerHTML = `<option value="">${t('style_aucune_etiquette', '— aucune étiquette —')}</option>` +
+        etq.innerHTML = `<option value="">${t('style_aucune_etiquette', 'â€” aucune Ã©tiquette â€”')}</option>` +
             a.colonnes.map(c => `<option value="${c}">${c}</option>`).join('');
         const catChamp = $('cat-champ');
         catChamp.innerHTML = a.colonnes.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -715,7 +1028,19 @@ function renderEtape3() {
         $('panneau-cat').style.display = 'none';
         swatchesMaj();
     }
-    $('err-3').style.display = 'none';
+    $('err-5').style.display = 'none';
+}
+function renderEtape6() {
+    const pts = fichiers.filter(f => f.analyse && f.analyse.type === 'points' && f.etat !== 'erreur').length;
+    const sig = fichiers.filter(f => f.analyse && f.analyse.type === 'sig' && f.etat !== 'erreur').length;
+    const err = fichiers.filter(f => f.etat === 'erreur').length;
+    $('etape6-sous').textContent = `${fichiers.length} ${t('fichiers', 'fichier(s)')}`;
+    $('resume-enregistrement').innerHTML = `<div class="resume-grille">
+        <div class="rv-item"><b>${pts}</b><span>${t('badge_points', 'Points')}</span></div>
+        <div class="rv-item"><b>${sig}</b><span>${t('badge_sig', 'Couche(s) SIG')}</span></div>
+        ${err ? `<div class="rv-item"><b style="color:var(--red)">${err}</b><span>${t('erreurs', 'erreur(s)')}</span></div>` : ''}
+    </div>`;
+    $('err-6').style.display = 'none';
 }
 function swatchesMaj() {
     const c = $('style-couleur').value;
@@ -738,7 +1063,6 @@ function categoriesMaj() {
             if (!vus.has(s)) vus.set(s, { valeur: s, couleur: PALETTE[vus.size % PALETTE.length], label: s });
         }
         classes = [...vus.values()].slice(0, 50);
-    } else if (idx >= 0 && a.features) {
     }
     $('classes-cat').innerHTML = classes.map((cl, i) => `
         <div class="classe-ligne">
@@ -797,6 +1121,10 @@ async function importerCouche(f) {
     fd.append('nom_couche', nom);
     fd.append('ajax', '1');
     fd.append('style_options', JSON.stringify(styleCourant()));
+    const src = $('val-source');
+    if (src && src.value.trim()) fd.append('source', src.value.trim());
+    const desc = $('val-description');
+    if (desc && desc.value.trim()) fd.append('description', desc.value.trim());
     const rep = await fetch(URL_IMPORT_COUCHE, {
         method: 'POST', credentials: 'same-origin', headers: { 'X-CSRFToken': CSRF }, body: fd
     });
@@ -811,7 +1139,7 @@ function validerEtape2() {
     if (f.analyse && f.analyse.type === 'points') {
         const m = f.analyse.mapping;
         if (m.latitude == null || m.longitude == null) {
-            $('err-2').textContent = t('colonnes_requises', 'Sélectionnez les colonnes Latitude et Longitude.');
+            $('err-2').textContent = t('colonnes_requises', 'SÃ©lectionnez les colonnes Latitude et Longitude.');
             $('err-2').style.display = '';
             return false;
         }
@@ -819,16 +1147,31 @@ function validerEtape2() {
     $('err-2').style.display = 'none';
     return true;
 }
+function validerEtape3() {
+    const f = actif();
+    if (!f || !f.analyse) { $('err-3').textContent = t('fichier_invalide', 'Fichier invalide.'); $('err-3').style.display = ''; return false; }
+    if (f.etat === 'erreur') { $('err-3').textContent = f.message || t('fichier_invalide', 'Fichier invalide.'); $('err-3').style.display = ''; return false; }
+    if (f.analyse.type === 'points') {
+        const m = f.analyse.mapping;
+        if (m.latitude == null || m.longitude == null) {
+            $('err-3').textContent = t('colonnes_requises', 'SÃ©lectionnez les colonnes Latitude et Longitude.');
+            $('err-3').style.display = '';
+            return false;
+        }
+    }
+    $('err-3').style.display = 'none';
+    return true;
+}
 async function lancerImport() {
     if (!fichiers.length) return;
     $('progression').style.display = '';
-    $('resultat').style.display = 'none';
+    $('resume-enregistrement').style.display = 'none';
     const res = { points: 0, doublons: 0, invalides: 0, couches: [], erreurs: [], coucheIds: [] };
     for (let i = 0; i < fichiers.length; i++) {
         const f = fichiers[i];
         try {
             if (f.etat === 'erreur') { res.erreurs.push(`${f.file.name} : ${f.message || '?'}`); continue; }
-            if (!f.analyse) { res.erreurs.push(`${f.file.name} : non analysé`); continue; }
+            if (!f.analyse) { res.erreurs.push(`${f.file.name} : non analysÃ©`); continue; }
             if (f.analyse.type === 'points') {
                 const { ok, donnees } = await importerPoints(f);
                 if (ok && donnees.ok) {
@@ -839,8 +1182,17 @@ async function lancerImport() {
             } else {
                 const { ok, donnees } = await importerCouche(f);
                 if (ok && donnees.ok) {
-                    res.couches.push(donnees.nom || f.file.name);
-                    if (donnees.couche_id) res.coucheIds.push(donnees.couche_id);
+                    if (donnees.couches && donnees.couches.length) {
+                        donnees.couches.forEach(c => res.couches.push(c.nom));
+                        donnees.couche_ids.forEach(id => res.coucheIds.push(id));
+                    } else {
+                        res.couches.push(donnees.nom || f.file.name);
+                        if (donnees.couche_id) res.coucheIds.push(donnees.couche_id);
+                    }
+                    if (donnees.couches && donnees.couches.length > 1) {
+                        const av = donnees.couches.filter(c => c.avertissement);
+                        av.forEach(c => res.erreurs.push(`${c.nom} : ${c.avertissement}`));
+                    }
                 } else res.erreurs.push(`${f.file.name} : ${donnees.erreur || 'erreur serveur'}`);
             }
         } catch (e) {
@@ -848,22 +1200,21 @@ async function lancerImport() {
         }
     }
     $('progression').style.display = 'none';
+    $('resume-enregistrement').style.display = '';
     const r = $('resultat');
     const lignes = [];
-    if (res.points > 0) lignes.push(t('points_importes', '✅ {n} point(s) importé(s) avec succès').replace('{n}', res.points) + `${res.doublons ? ` · ${res.doublons} ${t('doublons', 'doublon(s)')}` : ''}${res.invalides ? ` · ${res.invalides} ${t('invalides', 'invalide(s)')}` : ''}`);
-    if (res.couches.length) lignes.push(`🗺️ <b>${res.couches.length}</b> ${t('couches_importees', 'couche(s) créée(s)')} : ${res.couches.join(', ')}`);
-    if (res.erreurs.length) lignes.push(`<div style="color:var(--red);margin-top:6px;">${t('erreurs_import', 'Erreurs')} : ${res.erreurs.join(' · ')}</div>`);
-    if (!lignes.length) lignes.push(`<div style="color:var(--red);">${t('aucun_import', 'Aucune donnée importée.')}</div>`);
+    if (res.points > 0) lignes.push(t('points_importes', 'âœ… {n} point(s) importÃ©(s) avec succÃ¨s').replace('{n}', res.points) + `${res.doublons ? ` Â· ${res.doublons} ${t('doublons', 'doublon(s)')}` : ''}${res.invalides ? ` Â· ${res.invalides} ${t('invalides', 'invalide(s)')}` : ''}`);
+    if (res.couches.length) lignes.push(`ðŸ—ºï¸ <b>${res.couches.length}</b> ${t('couches_importees', 'couche(s) crÃ©Ã©e(s)')} : ${res.couches.join(', ')}`);
+    if (res.erreurs.length) lignes.push(`<div style="color:var(--red);margin-top:6px;">${t('erreurs_import', 'Erreurs')} : ${res.erreurs.join(' Â· ')}</div>`);
+    if (!lignes.length) lignes.push(`<div style="color:var(--red);">${t('aucun_import', 'Aucune donnÃ©e importÃ©e.')}</div>`);
     const okGlobal = !res.erreurs.length && (res.points > 0 || res.couches.length);
     r.className = okGlobal ? 'ok' : 'err';
     r.innerHTML = lignes.join('<br>') + `<div class="actions" style="justify-content:center;">
-        <a class="btn btn-primary" href="${URL_CARTE}${res.coucheIds.length ? '?importe=' + res.coucheIds[0] : ''}">🗺️ ${t('voir_carte', 'Voir sur la carte')}</a>
-        <button class="btn" onclick="location.reload()">📥 ${t('importer_autres', 'Importer d\'autres fichiers')}</button>
+        <a class="btn btn-primary" href="${URL_CARTE}${res.coucheIds.length ? '?importe=' + res.coucheIds[0] : ''}">ðŸ—ºï¸ ${t('voir_carte', 'Voir sur la carte')}</a>
+        <button class="btn" onclick="location.reload()">ðŸ“¥ ${t('importer_autres', 'Importer d\'autres fichiers')}</button>
     </div>`;
     r.style.display = '';
-}
-function stemDe(nom) {
-    return nom.replace(/\.(shp|shx|shpx|dbf|prj|cpg|qmd)$/i, '').toLowerCase();
+    goStep(7);
 }
 function ajouterFichiers(liste) {
     const nouveaux = [];
@@ -881,7 +1232,7 @@ function ajouterFichiers(liste) {
         const entree = {
             id: idSuivant++, file: fichier, ext, type,
             etat: type ? 'attente' : 'erreur',
-            message: type ? '' : t('format_non_supporte', 'Format non supporté.'),
+            message: type ? '' : t('format_non_supporte', 'Format non supportÃ©.'),
             analyse: null
         };
         fichiers.push(entree);
@@ -905,7 +1256,7 @@ function ajouterFichiers(liste) {
         fichiers.push({
             id: idSuivant++, file: fichier, ext: extDe(fichier.name), type: 'sidecar',
             etat: 'erreur',
-            message: t('composant_sans_shp', 'Fichier .shp manquant pour ce composant — déposez tous les fichiers du Shapefile ensemble (même nom de base).'),
+            message: t('composant_sans_shp', 'Fichier .shp manquant pour ce composant â€” dÃ©posez tous les fichiers du Shapefile ensemble (mÃªme nom de base).'),
             analyse: null
         });
     });
@@ -934,8 +1285,18 @@ function initialiser() {
     zone.addEventListener('drop', (e) => { ajouterFichiers([...e.dataTransfer.files]); });
     $('retour-2').addEventListener('click', () => goStep(1));
     $('suivant-3').addEventListener('click', () => { if (validerEtape2()) goStep(3); });
-    $('retour-3').addEventListener('click', () => goStep(2));
+    $('retour-3b').addEventListener('click', () => goStep(2));
+    $('btn-valider').addEventListener('click', () => { if (validerEtape3()) goStep(4); });
+    $('retour-4').addEventListener('click', () => goStep(3));
+    $('suivant-5').addEventListener('click', () => goStep(5));
+    $('retour-5').addEventListener('click', () => goStep(4));
+    $('suivant-6').addEventListener('click', () => goStep(6));
+    $('retour-6').addEventListener('click', () => goStep(5));
     $('btn-importer').addEventListener('click', lancerImport);
+    const valNom = $('val-nom-couche');
+    if (valNom) valNom.addEventListener('input', () => { $('sig-nom-couche').value = valNom.value.trim(); });
+    const sigNom = $('sig-nom-couche');
+    if (sigNom) sigNom.addEventListener('input', () => { valNom.value = sigNom.value; });
     $('style-taille').addEventListener('input', () => { $('style-taille-val').textContent = $('style-taille').value; });
     $('style-opacite').addEventListener('input', () => {
         const v = Math.round(parseFloat($('style-opacite').value) * 100);

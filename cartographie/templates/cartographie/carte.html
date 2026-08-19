@@ -237,6 +237,24 @@
         .couche-item .couche-meta { font-size: .62rem; color: var(--text-3); flex-shrink: 0; }
         .couche-item .couche-del { border: none; background: transparent; color: var(--text-3); cursor: pointer; font-size: .78rem; line-height: 1; padding: 2px 4px; border-radius: 6px; flex-shrink: 0; }
         .couche-item .couche-del:hover { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+        .couche-item .couche-boutons { display: flex; gap: 3px; flex-shrink: 0; }
+        .couche-item .couche-boutons button { border: 1px solid var(--border); background: var(--bg-2); border-radius: 6px; width: 24px; height: 24px; cursor: pointer; font-size: .72rem; line-height: 1; color: var(--text-2); display: flex; align-items: center; justify-content: center; }
+        .couche-item .couche-boutons button:hover { color: var(--accent); border-color: var(--accent); }
+        .couche-item .couche-boutons .couche-del:hover { color: var(--red); border-color: var(--red); }
+        .couche-item .couche-reglages { flex: 1 0 100%; display: grid; gap: 5px; padding-top: 5px; border-top: 1px dashed var(--border); }
+        .couche-item .couche-reglages > button { border: 1px solid var(--border); background: var(--bg-2); border-radius: 7px; padding: 3px 0; font-size: .64rem; color: var(--text-3); cursor: pointer; }
+        .couche-item .couche-reglages > button:hover { color: var(--accent); border-color: var(--accent); }
+        .couche-item .couche-op-lbl { display: flex; align-items: center; gap: 6px; font-size: .68rem; color: var(--text-3); }
+        .couche-item .couche-op-lbl input[type="range"] { flex: 1; accent-color: var(--accent); }
+        .couche-item .couche-op-lbl em { width: 36px; text-align: right; font-style: normal; }
+        .couche-item .couche-ordre { display: flex; gap: 4px; }
+        .couche-item .couche-ordre button { flex: 1; border: 1px solid var(--border); background: var(--bg-2); border-radius: 6px; font-size: .68rem; cursor: pointer; color: var(--text-2); padding: 2px 0; }
+        .couche-item .couche-ordre button:hover { color: var(--accent); border-color: var(--accent); }
+        .co-details { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: .72rem; padding: 8px 10px; background: var(--bg-3); border-radius: 10px; border: 1px solid var(--border); }
+        .co-details .co-det-cle { color: var(--text-3); }
+        .co-details .co-det-val { font-weight: 600; color: var(--text); }
+        .co-fichiers { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+        .co-fichiers div { font-size: .62rem; padding: 2px 7px; border-radius: 20px; background: var(--bg-3); border: 1px solid var(--border); color: var(--text-3); }
         #liste-couches .couche-actions { display: flex; gap: 6px; margin-top: 2px; }
         #liste-couches .couche-actions button { flex: 1; font-size: .66rem; padding: 4px 0; border-radius: 7px; background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); cursor: pointer; }
         #liste-couches .couche-actions button:hover { color: var(--accent); border-color: var(--accent); }
@@ -764,6 +782,7 @@
             <summary><span data-lucide="settings"></span> <span data-i18n="administration">Administration</span></summary>
             <div class="g-corps" style="display:grid;gap:8px;">
                 <a class="btn" href="{% url 'dashboard' %}"><span data-lucide="layout-dashboard"></span> <span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+                <a class="btn" href="{% url 'admin_couches' %}"><span data-lucide="layers"></span> <span data-i18n="admin_couches">Gestion des couches cartographiques</span></a>
                 <a class="btn" href="{% url 'zone_list' %}"><span data-lucide="shield-alert"></span> <span data-i18n="zones_securite">Zones de sécurité</span></a>
                 <a class="btn" href="{% url 'rapport_generer' %}"><span data-lucide="file-text"></span> <span data-i18n="rapports">Rapports</span></a>
                 <a class="btn" href="{% url 'itineraire_list' %}"><span data-lucide="route"></span> <span data-i18n="itineraires">Itinéraires</span></a>
@@ -1015,6 +1034,34 @@
             <button type="button" class="btn btn-primary" id="export-lancer"><span data-lucide="download"></span> <span data-i18n="export_lancer">Exporter</span></button>
         </div>
         <input type="hidden" id="export-csrf" value="{{ csrf_token }}">
+    </div>
+</div>
+
+<div id="overlay-couche-infos" class="overlay" style="display:none;">
+    <div class="modale modale-projet">
+        <div class="modale-tete">
+            <div class="modale-titre"><span data-lucide="layers"></span> <span data-i18n="infos_couche_titre">Informations sur la couche</span></div>
+            <button type="button" class="btn btn-icon btn-sm" onclick="document.getElementById('overlay-couche-infos').style.display='none'" title="Fermer" data-i18n-title="fermer">✕</button>
+        </div>
+        <input type="hidden" id="co-infos-id">
+        <label class="modale-label" data-i18n="nom_couche">Nom de la couche</label>
+        <input type="text" id="co-infos-nom" class="modale-select" maxlength="200">
+        <div id="co-infos-details" class="co-details" style="margin-top:10px;"></div>
+        <div id="co-infos-fichiers" class="co-fichiers"></div>
+        <label class="modale-label" data-i18n="source_label">Source</label>
+        <input type="text" id="co-infos-source" class="modale-select" maxlength="300" placeholder="Ex : Enquête terrain 2026" data-i18n-ph="source_ph">
+        <label class="modale-label" data-i18n="description_label">Description</label>
+        <textarea id="co-infos-description" class="modale-select" rows="3" maxlength="2000" style="resize:vertical;" placeholder="Ex : Villages enquêtés lors de la mission GPS…" data-i18n-ph="description_ph"></textarea>
+        <label class="modale-label" data-i18n="statut_label">Statut</label>
+        <select id="co-infos-statut" class="modale-select">
+            <option value="active" data-i18n="statut_actif">Active</option>
+            <option value="archivee" data-i18n="statut_archivee">Archivée</option>
+            <option value="brouillon" data-i18n="statut_brouillon">Brouillon</option>
+        </select>
+        <div class="modale-actions">
+            <button type="button" class="btn" onclick="document.getElementById('overlay-couche-infos').style.display='none'" data-i18n="annuler">Annuler</button>
+            <button type="button" class="btn btn-primary" onclick="sauverInfosCouche()"><span data-lucide="save"></span> <span data-i18n="enregistrer">Enregistrer</span></button>
+        </div>
     </div>
 </div>
 
@@ -1646,7 +1693,7 @@ function rechargerCouches() {
     }).catch(() => {});
 }
 
-/* ─── Couches : liste + visibilité (choisir quelle couche afficher) ── */
+/* ─── Couches : liste + visibilité + gestion (infos, zoom, opacité, ordre, export) ── */
 function rendreListeCouches() {
     const zone = document.getElementById('liste-couches');
     if (!zone) return;
@@ -1673,22 +1720,84 @@ function rendreListeCouches() {
         const nom = document.createElement('span');
         nom.className = 'couche-nom';
         nom.textContent = c.nom || 'Couche ' + c.id;
-        nom.title = c.nom || '';
+        nom.title = (mukmapT && mukmapT('infos_couche_titre', 'Informations sur la couche')) || 'Informations sur la couche';
+        nom.style.cursor = 'pointer';
+        nom.addEventListener('click', () => ouvrirInfosCouche(c.id));
         lbl.appendChild(vis);
         lbl.appendChild(puce);
         lbl.appendChild(nom);
         const meta = document.createElement('span');
         meta.className = 'couche-meta';
         meta.textContent = (c.type || '?') + ' · ' + (c.nb_geometries || 0);
+        const boutons = document.createElement('div');
+        boutons.className = 'couche-boutons';
+        const bInfo = document.createElement('button');
+        bInfo.type = 'button';
+        bInfo.textContent = 'ℹ';
+        bInfo.title = (mukmapT && mukmapT('infos', 'Infos')) || 'Infos';
+        bInfo.addEventListener('click', () => ouvrirInfosCouche(c.id));
+        const bZoom = document.createElement('button');
+        bZoom.type = 'button';
+        bZoom.textContent = '⤢';
+        bZoom.title = (mukmapT && mukmapT('zoom_couche', 'Zoom sur la couche')) || 'Zoom sur la couche';
+        bZoom.addEventListener('click', () => zoomerSurCouche(c.id));
+        const bExp = document.createElement('button');
+        bExp.type = 'button';
+        bExp.textContent = '⭳';
+        bExp.title = (mukmapT && mukmapT('exporter_couche', 'Exporter (Shapefile / GeoJSON)')) || 'Exporter (Shapefile / GeoJSON)';
+        bExp.addEventListener('click', () => exporterCouche(c.id));
         const del = document.createElement('button');
         del.className = 'couche-del';
         del.type = 'button';
         del.title = (mukmapT && mukmapT('supprimer', 'Supprimer')) || 'Supprimer';
         del.textContent = '✕';
         del.addEventListener('click', () => supprimerCouche(c.id));
+        boutons.appendChild(bInfo);
+        boutons.appendChild(bZoom);
+        boutons.appendChild(bExp);
+        boutons.appendChild(del);
+        const reglages = document.createElement('div');
+        reglages.className = 'couche-reglages';
+        reglages.style.display = 'none';
+        const reglTitre = document.createElement('button');
+        reglTitre.type = 'button';
+        reglTitre.textContent = (mukmapT && mukmapT('regler_couche', 'Style, opacité, ordre…')) || 'Style, opacité, ordre…';
+        reglTitre.addEventListener('click', () => { reglages.style.display = reglages.style.display === 'none' ? 'grid' : 'none'; });
+        const range = document.createElement('input');
+        range.type = 'range';
+        range.min = '0'; range.max = '100'; range.value = '100';
+        range.className = 'couche-opacite';
+        range.title = (mukmapT && mukmapT('opacite', 'Opacité')) || 'Opacité';
+        range.addEventListener('input', () => { setOpaciteCouche(c.id, Number(range.value) / 100); });
+        const lblOp = document.createElement('label');
+        lblOp.className = 'couche-op-lbl';
+        const iconeOp = document.createElement('span');
+        iconeOp.textContent = '◐';
+        const emOp = document.createElement('em');
+        emOp.textContent = '100%';
+        range.addEventListener('input', () => { emOp.textContent = range.value + '%'; });
+        lblOp.appendChild(iconeOp);
+        lblOp.appendChild(range);
+        lblOp.appendChild(emOp);
+        const ordre = document.createElement('div');
+        ordre.className = 'couche-ordre';
+        const bHaut = document.createElement('button');
+        bHaut.type = 'button'; bHaut.textContent = '↑';
+        bHaut.title = (mukmapT && mukmapT('monter', 'Monter')) || 'Monter';
+        bHaut.addEventListener('click', () => deplacerCouche(c.id, 1));
+        const bBas = document.createElement('button');
+        bBas.type = 'button'; bBas.textContent = '↓';
+        bBas.title = (mukmapT && mukmapT('descendre', 'Descendre')) || 'Descendre';
+        bBas.addEventListener('click', () => deplacerCouche(c.id, -1));
+        ordre.appendChild(bHaut);
+        ordre.appendChild(bBas);
+        reglages.appendChild(reglTitre);
+        reglages.appendChild(lblOp);
+        reglages.appendChild(ordre);
         item.appendChild(lbl);
         item.appendChild(meta);
-        item.appendChild(del);
+        item.appendChild(boutons);
+        item.appendChild(reglages);
         zone.appendChild(item);
     });
     const actions = document.createElement('div');
@@ -1708,6 +1817,143 @@ function rendreListeCouches() {
     actions.appendChild(toutA);
     actions.appendChild(toutM);
     zone.appendChild(actions);
+}
+function setOpaciteCouche(id, facteur) {
+    const c = couchesDonnees.find(x => String(x.id) === String(id));
+    if (!c) return;
+    const base = (c.style_options && c.style_options.opacite) || 1;
+    const types = {
+        'couche-ligne-': 'line-opacity',
+        'couche-fill-': 'fill-opacity',
+        'couche-point-': 'circle-opacity',
+        'couche-glyphe-': 'text-opacity',
+        'couche-symbole-': 'text-opacity'
+    };
+    Object.keys(types).forEach(pref => {
+        const l = map.getLayer(pref + id);
+        if (!l) return;
+        const coef = pref === 'couche-fill-' ? 0.15 : 1;
+        try { map.setPaintProperty(l.id, types[pref], base * coef * facteur); } catch (e) {}
+    });
+}
+function deplacerCouche(id, sens) {
+    const i = couchesDonnees.findIndex(x => String(x.id) === String(id));
+    const j = i + sens;
+    if (i < 0 || j < 0 || j >= couchesDonnees.length) return;
+    const [c] = couchesDonnees.splice(i, 1);
+    couchesDonnees.splice(j, 0, c);
+    ['point', 'glyphe', 'symbole', 'fill', 'ligne'].forEach(t => {
+        const l = map.getLayer('couche-' + t + '-' + id);
+        if (!l) return;
+        const suivante = couchesDonnees[j] ? map.getLayer('couche-' + t + '-' + couchesDonnees[j].id) : undefined;
+        try { map.moveLayer(l.id, suivante ? suivante.id : undefined); } catch (e) {}
+    });
+    rendreListeCouches();
+}
+function zoomerSurCouche(id) {
+    const c = couchesDonnees.find(x => String(x.id) === String(id));
+    if (!c || !c.geojson || !c.geojson.features || !c.geojson.features.length) return;
+    try {
+        const bb = turf.bbox(c.geojson);
+        if (bb && isFinite(bb[0]) && isFinite(bb[2])) map.fitBounds(bb, { padding: 70, maxZoom: 16, duration: 900 });
+    } catch (e) {}
+}
+function exporterCouche(id) {
+    const c = couchesDonnees.find(x => String(x.id) === String(id));
+    if (!c) return;
+    const nom = (c.nom || ('couche_' + id)).replace(/[^\w\-. ]+/g, '').replace(/ /g, '_') || 'couche';
+    const choix = (mukmapT && mukmapT('choisir_format_export', 'Choisir le format d\'export :\n\nOK = Shapefile (.zip)\nAnnuler = GeoJSON')) || 'Choisir le format d\'export :\n\nOK = Shapefile (.zip)\nAnnuler = GeoJSON';
+    if (confirm(choix)) {
+        fetch('{% url "couche_export_shp" 0 %}'.replace('/0/', '/' + id + '/'))
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+            .then(blob => {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = nom + '.shp.zip';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+            })
+            .catch(() => alert((mukmapT && mukmapT('export_echec', "Erreur d'export Shapefile")) || "Erreur d'export Shapefile"));
+        return;
+    }
+    try {
+        const blob = new Blob([JSON.stringify(c.geojson)], { type: 'application/geo+json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = nom + '.geojson';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch (e) {
+        alert((mukmapT && mukmapT('export_echec', "Erreur d'export GeoJSON")) || "Erreur d'export GeoJSON");
+    }
+}
+function ouvrirInfosCouche(id) {
+    fetch('{% url "couche_metadonnees" 0 %}'.replace('/0/', '/' + id + '/') + '?ajax=1')
+        .then(r => r.json())
+        .then(j => {
+            if (!j || !j.ok) throw new Error('ko');
+            document.getElementById('co-infos-id').value = String(j.id);
+            document.getElementById('co-infos-nom').value = j.nom || '';
+            document.getElementById('co-infos-source').value = j.source || '';
+            document.getElementById('co-infos-description').value = j.description || '';
+            document.getElementById('co-infos-statut').value = j.statut || 'active';
+            const details = [
+                (mukmapT && mukmapT('type_geometrie', 'Type')) || 'Type', j.type,
+                (mukmapT && mukmapT('nb_entites', 'Entités')) || 'Entités', j.nb_entites,
+                'EPSG', j.epsg,
+                (mukmapT && mukmapT('srid_label', 'Stockage')) || 'Stockage', 'EPSG:' + (j.srid || 4326),
+                (mukmapT && mukmapT('encodage_label', 'Encodage')) || 'Encodage', j.encodage,
+                (mukmapT && mukmapT('nom_original', 'Fichier d\'origine')) || 'Fichier d\'origine', j.nom_original,
+                (mukmapT && mukmapT('taille_fichier', 'Taille')) || 'Taille', j.taille_octets ? Math.round(j.taille_octets / 1024) + ' Ko' : '—',
+                (mukmapT && mukmapT('importe_par', 'Importé par')) || 'Importé par', j.utilisateur || '—',
+                (mukmapT && mukmapT('date_import', 'Date d\'import')) || 'Date d\'import', (j.date_import || '').slice(0, 16).replace('T', ' ')
+            ];
+            const grille = document.getElementById('co-infos-details');
+            grille.innerHTML = '';
+            for (let i = 0; i < details.length; i += 2) {
+                const k = document.createElement('span');
+                k.className = 'co-det-cle';
+                k.textContent = details[i] + ' :';
+                const v = document.createElement('span');
+                v.className = 'co-det-val';
+                v.textContent = details[i + 1];
+                grille.appendChild(k);
+                grille.appendChild(v);
+            }
+            const fichiers = document.getElementById('co-infos-fichiers');
+            fichiers.innerHTML = '';
+            (j.fichiers_sources || []).forEach(f => {
+                const li = document.createElement('div');
+                li.textContent = f.split('/').pop();
+                fichiers.appendChild(li);
+            });
+            document.getElementById('overlay-couche-infos').style.display = 'flex';
+        })
+        .catch(() => alert((mukmapT && mukmapT('metadonnees_echec', 'Impossible de lire les métadonnées de la couche.')) || 'Impossible de lire les métadonnées de la couche.'));
+}
+function sauverInfosCouche() {
+    const id = document.getElementById('co-infos-id').value;
+    const donnees = new URLSearchParams();
+    donnees.set('nom', document.getElementById('co-infos-nom').value);
+    donnees.set('source', document.getElementById('co-infos-source').value);
+    donnees.set('description', document.getElementById('co-infos-description').value);
+    donnees.set('statut', document.getElementById('co-infos-statut').value);
+    fetch('{% url "couche_metadonnees" 0 %}'.replace('/0/', '/' + id + '/') + '?ajax=1', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: donnees.toString()
+    }).then(r => r.json()).then(j => {
+        if (j && j.ok) {
+            document.getElementById('overlay-couche-infos').style.display = 'none';
+            rechargerCouches();
+        } else {
+            alert((mukmapT && mukmapT('enregistrer_echec', "Erreur d'enregistrement.")) || "Erreur d'enregistrement.");
+        }
+    }).catch(() => alert((mukmapT && mukmapT('enregistrer_echec', "Erreur d'enregistrement.")) || "Erreur d'enregistrement."));
 }
 function visibiliteCouche(id, visible) {
     ['ligne', 'fill', 'point', 'glyphe', 'symbole'].forEach(t => {

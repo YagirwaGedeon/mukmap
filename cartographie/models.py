@@ -251,12 +251,30 @@ class CoucheGeometrie(models.Model):
     type_geometrie = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Type de géométrie")
     fichier_source = models.CharField(max_length=255, blank=True, verbose_name="Fichier source")
     srid = models.IntegerField(default=4326, verbose_name="SRID", help_text="Système de coordonnées (EPSG)")
+    nom_original = models.CharField(max_length=255, blank=True, verbose_name="Nom original du fichier")
+    encodage = models.CharField(max_length=50, blank=True, default='UTF-8', verbose_name="Encodage")
+    epsg = models.IntegerField(default=4326, verbose_name="EPSG de la projection source")
+    source = models.CharField(max_length=300, blank=True, verbose_name="Source / provenance")
+    description = models.TextField(blank=True, verbose_name="Description")
+    nb_entites = models.IntegerField(default=0, verbose_name="Nombre d'entités")
+    taille_octets = models.BigIntegerField(default=0, verbose_name="Taille (octets)")
+    statut = models.CharField(max_length=20, default='active', choices=[
+        ('active', 'Active'), ('archivee', 'Archivée'), ('brouillon', 'Brouillon'),
+    ], verbose_name="Statut")
+    utilisateur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='couches_importees', verbose_name="Utilisateur")
+    fichier_shp = models.FileField(upload_to='layers/', blank=True, verbose_name="Fichier source (.shp)")
+    fichier_shx = models.FileField(upload_to='layers/', blank=True, verbose_name="Fichier index (.shx)")
+    fichier_dbf = models.FileField(upload_to='layers/', blank=True, verbose_name="Fichier attributs (.dbf)")
+    fichier_prj = models.FileField(upload_to='layers/', blank=True, verbose_name="Fichier projection (.prj)")
+    fichier_cpg = models.FileField(upload_to='layers/', blank=True, verbose_name="Fichier encodage (.cpg)")
+    fichier_qmd = models.FileField(upload_to='layers/', blank=True, verbose_name="Fichier style QGIS (.qmd)")
     style_couleur = models.CharField(max_length=7, default='#3388ff', verbose_name="Couleur de style")
     style_options = models.JSONField(default=dict, blank=True, verbose_name="Options de style",
                                      help_text="Couleur, symbole, taille, opacité, étiquette et catégorisation")
     projet = models.ForeignKey(Projet, on_delete=models.SET_NULL, null=True, blank=True, related_name='couches', verbose_name="Projet")
     fichier_kml = models.FileField(upload_to='kml_imports/', blank=True, verbose_name="Fichier KML généré")
     date_import = models.DateTimeField(auto_now_add=True, verbose_name="Date d'import")
+    date_modification = models.DateTimeField(auto_now=True, verbose_name="Date de dernière modification")
 
     class Meta:
         ordering = ['-date_import']

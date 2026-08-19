@@ -1,6 +1,7 @@
 import json
 import re
 import base64
+import codecs
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape as _xml_escape
 import zipfile
@@ -9,6 +10,7 @@ import os
 import math
 import csv
 from datetime import date, timedelta
+from django.core.files.base import ContentFile
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
@@ -589,7 +591,26 @@ def geometrie_donnees(request):
             "couleur": couche.style_couleur,
             "style_options": couche.style_options or {},
             "fichier_source": couche.fichier_source or '',
+            "nom_original": couche.nom_original or '',
+            "encodage": couche.encodage or '',
+            "epsg": couche.epsg,
+            "srid": couche.srid,
+            "source": couche.source or '',
+            "description": couche.description or '',
+            "nb_entites": couche.nb_entites,
+            "taille_octets": couche.taille_octets,
+            "statut": couche.statut or 'active',
+            "utilisateur": couche.utilisateur.username if couche.utilisateur else '',
             "date_import": couche.date_import.isoformat() if couche.date_import else '',
+            "date_modification": couche.date_modification.isoformat() if couche.date_modification else '',
+            "fichiers_sources": [u for u in [
+                couche.fichier_shp.name if couche.fichier_shp else '',
+                couche.fichier_shx.name if couche.fichier_shx else '',
+                couche.fichier_dbf.name if couche.fichier_dbf else '',
+                couche.fichier_prj.name if couche.fichier_prj else '',
+                couche.fichier_cpg.name if couche.fichier_cpg else '',
+                couche.fichier_qmd.name if couche.fichier_qmd else '',
+            ] if u],
             "nb_geometries": couche.geometries.count(),
             "geojson": {"type": "FeatureCollection", "features": features},
         })
@@ -3347,17 +3368,29 @@ def importer_geometrie(request):
     nom_fichier = fichier.name.lower()
     contenu = fichier.read()
 
+    style_brut = request.POST.get('style_options')
+    try:
+        style_valide = json.loads(style_brut) if style_brut else {}
+    except (ValueError, TypeError):
+        style_valide = {}
+
+    couches_importees = []
     try:
         if nom_fichier.endswith('.kml') or nom_fichier.endswith('.kmz'):
-            couche = _importer_kml_kmz(nom_couche, contenu, nom_fichier)
+            couches_importees.append(_importer_kml_kmz(nom_couche, contenu, nom_fichier))
         elif nom_fichier.endswith('.gpx'):
-            couche = _importer_gpx(nom_couche, contenu, nom_fichier)
+            couches_importees.append(_importer_gpx(nom_couche, contenu, nom_fichier))
         elif nom_fichier.endswith('.zip') or nom_fichier.endswith('.shp'):
-            couche = _importer_shapefile(nom_couche, contenu, nom_fichier, auxiliaires)
+            couches_importees.extend(_importer_shapefile(
+                nom_couche, contenu, nom_fichier, auxiliaires,
+                request.user if request.user.is_authenticated else None,
+                request.POST.get('source', '').strip()[:300],
+                request.POST.get('description', '').strip()[:2000],
+                style_valide))
         elif nom_fichier.endswith('.geojson') or nom_fichier.endswith('.json'):
-            couche = _importer_geojson(nom_couche, contenu, nom_fichier)
+            couches_importees.append(_importer_geojson(nom_couche, contenu, nom_fichier))
         elif nom_fichier.endswith('.csv'):
-            couche = _importer_csv(nom_couche, contenu, nom_fichier)
+            couches_importees.append(_importer_csv(nom_couche, contenu, nom_fichier))
         else:
             if est_ajax:
                 return JsonResponse({'ok': False, 'erreur': "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp (avec .shx, .dbf, .prj, .cpg, .qmd)/.zip"}, status=400)
@@ -3369,14 +3402,6 @@ def importer_geometrie(request):
         if len(contenu) > 8 * 1024 * 1024:
             messages.error(request, "Fichier trop volumineux pour la sélection interactive des colonnes.")
             return redirect('index_cartographie')
-        style_brut = request.POST.get('style_options')
-        if style_brut:
-            try:
-                style_valide = json.loads(style_brut)
-            except (ValueError, TypeError):
-                style_valide = {}
-        else:
-            style_valide = {}
         request.session['import_ambig'] = {
             'nom_fichier': nom_fichier,
             'nom_couche': nom_couche,
@@ -3392,32 +3417,58 @@ def importer_geometrie(request):
         messages.error(request, f"Erreur lors de l'import : {e}")
         return redirect('index_cartographie')
 
-    style_brut = request.POST.get('style_options')
-    if style_brut:
-        try:
-            _appliquer_style_couche(couche, json.loads(style_brut))
-        except (ValueError, TypeError):
-            pass
+    if not couches_importees:
+        if est_ajax:
+            return JsonResponse({'ok': False, 'erreur': "Aucune couche n'a pu être importée."}, status=400)
+        messages.error(request, "Aucune couche n'a pu être importée.")
+        return redirect('index_cartographie')
+
+    for couche in couches_importees:
+        if not (isinstance(couche.style_options, dict) and couche.style_options.get('couleur')) and style_valide:
+            try:
+                _appliquer_style_couche(couche, style_valide)
+            except (ValueError, TypeError):
+                pass
 
     if est_ajax:
-        nb = couche.geometries.count()
         projet_actif = _projet_actif(request)
+        premiere = couches_importees[0]
         if projet_actif is not None:
-            couche.projet = projet_actif
-            couche.save(update_fields=['projet'])
-        _audit(request, "Import SIG", f"Couche {couche.nom} - {nb} géométries")
+            for couche in couches_importees:
+                couche.projet = projet_actif
+                couche.save(update_fields=['projet'])
+        for couche in couches_importees:
+            if not couche.nb_entites:
+                couche.nb_entites = couche.geometries.count()
+                couche.save(update_fields=['nb_entites'])
+            _audit(request, "Import SIG", f"Couche {couche.nom} - {couche.nb_entites} géométries")
         return JsonResponse({
-            'ok': True, 'couche_id': couche.pk, 'nom': couche.nom,
-            'importes': nb, 'type': couche.type_geometrie,
-            'style': couche.style_options or {},
+            'ok': True, 'couche_id': premiere.pk, 'nom': premiere.nom,
+            'importes': premiere.nb_entites, 'type': premiere.type_geometrie,
+            'style': premiere.style_options or {},
+            'couche_ids': [c.pk for c in couches_importees],
+            'couches': [{'id': c.pk, 'nom': c.nom, 'type': c.type_geometrie,
+                         'nb': c.nb_entites, 'epsg': c.epsg, 'encodage': c.encodage,
+                         'avertissement': getattr(c, '_avertissement', None)} for c in couches_importees],
         })
 
-    return _terminer_import(request, couche, nom_fichier)
+    if len(couches_importees) == 1:
+        return _terminer_import(request, couches_importees[0], nom_fichier)
+    for couche in couches_importees:
+        _terminer_import(request, couche, nom_fichier)
+    return redirect(f"{reverse('index_cartographie')}?importe={couches_importees[0].pk}")
 
 
 def _terminer_import(request, couche, nom_fichier):
     """Finalise un import : projet actif, audit, rapport, redirection avec zoom."""
     nb = couche.geometries.count()
+    if not couche.nb_entites:
+        couche.nb_entites = nb
+    if not couche.nom_original:
+        couche.nom_original = nom_fichier
+    if not couche.taille_octets and request.FILES:
+        couche.taille_octets = sum(getattr(f, 'size', 0) or 0 for f in request.FILES.values())
+    couche.save(update_fields=['nb_entites', 'nom_original', 'taille_octets'])
     projet_actif = _projet_actif(request)
     if projet_actif is not None:
         couche.projet = projet_actif
@@ -3765,25 +3816,229 @@ def _importer_gpx(nom_couche, contenu, nom_fichier='fichier.gpx'):
     return couche
 
 
-def _importer_shapefile(nom_couche, contenu, nom_fichier, auxiliaires=None):
+def _epsg_depuis_prj(contenu_prj):
+    """Détecte le code EPSG depuis le contenu d'un fichier .prj (WKT ESRI / OGC)."""
+    if not contenu_prj:
+        return None
+    texte = contenu_prj.decode('utf-8', errors='replace') if isinstance(contenu_prj, bytes) else str(contenu_prj)
+    m = re.search(r'AUTHORITY\s*\[\s*"EPSG"\s*,\s*"(\d+)"\s*\]', texte)
+    if m:
+        return int(m.group(1))
+    m = re.search(r'UTM\s+zone\s+(\d+)\s*([NS])', texte, re.IGNORECASE)
+    if m:
+        zone = int(m.group(1))
+        return 32600 + zone if m.group(2).upper() == 'N' else 32700 + zone
+    m = re.search(r'UTM_ZONE_(\d+)([NS])', texte, re.IGNORECASE)
+    if m:
+        zone = int(m.group(1))
+        return 32600 + zone if m.group(2).upper() == 'N' else 32700 + zone
+    haut = texte.upper()
+    if 'WEB MERCATOR' in haut or ('MERCATOR' in haut and 'PSEUDO' in haut):
+        return 3857
+    if 'GEOGCS' in haut and 'WGS 84' in haut:
+        return 4326
+    return None
+
+
+def _reprojection_wgs84(epsg):
+    """Retourne une fonction (x, y) -> (lon, lat) WGS84, ou None si non supporté."""
+    if not epsg or epsg == 4326:
+        return lambda x, y: (x, y)
+    if epsg == 3857:
+        R = 20037508.34
+        return lambda x, y: (x / R * 180.0, math.degrees(2 * math.atan(math.exp(y / R * math.pi)) - math.pi / 2))
+    if 32601 <= epsg <= 32660:
+        zone = epsg - 32600
+        return lambda x, y: _utm_inverse(x, y, zone, nord=True)
+    if 32701 <= epsg <= 32760:
+        zone = epsg - 32700
+        return lambda x, y: _utm_inverse(x, y, zone, nord=False)
+    return None
+
+
+def _utm_inverse(easting, northing, zone, nord=True):
+    """Inverse transverse Mercator (WGS84) : UTM -> WGS84. Formules standard USGS."""
+    a = 6378137.0
+    f = 1.0 / 298.257223563
+    e2 = 2 * f - f * f
+    ep2 = e2 / (1 - e2)
+    k0 = 0.9996
+    x = easting - 500000.0
+    y = northing if nord else northing - 10000000.0
+    M = y / k0
+    mu = M / (a * (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 * e2 * e2 / 256))
+    e1 = (1 - math.sqrt(1 - e2)) / (1 + math.sqrt(1 - e2))
+    phi1 = (mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * math.sin(2 * mu)
+            + (21 * e1 * e1 / 16 - 55 * e1 ** 4 / 32) * math.sin(4 * mu)
+            + (151 * e1 ** 3 / 96) * math.sin(6 * mu)
+            + (1097 * e1 ** 4 / 512) * math.sin(8 * mu))
+    N1 = a / math.sqrt(1 - e2 * math.sin(phi1) ** 2)
+    T1 = math.tan(phi1) ** 2
+    C1 = ep2 * math.cos(phi1) ** 2
+    R1 = a * (1 - e2) / (1 - e2 * math.sin(phi1) ** 2) ** 1.5
+    D = x / (N1 * k0)
+    lat = phi1 - (N1 * math.tan(phi1) / R1) * (
+        D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D ** 4 / 24
+        + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * ep2 - 3 * C1 * C1) * D ** 6 / 720)
+    lon = (D - (1 + 2 * T1 + C1) * D ** 3 / 6
+           + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * ep2 + 24 * T1 * T1) * D ** 5 / 120) / math.cos(phi1)
+    return (lon * 180.0 / math.pi + (zone * 6 - 183), lat * 180.0 / math.pi)
+
+
+def _reprojeter_coords(coords, gtype, transfo):
+    if gtype == 'Point':
+        return transfo(coords[0], coords[1])
+    if gtype == 'LineString':
+        return [list(transfo(x, y)) for x, y in coords]
+    if gtype == 'Polygon':
+        return [[list(transfo(x, y)) for x, y in ring] for ring in coords]
+    return coords
+
+
+def _encodage_depuis_cpg(contenu_cpg):
+    """Encodage Python depuis le contenu d'un fichier .cpg."""
+    if not contenu_cpg:
+        return None
+    texte = contenu_cpg.decode('utf-8', errors='replace').strip()
+    norm = texte.upper().replace('-', '').replace('_', '').replace(' ', '')
+    mapping = {
+        'UTF8': 'utf-8', 'UTF': 'utf-8',
+        'ISO88591': 'latin-1', 'LATIN1': 'latin-1', '88591': 'latin-1',
+        'WINDOWS1252': 'cp1252', 'CP1252': 'cp1252', 'ANSI': 'cp1252',
+        'USASCII': 'ascii', 'ASCII': 'ascii', 'OEM': 'cp850',
+    }
+    if norm in mapping:
+        return mapping[norm]
+    try:
+        codecs.lookup(texte)
+        return texte
+    except (LookupError, TypeError):
+        return None
+
+
+def _rgba_vers_hex(valeur):
+    if not valeur:
+        return None
+    v = str(valeur).strip()
+    if v.startswith('#'):
+        return v if re.fullmatch(r'#[0-9a-fA-F]{6}', v) else None
+    parts = [p.strip() for p in v.split(',')]
+    if len(parts) >= 3:
+        try:
+            r, g, b = int(parts[0]), int(parts[1]), int(parts[2])
+            return '#{:02x}{:02x}{:02x}'.format(max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b)))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _style_depuis_qmd(contenu_qmd):
+    """Extrait les paramètres de style récupérables depuis un fichier .qmd (QGIS)."""
+    if not contenu_qmd:
+        return {}
+    try:
+        racine = ET.fromstring(contenu_qmd.decode('utf-8', errors='replace'))
+    except ET.ParseError:
+        return {}
+    style = {}
+
+    def _option(nom_prop):
+        for opt in racine.iter('Option'):
+            if opt.get('name') == nom_prop:
+                return opt.get('value')
+        for prop in racine.iter('prop'):
+            if prop.get('k') == nom_prop:
+                return prop.get('v')
+        return None
+
+    couleur = _option('color')
+    if couleur:
+        style['couleur'] = _rgba_vers_hex(couleur)
+    contour = _option('outline_color')
+    if contour:
+        style['contour_couleur'] = _rgba_vers_hex(contour)
+    epaisseur = _option('outline_width')
+    if epaisseur:
+        try:
+            style['epaisseur'] = round(float(epaisseur), 2)
+        except (TypeError, ValueError):
+            pass
+    taille = _option('size')
+    if taille:
+        try:
+            style['taille'] = round(float(taille), 2)
+        except (TypeError, ValueError):
+            pass
+    if not couleur:
+        for el in racine.iter('color-alpha'):
+            if el.text:
+                style['couleur'] = _rgba_vers_hex(el.text)
+    return style
+
+
+def _lecteur_zip_securise(contenu):
+    """Ouvre un ZIP en bloquant les chemins dangereux (zip slip) et les fichiers trop gros."""
+    z = zipfile.ZipFile(io.BytesIO(contenu))
+    infos = []
+    for info in z.infolist():
+        nom = info.filename.replace('\\', '/')
+        if nom.startswith('__MACOSX/') or nom.endswith('/') or info.is_dir():
+            continue
+        if '..' in nom.split('/') or nom.startswith('/') or ':' in nom:
+            raise ValueError("Fichier ZIP invalide : nom de fichier dangereux détecté.")
+        if info.file_size > 50 * 1024 * 1024:
+            raise ValueError(f"Fichier trop volumineux dans le ZIP : {nom}")
+        infos.append((nom, info))
+    if not infos:
+        raise ValueError("Fichier ZIP vide ou illisible.")
+    return z, infos
+
+
+def _importer_shapefile(nom_couche, contenu, nom_fichier, auxiliaires=None, utilisateur=None,
+                        source=None, description=None, style_options=None):
+    """Importe un ou plusieurs Shapefiles (.shp + .shx/.dbf/.prj/.cpg/.qmd ou .zip).
+
+    Retourne une liste de couches créées (un ZIP peut contenir plusieurs .shp)."""
     import shapefile
 
     if nom_fichier.endswith('.zip'):
-        with zipfile.ZipFile(io.BytesIO(contenu)) as z:
-            shp_files = [n for n in z.namelist() if n.endswith('.shp')]
+        z, infos = _lecteur_zip_securise(contenu)
+        try:
+            shp_files = sorted(n for n, _ in infos if n.lower().endswith('.shp'))
             if not shp_files:
                 raise ValueError("Aucun fichier .shp trouvé dans le ZIP.")
-            base = shp_files[0].rsplit('.', 1)[0]
+            couches = []
+            for shp_nom in shp_files:
+                base = shp_nom.rsplit('.', 1)[0]
+                par_ext = {}
+                for n, _ in infos:
+                    if n == base + '.shx' or n == base + '.shpx':
+                        par_ext['shx'] = io.BytesIO(z.read(n))
+                    elif n == base + '.dbf':
+                        par_ext['dbf'] = io.BytesIO(z.read(n))
+                    elif n == base + '.prj':
+                        par_ext['prj'] = io.BytesIO(z.read(n))
+                    elif n == base + '.cpg':
+                        par_ext['cpg'] = io.BytesIO(z.read(n))
+                    elif n == base + '.qmd':
+                        par_ext['qmd'] = io.BytesIO(z.read(n))
+                manquants = [e for e in ('shx', 'dbf') if e not in par_ext]
+                if manquants:
+                    raise ValueError(
+                        f"Shapefile {shp_nom} : fournissez aussi "
+                        + ', '.join('.' + e for e in manquants) + " (même nom de base).")
+                nom_couche_i = nom_couche
+                if len(shp_files) > 1:
+                    base_nom = os.path.splitext(os.path.basename(shp_nom))[0]
+                    nom_couche_i = (nom_couche + ' - ' if nom_couche else '') + base_nom.replace('_', ' ').replace('-', ' ').title()
+                couches.append(_creer_couche_shapefile(
+                    nom_couche_i, io.BytesIO(z.read(shp_nom)), par_ext, shp_nom,
+                    utilisateur, source, description, style_options))
+            return couches
+        finally:
+            z.close()
 
-            def _lire_composant(ext):
-                nom = f'{base}.{ext}'
-                if nom in z.namelist():
-                    return io.BytesIO(z.read(nom))
-                return None
-
-            with shapefile.Reader(shp=_lire_composant('shp'), shx=_lire_composant('shx'), dbf=_lire_composant('dbf')) as reader:
-                geometries = _lire_shapefile_reader(reader)
-    elif nom_fichier.endswith('.shp'):
+    if nom_fichier.endswith('.shp'):
         base = nom_fichier.rsplit('.', 1)[0].lower()
         par_ext = {}
         for aux in (auxiliaires or []):
@@ -3799,21 +4054,105 @@ def _importer_shapefile(nom_couche, contenu, nom_fichier, auxiliaires=None):
         if manquants:
             raise ValueError(
                 "Pour un Shapefile, fournissez aussi les fichiers "
-                + ', '.join(f'.{e}' for e in manquants)
+                + ', '.join('.' + e for e in manquants)
                 + f" (même nom que {nom_fichier}).")
-        with shapefile.Reader(shp=io.BytesIO(contenu), shx=par_ext['shx'], dbf=par_ext['dbf']) as reader:
-            geometries = _lire_shapefile_reader(reader)
-    else:
-        raise ValueError("Format non supporté.")
+        return [_creer_couche_shapefile(
+            nom_couche, io.BytesIO(contenu), par_ext, nom_fichier,
+            utilisateur, source, description, style_options)]
+
+    raise ValueError("Format non supporté.")
+
+
+def _creer_couche_shapefile(nom_couche, shp_buf, par_ext, nom_fichier, utilisateur,
+                            source, description, style_options):
+    """Crée une couche à partir d'un Shapefile (.shp + .shx/.dbf + options .prj/.cpg/.qmd)."""
+    import shapefile
+
+    epsg = _epsg_depuis_prj(par_ext.get('prj').getvalue() if par_ext.get('prj') else None)
+    encodage = _encodage_depuis_cpg(par_ext.get('cpg').getvalue() if par_ext.get('cpg') else None) or 'UTF-8'
+
+    try:
+        reader = shapefile.Reader(shp=shp_buf, shx=par_ext['shx'], dbf=par_ext['dbf'], encoding=encodage)
+    except (UnicodeDecodeError, TypeError, ValueError, shapefile.ShapefileException):
+        shp_buf.seek(0)
+        reader = shapefile.Reader(shp=shp_buf, shx=par_ext['shx'], dbf=par_ext['dbf'], encoding='latin-1')
+        encodage = 'latin-1'
+    try:
+        geometries = _lire_shapefile_reader(reader)
+    finally:
+        reader.close()
 
     if not geometries:
         raise ValueError("Aucune géométrie trouvée dans le Shapefile.")
 
+    transfo = _reprojection_wgs84(epsg)
+    if transfo is None:
+        projection_ok = False
+        srid_couche = epsg or 4326
+    else:
+        projection_ok = True
+        srid_couche = 4326
+        for g in geometries:
+            g['coords'] = _reprojeter_coords(g['coords'], g['type'], transfo)
+
     type_geo = _type_shapefile_vers_couche(geometries[0]['type'])
-    couche = CoucheGeometrie.objects.create(nom=nom_couche, type_geometrie=type_geo, fichier_source=nom_fichier)
+    couche = CoucheGeometrie.objects.create(
+        nom=nom_couche, type_geometrie=type_geo, fichier_source=nom_fichier,
+        nom_original=nom_fichier, srid=srid_couche, epsg=epsg or 4326,
+        encodage=encodage, nb_entites=len(geometries),
+        source=source or '', description=description or '',
+        utilisateur=utilisateur,
+    )
     for g in geometries:
-        Geometrie.objects.create(couche=couche, type=g['type'], coordonnees=g['coords'], proprietes=g['proprietes'])
+        Geometrie.objects.create(couche=couche, type=g['type'],
+                                 coordonnees=g['coords'], proprietes=g['proprietes'])
+
+    _sauvegarder_fichiers_source(couche, nom_fichier, shp_buf, par_ext)
+
+    style_qmd = _style_des_qmd(par_ext.get('qmd'))
+    if isinstance(style_options, dict) and style_options.get('couleur'):
+        _appliquer_style_couche(couche, style_options)
+    elif style_qmd:
+        _appliquer_style_couche(couche, style_qmd)
+    elif isinstance(style_options, dict):
+        _appliquer_style_couche(couche, style_options)
+
+    if not projection_ok:
+        couche._avertissement = ("La projection du fichier n'a pas pu être convertie automatiquement en WGS84 "
+                                 "(EPSG non reconnu). Les coordonnées ont été conservées telles quelles.")
     return couche
+
+
+def _style_des_qmd(par_ext_qmd):
+    if not par_ext_qmd:
+        return {}
+    try:
+        contenu = par_ext_qmd.getvalue()
+    except AttributeError:
+        contenu = par_ext_qmd
+    return _style_depuis_qmd(contenu)
+
+
+def _sauvegarder_fichiers_source(couche, nom_fichier, shp_buf, par_ext):
+    """Stocke les fichiers sources du Shapefile dans media/layers/couche_<id>/."""
+    dossier = f'couche_{couche.pk}'
+    base_nom = os.path.basename(nom_fichier).replace('.SHP', '.shp')
+    try:
+        couche.fichier_shp.save(f'{dossier}/{base_nom}', ContentFile(shp_buf.getvalue()), save=False)
+        for ext, cle_champ in (('.shx', 'fichier_shx'), ('.dbf', 'fichier_dbf'),
+                               ('.prj', 'fichier_prj'), ('.cpg', 'fichier_cpg'), ('.qmd', 'fichier_qmd')):
+            if par_ext.get(ext.lstrip('.')):
+                nom = os.path.basename(base_nom).replace('.shp', ext)
+                setattr(couche, cle_champ, None)
+                getattr(couche, cle_champ).save(f'{dossier}/{nom}',
+                                                ContentFile(par_ext[ext.lstrip('.')].getvalue()), save=False)
+    except Exception:
+        pass
+    try:
+        couche.save(update_fields=['fichier_shp', 'fichier_shx', 'fichier_dbf',
+                                   'fichier_prj', 'fichier_cpg', 'fichier_qmd'])
+    except Exception:
+        pass
 
 
 def _lire_shapefile_reader(reader):
@@ -4297,10 +4636,151 @@ def couche_delete(request, pk):
                 os.remove(couche.fichier_kml.path)
             except Exception:
                 pass
+        for champ in ('fichier_shp', 'fichier_shx', 'fichier_dbf', 'fichier_prj', 'fichier_cpg', 'fichier_qmd'):
+            f = getattr(couche, champ)
+            if f:
+                try:
+                    os.remove(f.path)
+                except Exception:
+                    pass
+        try:
+            import shutil
+            dossier = os.path.join(settings.MEDIA_ROOT, 'layers', f'couche_{couche.pk}')
+            if os.path.isdir(dossier):
+                shutil.rmtree(dossier, ignore_errors=True)
+        except Exception:
+            pass
         couche.delete()
         messages.success(request, f"Couche « {couche.nom} » supprimée.")
         return redirect('index_cartographie')
     return render(request, 'cartographie/couche_confirm_delete.html', {'couche': couche})
+
+
+@user_passes_test(_est_admin)
+def admin_couches(request):
+    """§20 : section Administration — Gestion des couches cartographiques."""
+    from django.db.models import Count
+
+    couches = (CoucheGeometrie.objects.select_related('projet', 'utilisateur')
+               .annotate(nb_geometries=Count('geometries')).order_by('-date_import'))
+    statut = request.GET.get('statut', '')
+    projet_id = request.GET.get('projet', '')
+    if statut in ('active', 'archivee', 'brouillon'):
+        couches = couches.filter(statut=statut)
+    if projet_id:
+        couches = couches.filter(projet_id=projet_id)
+    projets = Projet.objects.all()
+    return render(request, 'cartographie/admin_couches.html', {
+        'couches': couches, 'statut_filtre': statut, 'projet_id': projet_id,
+        'projets': projets,
+    })
+
+
+def _creer_zip_shapefile(couche):
+    """Construit un ZIP Shapefile (shp+shx+dbf+prj+cpg) pour une couche."""
+    import shapefile
+
+    dossier = f'layers/couche_{couche.pk}'
+    base = f'couche_{couche.pk}'
+    geoms = list(couche.geometries.all())
+    types_utilises = {g.type for g in geoms}
+    if 'Point' in types_utilises or not types_utilises:
+        shp_type = shapefile.POINT
+    elif 'LineString' in types_utilises:
+        shp_type = shapefile.POLYLINE
+    else:
+        shp_type = shapefile.POLYGON
+
+    def _point(g):
+        return tuple(g.coordonnees[:2])
+
+    with shapefile.Writer(target=os.path.join(settings.MEDIA_ROOT, dossier, base), shapeType=shp_type) as w:
+        # champs
+        champs = {}
+        for g in geoms:
+            for k, v in (g.proprietes or {}).items():
+                if k in ('couche_nom', 'couche_id', 'couleur', 'geom_id'):
+                    continue
+                if k not in champs:
+                    if isinstance(v, (int, float)) and not isinstance(v, bool):
+                        champs[k] = 'N'
+                    else:
+                        champs[k] = 'C'
+        for k, t in champs.items():
+            w.field(str(k)[:10], t, size=254)
+        for g in geoms:
+            if shp_type == shapefile.POINT:
+                w.point(*_point(g))
+            elif shp_type == shapefile.POLYLINE:
+                w.line([list(map(tuple, g.coordonnees))])
+            else:
+                w.poly([list(map(tuple, ring)) for ring in g.coordonnees])
+            w.record(*[g.proprietes.get(k, '') for k in champs])
+        w.close()
+
+    chemin_prj = os.path.join(settings.MEDIA_ROOT, dossier, base + '.prj')
+    with open(chemin_prj, 'w', encoding='utf-8') as f:
+        f.write('GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433],AUTHORITY["EPSG","4326"]]')
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        for ext in ('.shp', '.shx', '.dbf', '.prj'):
+            chemin = os.path.join(settings.MEDIA_ROOT, dossier, base + ext)
+            with open(chemin, 'rb') as f:
+                z.writestr(couche.nom.replace(' ', '_') + ext, f.read())
+    return buf.getvalue()
+
+
+@login_required
+def couche_export_shp(request, pk):
+    """Exporte une couche SIG au format Shapefile (ZIP : .shp/.shx/.dbf/.prj)."""
+    couche = get_object_or_404(CoucheGeometrie, pk=pk)
+    try:
+        contenu = _creer_zip_shapefile(couche)
+    except Exception as e:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'ajax' in request.GET:
+            return JsonResponse({'ok': False, 'erreur': f"Erreur d'export : {e}"}, status=400)
+        messages.error(request, f"Erreur d'export : {e}")
+        return redirect('index_cartographie')
+    nom = re.sub(r'[^\w\-. ]+', '', couche.nom).strip().replace(' ', '_') or 'couche'
+    reponse = HttpResponse(contenu, content_type='application/zip')
+    reponse['Content-Disposition'] = f'attachment; filename="{nom}.shp.zip"'
+    return reponse
+
+
+@login_required
+def couche_metadonnees(request, pk):
+    """Lit ou met à jour les métadonnées d'une couche (§10/12)."""
+    couche = get_object_or_404(CoucheGeometrie, pk=pk)
+    if request.method == 'POST':
+        couche.nom = (request.POST.get('nom') or couche.nom).strip()[:200]
+        couche.source = (request.POST.get('source') or couche.source).strip()[:300]
+        couche.description = (request.POST.get('description') or couche.description).strip()[:2000]
+        if request.POST.get('statut') in ('active', 'archivee', 'brouillon'):
+            couche.statut = request.POST['statut']
+        couche.save()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'ajax' in request.GET:
+            return JsonResponse({'ok': True, 'id': couche.pk, 'nom': couche.nom,
+                                 'source': couche.source, 'description': couche.description,
+                                 'statut': couche.statut})
+        messages.success(request, f"Couche « {couche.nom} » mise à jour.")
+        return redirect('index_cartographie')
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'ajax' in request.GET:
+        return JsonResponse({
+            'ok': True, 'id': couche.pk, 'nom': couche.nom, 'nom_original': couche.nom_original,
+            'type': couche.get_type_geometrie_display(), 'nb_entites': couche.nb_entites,
+            'epsg': couche.epsg, 'srid': couche.srid, 'encodage': couche.encodage,
+            'source': couche.source, 'description': couche.description,
+            'statut': couche.statut,
+            'taille_octets': couche.taille_octets,
+            'utilisateur': couche.utilisateur.username if couche.utilisateur else '',
+            'date_import': couche.date_import.isoformat() if couche.date_import else '',
+            'date_modification': couche.date_modification.isoformat() if couche.date_modification else '',
+            'fichiers_sources': [u for u in [
+                couche.fichier_shp.name, couche.fichier_shx.name, couche.fichier_dbf.name,
+                couche.fichier_prj.name, couche.fichier_cpg.name, couche.fichier_qmd.name] if u],
+        })
+    return render(request, 'cartographie/couche_metadonnees.html', {'couche': couche})
 
 
 # ─── ÉDITION DES POINTS + MÉDIAS ───────────────────────────────

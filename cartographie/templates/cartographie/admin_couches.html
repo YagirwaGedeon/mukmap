@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des couches cartographiques - MUKMAP v1.0</title>
+    <style>
+        :root { --bg: #1a1b2e; --bg-card: #232541; --border: #3d4060; --text: #e8e9f3; --text-sec: #a0a3c2; --text-muted: #6b6e8a; --accent: #60a5fa; --green: #4ade80; --red: #ef4444; --yellow: #eab308; }
+        [data-theme="light"] { --bg: #f0f2f5; --bg-card: #ffffff; --border: #d1d5db; --text: #1f2937; --text-sec: #6b7280; --text-muted: #9ca3af; --accent: #2563eb; --green: #16a34a; --red: #dc2626; --yellow: #ca8a04; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); }
+        .topbar { background: var(--bg-card); padding: 16px 30px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+        .topbar h1 { font-size: 1.3rem; }
+        .topbar nav a { color: var(--text-sec); text-decoration: none; margin-left: 18px; font-size: 0.9rem; }
+        .topbar nav a:hover { color: var(--accent); }
+        .container { max-width: 1100px; margin: 0 auto; padding: 30px; }
+        .filtres { margin-bottom: 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .filtres a, .filtres form { padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; text-decoration: none; font-weight: 600; }
+        .filtre-all { background: var(--bg-card); color: var(--text); border: 1px solid var(--border); }
+        .filtre-actif { outline: 2px solid var(--accent); }
+        .filtres select { padding: 6px 10px; border-radius: 20px; background: var(--bg-card); color: var(--text); border: 1px solid var(--border); font-size: 0.85rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+        th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.5px; }
+        td { color: var(--text-sec); }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: 700; }
+        .badge-active { background: var(--green); color: #fff; }
+        .badge-archivee { background: var(--yellow); color: #000; }
+        .badge-brouillon { background: var(--text-muted); color: #fff; }
+        .actions a { text-decoration: none; margin-right: 8px; font-size: 0.82rem; font-weight: 600; }
+        .btn-edit { color: var(--accent); }
+        .btn-view { color: var(--green); }
+        .btn-del { color: var(--red); }
+        .btn-exp { color: var(--yellow); }
+        .vide { text-align: center; padding: 60px; color: var(--text-muted); }
+        .edit-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin: 6px 0; display: grid; gap: 10px; }
+        .edit-panel input, .edit-panel select, .edit-panel textarea { width: 100%; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 0.85rem; }
+        .edit-panel label { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 3px; }
+        .edit-panel .row { display: flex; gap: 10px; }
+        .edit-panel .row > div { flex: 1; }
+        .btn { display: inline-block; padding: 7px 14px; border-radius: 8px; font-weight: 700; font-size: 0.82rem; cursor: pointer; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); text-decoration: none; }
+        .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .theme-toggle button { width: auto; padding: 6px 14px; background: var(--bg-card); color: var(--text); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin: 0; }
+    </style>
+{% include 'cartographie/_pwa_head.html' %}
+</head>
+<body>
+<div class="topbar">
+    <h1><span data-i18n="admin_couches">Gestion des couches cartographiques</span></h1>
+    <nav>
+        {% include 'cartographie/_selecteur_langue.html' %}
+        <span class="theme-toggle"><button onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='light'?'dark':'light'" title="Thème" data-i18n-title="theme">🌗</button></span>
+        <a href="{% url 'index_cartographie' %}"><span data-i18n="carte">Carte</span></a>
+        <a href="{% url 'dashboard' %}"><span data-i18n="tableau_de_bord">Tableau de bord</span></a>
+        <a href="{% url 'audit_list' %}"><span data-i18n="historique">Historique</span></a>
+        <a href="{% url 'import_page' %}">+ <span data-i18n="importer_couche">Importer une couche</span></a>
+    </nav>
+</div>
+<div class="container">
+    <div class="filtres">
+        <a href="{% url 'admin_couches' %}" class="filtre-all {% if not statut_filtre %}filtre-actif{% endif %}"><span data-i18n="toutes">Toutes</span></a>
+        <a href="{% url 'admin_couches' %}?statut=active" class="filtre-all {% if statut_filtre == 'active' %}filtre-actif{% endif %}"><span data-i18n="statut_actif">Active</span></a>
+        <a href="{% url 'admin_couches' %}?statut=archivee" class="filtre-all {% if statut_filtre == 'archivee' %}filtre-actif{% endif %}"><span data-i18n="statut_archivee">Archivée</span></a>
+        <a href="{% url 'admin_couches' %}?statut=brouillon" class="filtre-all {% if statut_filtre == 'brouillon' %}filtre-actif{% endif %}"><span data-i18n="statut_brouillon">Brouillon</span></a>
+        <form method="get" action="{% url 'admin_couches' %}">
+            <select name="projet" onchange="this.form.submit()">
+                <option value=""><span data-i18n="tous_projets">Tous les projets</span></option>
+                {% for p in projets %}
+                <option value="{{ p.pk }}" {% if projet_id == p.pk|stringformat:'s' %}selected{% endif %}>{{ p.nom }}</option>
+                {% endfor %}
+            </select>
+            {% if statut_filtre %}<input type="hidden" name="statut" value="{{ statut_filtre }}">{% endif %}
+        </form>
+    </div>
+
+    {% if couches %}
+    <table>
+        <thead>
+            <tr>
+                <th><span data-i18n="nom_couche">Couche</span></th>
+                <th><span data-i18n="type_geometrie">Type</span></th>
+                <th><span data-i18n="nb_entites">Entités</span></th>
+                <th>EPSG</th>
+                <th><span data-i18n="projet">Projet</span></th>
+                <th><span data-i18n="statut_label">Statut</span></th>
+                <th><span data-i18n="importe_par">Importé par</span></th>
+                <th><span data-i18n="date_import">Date</span></th>
+                <th><span data-i18n="actions">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in couches %}
+            <tr id="ligne-{{ c.pk }}">
+                <td style="font-weight:600;color:var(--text);">
+                    <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:{{ c.style_couleur|default:'#60a5fa' }};margin-right:6px;"></span>{{ c.nom }}
+                    {% if c.nom_original %}<div style="font-size:.68rem;color:var(--text-muted);">{{ c.nom_original }}</div>{% endif %}
+                </td>
+                <td>{{ c.get_type_geometrie_display|default:c.type_geometrie }}</td>
+                <td>{{ c.nb_geometries|default:c.nb_entites }}</td>
+                <td>{{ c.epsg|default:'—' }}</td>
+                <td>{{ c.projet.nom|default:'—' }}</td>
+                <td>
+                    <span class="badge badge-{{ c.statut }}">{% if c.statut == 'active' %}<span data-i18n="statut_actif">Active</span>{% elif c.statut == 'archivee' %}<span data-i18n="statut_archivee">Archivée</span>{% else %}<span data-i18n="statut_brouillon">Brouillon</span>{% endif %}</span>
+                </td>
+                <td>{{ c.utilisateur.username|default:'—' }}</td>
+                <td>{{ c.date_import|date:'d/m/Y H:i' }}</td>
+                <td class="actions">
+                    <a class="btn-view" href="{% url 'index_cartographie' %}?importe={{ c.pk }}" title="Voir sur la carte" data-i18n-title="voir_carte">👁</a>
+                    <a class="btn-exp" href="{% url 'couche_export_shp' c.pk %}" title="Exporter Shapefile" data-i18n-title="exporter_couche">⭳</a>
+                    <a class="btn-edit" href="javascript:void(0)" onclick="basculerEdition({{ c.pk }})" title="Modifier" data-i18n-title="modifier">✎</a>
+                    <a class="btn-del" href="javascript:void(0)" onclick="supprimer({{ c.pk }}, '{{ c.nom|escapejs }}')" title="Supprimer" data-i18n-title="supprimer">✕</a>
+                </td>
+            </tr>
+            <tr id="edit-{{ c.pk }}" style="display:none;">
+                <td colspan="9">
+                    <div class="edit-panel">
+                        <div class="row">
+                            <div><label data-i18n="nom_couche">Nom</label><input type="text" id="e-nom-{{ c.pk }}" value="{{ c.nom }}"></div>
+                            <div><label data-i18n="statut_label">Statut</label>
+                                <select id="e-statut-{{ c.pk }}">
+                                    <option value="active" {% if c.statut == 'active' %}selected{% endif %} data-i18n="statut_actif">Active</option>
+                                    <option value="archivee" {% if c.statut == 'archivee' %}selected{% endif %} data-i18n="statut_archivee">Archivée</option>
+                                    <option value="brouillon" {% if c.statut == 'brouillon' %}selected{% endif %} data-i18n="statut_brouillon">Brouillon</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div><label data-i18n="source_label">Source</label><input type="text" id="e-source-{{ c.pk }}" value="{{ c.source }}"></div>
+                        <div><label data-i18n="description_label">Description</label><textarea id="e-description-{{ c.pk }}" rows="2">{{ c.description }}</textarea></div>
+                        <div>
+                            <button type="button" class="btn btn-primary" onclick="enregistrer({{ c.pk }})"><span data-i18n="enregistrer">Enregistrer</span></button>
+                            <button type="button" class="btn" onclick="basculerEdition({{ c.pk }})"><span data-i18n="annuler">Annuler</span></button>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="vide"><span data-i18n="aucune_couche">Aucune couche — importez un GeoJSON, SHP, KML, GPX…</span></div>
+    {% endif %}
+</div>
+<script>
+function csrf() { return (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''; }
+function basculerEdition(pk) {
+    const tr = document.getElementById('edit-' + pk);
+    tr.style.display = tr.style.display === 'none' ? '' : 'none';
+}
+function enregistrer(pk) {
+    const corps = new URLSearchParams();
+    corps.set('nom', document.getElementById('e-nom-' + pk).value);
+    corps.set('statut', document.getElementById('e-statut-' + pk).value);
+    corps.set('source', document.getElementById('e-source-' + pk).value);
+    corps.set('description', document.getElementById('e-description-' + pk).value);
+    fetch('{% url "couche_metadonnees" 0 %}'.replace('/0/', '/' + pk + '/') + '?ajax=1', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf(), 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: corps.toString()
+    }).then(r => r.json()).then(j => { if (j && j.ok) location.reload(); else alert('Erreur'); })
+      .catch(() => alert('Erreur réseau'));
+}
+function supprimer(pk, nom) {
+    if (!confirm('Supprimer la couche « ' + nom + ' » ?')) return;
+    fetch('{% url "couche_delete" 0 %}'.replace('/0/', '/' + pk + '/'), {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf() }
+    }).then(() => location.reload()).catch(() => location.reload());
+}
+</script>
+</body>
+</html>
