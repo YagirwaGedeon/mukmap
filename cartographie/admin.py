@@ -6,9 +6,38 @@ from .models import (
     CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, ImageAerienne, CoucheWMS,
     ProjetAdduction, OuvrageHydraulique, TraceAdduction,
     ReleveSource, ReleveVillage, ReleveConsommation, ReleveRepere,
+    StatutPoint, HistoriquePoint, Visite,
 )
 
-admin.site.register(PointGeographique)
+
+@admin.register(PointGeographique)
+class PointGeographiqueAdmin(admin.ModelAdmin):
+    list_display = ('code', 'nom', 'categorie', 'statut', 'projet', 'province', 'territoire', 'auteur', 'date_creation')
+    list_filter = ('categorie', 'statut', 'archive', 'projet', 'province')
+    search_fields = ('code', 'identifiant', 'nom', 'description', 'adresse', 'village')
+
+
+@admin.register(StatutPoint)
+class StatutPointAdmin(admin.ModelAdmin):
+    list_display = ('nom', 'code', 'couleur', 'ordre', 'projet', 'actif')
+    list_filter = ('actif', 'projet')
+    search_fields = ('nom', 'code')
+
+
+@admin.register(HistoriquePoint)
+class HistoriquePointAdmin(admin.ModelAdmin):
+    list_display = ('point', 'type', 'action', 'utilisateur', 'date')
+    list_filter = ('type', 'date')
+    search_fields = ('action', 'point__nom', 'point__code')
+
+
+@admin.register(Visite)
+class VisiteAdmin(admin.ModelAdmin):
+    list_display = ('point', 'agent', 'date_visite', 'statut')
+    list_filter = ('statut', 'date_visite')
+    search_fields = ('point__nom', 'point__code', 'notes')
+
+
 admin.site.register(Projet)
 admin.site.register(ProfilAgent)
 admin.site.register(Activite)

@@ -12,6 +12,7 @@ import io
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
+from django.contrib.auth.models import User
 
 from .models import PointGeographique
 from .views import _projet_actif, _audit, _valider_coordonnees_wgs84
@@ -29,21 +30,33 @@ def _float_ou_nul(valeur):
 # ─── Registre des colonnes du modèle ─────────────────────────────
 # type : text | nb | date | choix | fkey
 CHAMPS_MODELE = {
+    'code': 'text',
+    'identifiant': 'text',
     'nom': 'text',
     'description': 'text',
     'latitude': 'nb',
     'longitude': 'nb',
+    'precision_gps_m': 'nb',
+    'altitude': 'nb',
+    'adresse': 'text',
     'categorie': 'choix',
     'statut': 'choix',
+    'etat_avancement': 'text',
     'province': 'text',
+    'territoire': 'text',
     'commune': 'text',
+    'secteur': 'text',
     'quartier': 'text',
+    'village': 'text',
+    'observations': 'text',
     'date_creation': 'date',
+    'date_visite': 'date',
     'source_fichier': 'text',
     'source_format': 'text',
     'projet': 'fkey',
     'activite': 'fkey',
     'auteur': 'fkey',
+    'agent': 'fkey',
 }
 
 CHOIX_CATEGORIE = dict(PointGeographique.CATEGORIE_CHOICES)
@@ -55,11 +68,15 @@ MAX_SCAN_COLONNES = 3000
 
 # Champs triables directement en SQL (ordre SQL équivalent au tri Python).
 ORDRE_SQL = {
+    'code': 'code', 'identifiant': 'identifiant',
     'nom': 'nom', 'description': 'description',
     'latitude': 'latitude', 'longitude': 'longitude',
-    'categorie': 'categorie', 'statut': 'statut',
-    'province': 'province', 'commune': 'commune', 'quartier': 'quartier',
-    'date_creation': 'date_creation',
+    'precision_gps_m': 'precision_gps_m', 'altitude': 'altitude',
+    'categorie': 'categorie', 'statut': 'statut', 'etat_avancement': 'etat_avancement',
+    'province': 'province', 'territoire': 'territoire', 'commune': 'commune',
+    'secteur': 'secteur', 'quartier': 'quartier', 'village': 'village',
+    'adresse': 'adresse', 'observations': 'observations',
+    'date_creation': 'date_creation', 'date_visite': 'date_visite',
     'source_fichier': 'source_fichier', 'source_format': 'source_format',
 }
 
@@ -86,8 +103,14 @@ def _valeur_ligne(p, champ):
         if p.auteur:
             return p.auteur.get_full_name() or p.auteur.username
         return ''
+    if champ == 'agent':
+        if p.agent:
+            return p.agent.get_full_name() or p.agent.username
+        return ''
     if champ == 'date_creation':
         return p.date_creation.strftime('%d/%m/%Y %H:%M')
+    if champ == 'date_visite':
+        return p.date_visite.strftime('%d/%m/%Y %H:%M') if p.date_visite else ''
     val = getattr(p, champ, '')
     return val if val is not None else ''
 
@@ -370,6 +393,9 @@ def _recherche_q(qs, q):
     q_total = None
     for t in termes:
         qq = (Q(nom__icontains=t) | Q(description__icontains=t)
+              | Q(code__icontains=t) | Q(identifiant__icontains=t)
+              | Q(adresse__icontains=t) | Q(village__icontains=t)
+              | Q(territoire__icontains=t) | Q(secteur__icontains=t)
               | Q(province__icontains=t) | Q(commune__icontains=t)
               | Q(quartier__icontains=t) | Q(source_fichier__icontains=t)
               | Q(projet__nom__icontains=t) | Q(auteur__first_name__icontains=t)
@@ -381,24 +407,37 @@ def _recherche_q(qs, q):
 def _serialiser_point(p):
     return {
         'id': p.pk,
+        'code': p.code,
+        'identifiant': p.identifiant,
         'nom': p.nom,
         'description': p.description,
         'latitude': p.latitude,
         'longitude': p.longitude,
+        'precision_gps_m': p.precision_gps_m,
+        'altitude': p.altitude,
+        'adresse': p.adresse,
         'categorie': p.categorie,
         'categorie_label': CHOIX_CATEGORIE.get(p.categorie, p.categorie),
         'statut': p.statut,
         'statut_label': CHOIX_STATUT.get(p.statut, p.statut),
+        'etat_avancement': p.etat_avancement,
         'province': p.province,
+        'territoire': p.territoire,
         'commune': p.commune,
+        'secteur': p.secteur,
         'quartier': p.quartier,
+        'village': p.village,
+        'observations': p.observations,
         'projet': p.projet.nom if p.projet else '',
         'projet_id': p.projet_id,
         'activite': p.activite.nom_activite if p.activite else '',
         'auteur': (p.auteur.get_full_name() or p.auteur.username) if p.auteur else '',
+        'agent': (p.agent.get_full_name() or p.agent.username) if p.agent else '',
         'date_creation': p.date_creation.strftime('%d/%m/%Y %H:%M'),
+        'date_visite': p.date_visite.strftime('%d/%m/%Y %H:%M') if p.date_visite else '',
         'updated_at': p.updated_at.isoformat() if p.updated_at else None,
         'supprime': bool(p.supprime),
+        'archive': bool(p.archive),
         'synchro_id': p.synchro_id,
         'donnees': p.donnees or {},
         'source_fichier': p.source_fichier,
@@ -495,8 +534,9 @@ def _stats_lignes(lignes, colonnes):
 
 def _facettes(lignes, colonnes):
     """Valeurs distinctes (avec comptage) pour les champs de filtrage rapide."""
-    priorites = ['categorie', 'statut', 'province', 'commune', 'quartier',
-                 'projet', 'auteur', 'source_fichier', 'source_format']
+    priorites = ['categorie', 'statut', 'province', 'territoire', 'commune', 'secteur',
+                 'quartier', 'village', 'projet', 'auteur', 'agent',
+                 'source_fichier', 'source_format']
     facettes = {}
     for champ in priorites:
         comptes = {}
@@ -607,20 +647,38 @@ def api_points_creer(request):
                                  'result': _serialiser_point(existant)})
     p = PointGeographique.objects.create(
         nom=nom[:200],
+        code=str(data.get('code') or '')[:30],
+        identifiant=str(data.get('identifiant') or '')[:64],
         description=str(data.get('description') or ''),
         latitude=lat,
         longitude=lng,
         precision_gps_m=_float_ou_nul(data.get('precision_gps_m')),
+        altitude=_float_ou_nul(data.get('altitude')),
+        adresse=str(data.get('adresse') or ''),
         categorie=str(data.get('categorie') or 'autre'),
-        statut=str(data.get('statut') or 'actif'),
+        statut=str(data.get('statut') or 'nouveau'),
+        etat_avancement=str(data.get('etat_avancement') or '')[:40],
         province=str(data.get('province') or ''),
+        territoire=str(data.get('territoire') or ''),
         commune=str(data.get('commune') or ''),
+        secteur=str(data.get('secteur') or ''),
         quartier=str(data.get('quartier') or ''),
+        village=str(data.get('village') or ''),
+        observations=str(data.get('observations') or ''),
         projet=projet,
         donnees={k: v for k, v in (data.get('donnees') or {}).items()},
         synchro_id=synchro_id,
         auteur=request.user,
     )
+    if data.get('agent'):
+        agent = User.objects.filter(pk=data['agent']).first()
+        if agent:
+            p.agent = agent
+            p.save(update_fields=['agent'])
+    from .models import HistoriquePoint
+    HistoriquePoint.objects.create(point=p, type='creation',
+                                   action=f"Point créé (table) : {p.code or p.nom}",
+                                   utilisateur=request.user)
     _audit(request, "Création de point (table)", f"Point #{p.pk} - {p.nom}")
     return JsonResponse({'ok': True, 'id': p.pk, 'result': _serialiser_point(p)}, status=201)
 
@@ -640,7 +698,8 @@ def api_point_modifier(request, pk):
     except ValueError:
         data = {}
     for champ in ('nom', 'description', 'categorie', 'statut', 'province', 'commune', 'quartier',
-                  'source_fichier', 'source_format'):
+                  'source_fichier', 'source_format', 'code', 'identifiant', 'adresse',
+                  'territoire', 'secteur', 'village', 'observations', 'etat_avancement'):
         if champ in data:
             setattr(p, champ, str(data[champ])[:200] if champ in ('nom', 'source_fichier', 'source_format') else str(data[champ]))
     for champ in ('latitude', 'longitude'):
@@ -657,9 +716,20 @@ def api_point_modifier(request, pk):
             setattr(p, champ, valeur)
     if 'precision_gps_m' in data:
         p.precision_gps_m = _float_ou_nul(data['precision_gps_m'])
+    if 'altitude' in data:
+        p.altitude = _float_ou_nul(data['altitude'])
+    if 'agent' in data:
+        agent = User.objects.filter(pk=data['agent']).first()
+        p.agent = agent
+    if 'archive' in data:
+        p.archive = bool(data['archive'])
     if isinstance(data.get('donnees'), dict):
         p.donnees = {str(k): v for k, v in data['donnees'].items()}
     p.save()
+    from .models import HistoriquePoint
+    HistoriquePoint.objects.create(point=p, type='modification',
+                                   action=f"Point modifié (table) : {p.code or p.nom}",
+                                   utilisateur=request.user)
     _audit(request, "Modification de point (table)", f"Point #{pk}")
     return JsonResponse({'ok': True, 'result': _serialiser_point(p)})
 
@@ -710,14 +780,17 @@ def api_points_export(request, format):
             for cle in d.get('donnees', {}):
                 if cle not in colonnes_json:
                     colonnes_json.append(cle)
-        entetes = ['id', 'nom', 'description', 'latitude', 'longitude', 'categorie',
-                   'statut', 'province', 'commune', 'quartier', 'projet', 'activite',
-                   'auteur', 'date_creation', 'source_fichier', 'source_format'] + colonnes_json
+        entetes = ['id', 'code', 'identifiant', 'nom', 'description', 'latitude', 'longitude',
+                   'precision_gps_m', 'altitude', 'adresse', 'categorie', 'statut',
+                   'etat_avancement', 'province', 'territoire', 'commune', 'secteur',
+                   'quartier', 'village', 'observations', 'projet', 'activite',
+                   'auteur', 'agent', 'date_creation', 'date_visite',
+                   'source_fichier', 'source_format'] + colonnes_json
         buf = io.StringIO()
         ecrivain = csv.writer(buf)
         ecrivain.writerow(entetes)
         for d in donnees:
-            ligne = [d.get(h, '') for h in entetes[:16]]
+            ligne = [d.get(h, '') for h in entetes[:28]]
             for cle in colonnes_json:
                 ligne.append(d.get('donnees', {}).get(cle, ''))
             ecrivain.writerow(ligne)

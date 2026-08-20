@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tous les points — MUKMAP v1.0</title>
+    {% load cartographie_extras %}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -109,7 +110,7 @@
         <h2>📍 <span data-i18n="tous_points">Tous les points</span></h2>
         <p class="sous" data-i18n="tous_points_sous">L'ensemble des points enregistrés, tous projets confondus. Cliquez sur ▸ pour voir le détail complet d'un point.</p>
         <form method="GET" class="filtres">
-            <input type="text" name="q" value="{{ f_q }}" placeholder="Rechercher un point (nom, province, commune…)" data-i18n-ph="rechercher_point">
+            <input type="text" name="q" value="{{ f_q }}" placeholder="Rechercher un point (nom, code, adresse, village…)" data-i18n-ph="rechercher_point">
             <select name="projet">
                 <option value="" data-i18n="tous_projets">Tous les projets</option>
                 {% for p in projets %}<option value="{{ p.pk }}" {% if f_projet == p.pk|stringformat:'s' %}selected{% endif %}>{{ p.nom }}</option>{% endfor %}
@@ -122,15 +123,33 @@
                 <option value="" data-i18n="tous_etats">Tous les états</option>
                 {% for val, lib in statuts %}<option value="{{ val }}" {% if f_statut == val %}selected{% endif %}>{{ lib }}</option>{% endfor %}
             </select>
+            <select name="territoire">
+                <option value="">Territoire / district</option>
+                {% for val in territoires %}<option value="{{ val }}" {% if f_territoire == val %}selected{% endif %}>{{ val }}</option>{% endfor %}
+            </select>
+            <select name="agent">
+                <option value="">Agent responsable</option>
+                {% for a in agents_liste %}<option value="{{ a.pk }}" {% if f_agent == a.pk|stringformat:'s' %}selected{% endif %}>{{ a.get_full_name|default:a.username }}</option>{% endfor %}
+            </select>
+            <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--text-2);">
+                <input type="checkbox" name="archives" value="1" {% if f_archives %}checked{% endif %} style="width:auto;"> Inclure les archivés
+            </label>
             <button type="submit" class="btn btn-primary"><span data-i18n="filtrer">Filtrer</span></button>
-            {% if f_q or f_projet or f_categorie or f_statut %}<a class="btn" href="{% url 'points_liste' %}" data-i18n="reinitialiser">Réinitialiser</a>{% endif %}
+            {% if f_q or f_projet or f_categorie or f_statut or f_territoire or f_agent or f_archives %}<a class="btn" href="{% url 'points_liste' %}" data-i18n="reinitialiser">Réinitialiser</a>{% endif %}
         </form>
         <div class="stat">
             <span class="pill accent">{{ total }} <span data-i18n="points">points</span></span>
-            <span class="pill" id="visible-pill"></span>
+            {% for val, lib in statuts %}
+                {% if stats_par_statut|get_item:val %}<span class="pill" title="{{ lib }}">{{ lib }} : {{ stats_par_statut|get_item:val }}</span>{% endif %}
+            {% endfor %}
             <span style="flex:1;"></span>
             <button type="button" class="btn btn-sm" id="sel-tous-bt"><span data-i18n="tout_selectionner">✅ Tout sélectionner</span></button>
             <button type="button" class="btn btn-sm" id="sel-aucun-bt"><span data-i18n="tout_deselectionner">☐ Désélectionner</span></button>
+            <button type="button" class="btn btn-sm btn-vert" id="sel-export-bt" disabled><span>📤 Exporter la sélection</span></button>
+            <select class="btn btn-sm" id="sel-statut-bt" disabled style="padding:6px 10px;font-size:.75rem;border-radius:8px;background:var(--bg-3);color:var(--text);border:1px solid var(--border);">
+                <option value="">Changer le statut…</option>
+                {% for val, lib in statuts %}<option value="{{ val }}">{{ lib }}</option>{% endfor %}
+            </select>
             <button type="button" class="btn btn-sm btn-danger" id="sel-suppr-bt" disabled><span data-i18n="supprimer_selection">🗑 Supprimer la sélection</span></button>
             <span class="pill" id="selection-pill"></span>
         </div>
@@ -140,16 +159,18 @@
                     <tr>
                         <th style="width:36px;"><input type="checkbox" id="sel-tous" title="Tout sélectionner" data-i18n-title="tout_selectionner"></th>
                         <th style="width:34px;"></th>
-                        <th data-i18n="nom_lieu">Nom du lieu</th>
+                        <th><a href="?{% url_replace tri='nom' %}" style="color:inherit;text-decoration:none;">Code</a></th>
+                        <th><a href="?{% url_replace tri='nom' %}" style="color:inherit;text-decoration:none;" data-i18n="nom_lieu">Nom du lieu</a></th>
                         <th data-i18n="categorie">Catégorie</th>
                         <th data-i18n="etat">État</th>
                         <th data-i18n="projet">Projet</th>
                         <th data-i18n="province">Province</th>
+                        <th>Territoire</th>
                         <th>Coordonnées</th>
                         <th data-i18n="agent_role">Agent</th>
-                        <th data-i18n="date_heure">Date</th>
+                        <th><a href="?{% url_replace tri='-date_creation' %}" style="color:inherit;text-decoration:none;" data-i18n="date_heure">Date</a></th>
                         <th style="width:70px;">📷 <span data-i18n="photos">Photos</span></th>
-                        <th style="width:150px;">Actions</th>
+                        <th style="width:170px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -157,36 +178,44 @@
                     <tr class="ligne-principale" data-point="{{ p.pk }}">
                         <td><input type="checkbox" class="sel-point" value="{{ p.pk }}" title="Sélectionner"></td>
                         <td><button type="button" class="chevron" title="Détails">▸</button></td>
-                        <td><b>{{ p.nom }}</b>{% if p.description %}<div style="font-size:.7rem;color:var(--text-3);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.description }}</div>{% endif %}</td>
+                        <td><b>{{ p.code|default:'—' }}</b></td>
+                        <td><b>{{ p.nom }}</b>{% if p.description %}<div style="font-size:.7rem;color:var(--text-3);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.description }}</div>{% endif %}</td>
                         <td><span class="badge" data-cat="{{ p.categorie }}"><span id="cat-emoji-{{ p.pk }}"></span> <span>{{ p.get_categorie_display }}</span></span></td>
-                        <td><span class="badge">{{ p.get_statut_display }}</span></td>
+                        <td><span class="badge" style="border-color:{{ p.statut|statut_couleur }}55;color:{{ p.statut|statut_couleur }};">● {{ p.get_statut_display }}</span></td>
                         <td>{% if p.projet %}<span class="badge badge-projet">📁 {{ p.projet.nom }}</span>{% else %}<span class="badge badge-sansprojet" data-i18n="sans_projet">Sans projet</span>{% endif %}</td>
                         <td>{{ p.province|default:'—' }}{% if p.commune %}<div style="font-size:.7rem;color:var(--text-3);">{{ p.commune }}</div>{% endif %}</td>
-                        <td class="coords">{{ p.latitude|floatformat:6 }}, {{ p.longitude|floatformat:6 }}</td>
-                        <td>{% if p.auteur %}{{ p.auteur.get_full_name|default:p.auteur.username }}{% else %}—{% endif %}</td>
+                        <td>{{ p.territoire|default:'—' }}{% if p.village %}<div style="font-size:.7rem;color:var(--text-3);">{{ p.village }}</div>{% endif %}</td>
+                        <td class="coords">{{ p.latitude|floatformat:6 }}, {{ p.longitude|floatformat:6 }}{% if p.altitude %}<div style="font-size:.65rem;color:var(--text-3);">⛰️ {{ p.altitude }} m</div>{% endif %}</td>
+                        <td>{% if p.agent %}{{ p.agent.get_full_name|default:p.agent.username }}{% elif p.auteur %}{{ p.auteur.get_full_name|default:p.auteur.username }}{% else %}—{% endif %}</td>
                         <td style="white-space:nowrap;">{{ p.date_creation|date:'d/m/Y H:i' }}</td>
                         <td>{% if p.nb_photos %}<span class="badge">📷 {{ p.nb_photos }}</span>{% else %}—{% endif %}</td>
                         <td><div class="actions">
-                            <a class="btn btn-sm btn-vert" href="{% url 'index_cartographie' %}?point={{ p.pk }}" data-i18n="voir_sur_carte">Voir sur la carte</a>
+                            <a class="btn btn-sm" href="{% url 'point_detail' p.pk %}" data-i18n="voir_details">Voir détails</a>
+                            <a class="btn btn-sm btn-vert" href="{% url 'index_cartographie' %}?point={{ p.pk }}" data-i18n="voir_sur_carte">Carte</a>
                             <a class="btn btn-sm" href="{% url 'point_edit' p.pk %}" data-i18n="modifier">Modifier</a>
                             <a class="btn btn-sm btn-danger" href="{% url 'point_delete' p.pk %}" data-i18n="supprimer">Supprimer</a>
                         </div></td>
                     </tr>
                     <tr class="ligne-detail" style="display:none;">
-                        <td colspan="12">
+                        <td colspan="14">
                             <div class="grille-details">
+                                <div class="ligne"><span class="cle">Code / Identifiant</span><span class="val">{{ p.code|default:'—' }} / {{ p.identifiant|default:'—' }}</span></div>
                                 <div class="ligne"><span class="cle">Catégorie</span><span class="val">{{ p.get_categorie_display }}</span></div>
                                 <div class="ligne"><span class="cle">État</span><span class="val">{{ p.get_statut_display }}</span></div>
+                                <div class="ligne"><span class="cle">État d'avancement</span><span class="val">{{ p.etat_avancement|default:'—' }}</span></div>
                                 <div class="ligne"><span class="cle">Projet</span><span class="val">{% if p.projet %}{{ p.projet.nom }}{% else %}—{% endif %}</span></div>
                                 <div class="ligne"><span class="cle">Province</span><span class="val">{{ p.province|default:'—' }}</span></div>
-                                <div class="ligne"><span class="cle">Commune</span><span class="val">{{ p.commune|default:'—' }}</span></div>
-                                <div class="ligne"><span class="cle">Quartier</span><span class="val">{{ p.quartier|default:'—' }}</span></div>
-                                <div class="ligne"><span class="cle">Latitude</span><span class="val">{{ p.latitude }}</span></div>
-                                <div class="ligne"><span class="cle">Longitude</span><span class="val">{{ p.longitude }}</span></div>
-                                <div class="ligne"><span class="cle">Agent</span><span class="val">{% if p.auteur %}{{ p.auteur.get_full_name|default:p.auteur.username }}{% else %}—{% endif %}</span></div>
+                                <div class="ligne"><span class="cle">Territoire</span><span class="val">{{ p.territoire|default:'—' }}</span></div>
+                                <div class="ligne"><span class="cle">Commune / secteur</span><span class="val">{{ p.commune|default:'—' }} / {{ p.secteur|default:'—' }}</span></div>
+                                <div class="ligne"><span class="cle">Quartier / village</span><span class="val">{{ p.quartier|default:'—' }} / {{ p.village|default:'—' }}</span></div>
+                                <div class="ligne"><span class="cle">Adresse</span><span class="val">{{ p.adresse|default:'—' }}</span></div>
+                                <div class="ligne"><span class="cle">Latitude / Longitude</span><span class="val">{{ p.latitude }} / {{ p.longitude }}</span></div>
+                                <div class="ligne"><span class="cle">Altitude / Précision</span><span class="val">{{ p.altitude|default:'—' }} m / {{ p.precision_gps_m|default:'—' }} m</span></div>
+                                <div class="ligne"><span class="cle">Agent</span><span class="val">{% if p.agent %}{{ p.agent.get_full_name|default:p.agent.username }}{% elif p.auteur %}{{ p.auteur.get_full_name|default:p.auteur.username }}{% else %}—{% endif %}</span></div>
                                 <div class="ligne"><span class="cle">Date</span><span class="val">{{ p.date_creation|date:'d/m/Y H:i' }}</span></div>
                                 <div class="ligne"><span class="cle">Photos géoréférencées</span><span class="val">{% if p.nb_photos %}📷 {{ p.nb_photos }}{% else %}—{% endif %}</span></div>
                                 {% if p.description %}<div class="ligne" style="grid-column:1/-1;"><span class="cle">Description</span><span class="val">{{ p.description }}</span></div>{% endif %}
+                                {% if p.observations %}<div class="ligne" style="grid-column:1/-1;"><span class="cle">Observations</span><span class="val">{{ p.observations }}</span></div>{% endif %}
                                 {% if p.donnees %}
                                 <div style="grid-column:1/-1;margin-top:8px;">
                                     <b style="font-size:.75rem;color:var(--accent);">{{ p.donnees|length }} colonne(s) du fichier importé</b>
@@ -200,13 +229,21 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="12">
+                    <tr><td colspan="14">
                         <div class="aucun"><div class="grand">🔍</div><div data-i18n="aucun_point_trouve">Aucun point ne correspond à votre recherche.</div></div>
                     </td></tr>
                 {% endfor %}
                 </tbody>
             </table>
         </div>
+
+        {% if page.has_other_pages %}
+        <div style="display:flex;align-items:center;gap:12px;margin-top:16px;justify-content:center;flex-wrap:wrap;">
+            {% if page.has_previous %}<a class="btn btn-sm" href="?{% url_replace page=page.previous_page_number %}">← <span data-i18n="precedente">Précédente</span></a>{% endif %}
+            <span class="pill accent">Page {{ page.number }} / {{ page.paginator.num_pages }}</span>
+            {% if page.has_next %}<a class="btn btn-sm" href="?{% url_replace page=page.next_page_number %}"><span data-i18n="suivante">Suivante</span> →</a>{% endif %}
+        </div>
+        {% endif %}
     </div>
 </main>
 
@@ -265,6 +302,8 @@ const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '{{ csrf_t
 const checkboxes = () => Array.from(document.querySelectorAll('#table-points tbody .sel-point'));
 const selectionPill = document.getElementById('selection-pill');
 const boutonSuppr = document.getElementById('sel-suppr-bt');
+const boutonExport = document.getElementById('sel-export-bt');
+const selectStatut = document.getElementById('sel-statut-bt');
 const selectionnerTous = document.getElementById('sel-tous');
 const boutonTous = document.getElementById('sel-tous-bt');
 const boutonAucun = document.getElementById('sel-aucun-bt');
@@ -273,12 +312,17 @@ const tradsSel = {
     aucun: () => '☐ Désélectionner',
     supprimer: n => '🗑 Supprimer la sélection' + (n ? ' (' + n + ')' : ''),
 };
+function idsSelectionnes() {
+    return checkboxes().filter(c => c.checked).map(c => Number(c.value));
+}
 function majSelection() {
     const cases = checkboxes();
     const n = cases.filter(c => c.checked).length;
     if (selectionnerTous) selectionnerTous.checked = cases.length > 0 && n === cases.length;
     selectionnerTous.indeterminate = n > 0 && n < cases.length;
     if (boutonSuppr) { boutonSuppr.disabled = n === 0; boutonSuppr.textContent = tradsSel.supprimer(n); }
+    if (boutonExport) { boutonExport.disabled = n === 0; }
+    if (selectStatut) { selectStatut.disabled = n === 0; }
     if (selectionPill) selectionPill.textContent = n ? n + ' sélectionné(s)' : '';
 }
 if (selectionnerTous) {
@@ -296,6 +340,40 @@ if (boutonAucun) boutonAucun.addEventListener('click', () => {
     majSelection();
 });
 checkboxes().forEach(c => c.addEventListener('change', majSelection));
+
+// POINTS : export de la sélection (tous formats)
+if (boutonExport) {
+    boutonExport.addEventListener('click', () => {
+        const ids = idsSelectionnes();
+        if (!ids.length) return;
+        const format = window.prompt('Format d\'export (geojson, kml, gpx, csv, excel, json) :', 'geojson');
+        if (!format) return;
+        const url = "{% url 'api_table_points_export' 'FORMAT' %}".replace('FORMAT', encodeURIComponent(format))
+            + '?ids=' + ids.join(',');
+        window.location.href = url;
+    });
+}
+
+// POINTS : changement de statut en masse
+if (selectStatut) {
+    selectStatut.addEventListener('change', () => {
+        const statut = selectStatut.value;
+        selectStatut.value = '';
+        if (!statut) return;
+        const ids = idsSelectionnes();
+        if (!ids.length) return;
+        if (!window.confirm('Changer le statut de ' + ids.length + ' point(s) sélectionné(s) ?')) return;
+        fetch('{% url "api_points_statut_masse" %}', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+            body: JSON.stringify({ ids: ids, statut: statut }),
+        }).then(r => r.json()).then(d => {
+            if (d && d.ok) { window.location.reload(); }
+            else { window.alert(d && d.erreur ? d.erreur : 'Échec du changement de statut.'); }
+        }).catch(() => { window.alert('Erreur réseau.'); });
+    });
+}
+
 if (boutonSuppr) {
     boutonSuppr.addEventListener('click', () => {
         const ids = checkboxes().filter(c => c.checked).map(c => c.value);

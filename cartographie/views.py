@@ -34,7 +34,7 @@ from .models import (
     ProfilAgent, ZoneSecurite, Itineraire,
     CoucheGeometrie, Geometrie, JournalAudit, MediaPoint, SourceGeometrie,
     CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, CoucheWMS, ImageAerienne,
-    SessionTravail, MeteoActivite
+    SessionTravail, MeteoActivite, StatutPoint, HistoriquePoint, Visite
 )
 from .i18n import langue_active
 from . import geo_formats
@@ -409,8 +409,13 @@ def _serialiser_points_carte(points):
             "latitude": p.latitude, "longitude": p.longitude,
             "photo": p.photo.url if p.photo else '',
             "precision_gps_m": p.precision_gps_m,
+            "altitude": p.altitude,
             "categorie": p.categorie, "statut": p.statut,
-            "province": p.province, "commune": p.commune, "quartier": p.quartier,
+            "code": p.code or '', "identifiant": p.identifiant or '',
+            "etat_avancement": p.etat_avancement or '',
+            "province": p.province, "territoire": p.territoire, "commune": p.commune,
+            "secteur": p.secteur, "quartier": p.quartier, "village": p.village,
+            "adresse": p.adresse, "observations": p.observations,
             "projet": p.projet.nom if p.projet else '',
             "projet_id": p.projet_id,
             "donnees": p.donnees or {},
@@ -423,17 +428,59 @@ def _serialiser_points_carte(points):
                         "utilisateur": (m.utilisateur.get_full_name() or m.utilisateur.username) if m.utilisateur else '',
                         "commentaire": m.commentaire} for m in p.medias.all()],
             "auteur": p.auteur.get_full_name() or p.auteur.username if p.auteur else 'Anonyme',
+            "agent": p.agent.get_full_name() or p.agent.username if p.agent else '',
             "date": p.date_creation.strftime('%d/%m/%Y %H:%M'),
+            "date_visite": p.date_visite.strftime('%d/%m/%Y %H:%M') if p.date_visite else '',
+            "archive": p.archive,
+            "statut_couleur": _couleur_statut_point(p.statut),
+            "statut_nom": _nom_statut_point(p.statut),
         }
         for p in points
     ]
 
 
+def _nom_statut_point(code):
+    """Nom affiché d'un statut (configuration StatutPoint, sinon libellé par défaut)."""
+    cfg = _cache_statuts_points().get(code)
+    if cfg:
+        return cfg.get('nom') or code
+    return dict(PointGeographique.STATUT_CHOICES).get(code, code)
+
+
+def _couleur_statut_point(code):
+    """Couleur d'un statut (configuration StatutPoint, sinon couleur par défaut)."""
+    cfg = _cache_statuts_points().get(code)
+    if cfg:
+        return cfg.get('couleur') or '#6b729c'
+    couleurs = {'actif': '#16a34a', 'nouveau': '#2563eb', 'planifie': '#7c3aed',
+                'a_visiter': '#d97706', 'en_cours': '#ea580c', 'visite': '#0891b2',
+                'verifie': '#059669', 'termine': '#166534', 'suspendu': '#dc2626',
+                'inactif': '#64748b', 'archive': '#475569'}
+    return couleurs.get(code, '#6b729c')
+
+
+_cache_statuts_points_val = None
+
+
+def _cache_statuts_points():
+    """Cache process des statuts configurés (globaux)."""
+    global _cache_statuts_points_val
+    if _cache_statuts_points_val is None:
+        _cache_statuts_points_val = {
+            s.code: {'nom': s.nom, 'couleur': s.couleur}
+            for s in StatutPoint.objects.filter(projet__isnull=True, actif=True)
+        }
+    return _cache_statuts_points_val
+
+
 def points_donnees(request):
     """JSON des points pour recharger la carte après un import AJAX."""
     qs = PointGeographique.objects.select_related('auteur', 'projet').prefetch_related('medias') \
-        .filter(supprime=False)
+        .filter(supprime=False, archive=False)
     projet_actif = _projet_actif(request)
+    # POINTS : mode multi-projets (admin) — tous les points, tous projets confondus
+    if request.GET.get('tous') in ('1', 'true') and _est_admin(request.user):
+        projet_actif = None
     if projet_actif is not None:
         qs = qs.filter(projet=projet_actif)
     return JsonResponse(_serialiser_points_carte(qs), safe=False)
@@ -488,12 +535,14 @@ def index_cartographie(request):
         return redirect('index_cartographie')
 
     points_qs = PointGeographique.objects.select_related('auteur', 'projet').prefetch_related('medias') \
-        .filter(supprime=False)
+        .filter(supprime=False, archive=False)
     activites_qs = Activite.objects.select_related('projet', 'agent').prefetch_related('photos')
     couches_qs = CoucheGeometrie.objects.all()
     zones_qs = ZoneSecurite.objects.all()
 
-    if projet_actif is not None:
+    # POINTS : mode multi-projets (admin) — voir tous les points, tous projets confondus
+    projets_tous = _est_admin(request.user) and request.GET.get('projets') == 'tous'
+    if projet_actif is not None and not projets_tous:
         activites_qs = activites_qs.filter(projet=projet_actif)
         couches_qs = couches_qs.filter(projet=projet_actif)
         zones_qs = zones_qs.filter(projet=projet_actif)
@@ -559,6 +608,7 @@ def index_cartographie(request):
         'est_invite': est_invite,
         'est_admin': _est_admin(request.user),
         'projet_actif': projet_actif,
+        'projets_tous': projets_tous,
         'activite_actuelle': activite_actuelle,
         'activites_recentes': activites_qs.exclude(nom_activite='').values('nom_activite').distinct()[:8],
         'session_projet_id': request.session.get('projet_actif_id') or 0,
@@ -566,6 +616,12 @@ def index_cartographie(request):
         'couche_importee': request.GET.get('importe', ''),
         'est_admin_principal': _est_admin_principal(request.user),
         'mode_json': _json_script(_etat_mode(request)),
+        'statuts_config': _json_script(list(StatutPoint.objects.filter(projet__isnull=True, actif=True)
+                                            .values('code', 'nom', 'couleur', 'ordre'))),
+        'agents_responsables': _json_script([
+            {'id': u.pk, 'nom': u.get_full_name() or u.username}
+            for u in User.objects.filter(is_active=True).order_by('username')
+        ]),
     }
     return render(request, 'cartographie/carte.html', ctx)
 
@@ -1479,16 +1535,35 @@ def importer_fichier(request):
             if lat is None:
                 continue
             source_format = nom_fichier.rsplit('.', 1)[-1].upper() if '.' in nom_fichier else ''
-            PointGeographique.objects.create(
+            point = PointGeographique.objects.create(
                 nom=(p.get('nom') or 'Sans nom')[:200],
                 description=p.get('description', ''),
                 latitude=lat,
                 longitude=lng,
+                code=str(proprietes.get('code') or p.get('code') or '')[:30],
+                identifiant=str(proprietes.get('identifiant') or p.get('identifiant') or '')[:64],
+                adresse=str(proprietes.get('adresse') or '')[:255],
+                territoire=str(proprietes.get('territoire') or '')[:100],
+                commune=str(proprietes.get('commune') or '')[:100],
+                secteur=str(proprietes.get('secteur') or '')[:100],
+                quartier=str(proprietes.get('quartier') or '')[:100],
+                village=str(proprietes.get('village') or '')[:100],
+                observations=str(proprietes.get('observations') or ''),
                 donnees=proprietes,
                 source_fichier=fichier.name,
                 source_format=source_format,
+                projet=_projet_actif(request),
                 auteur=request.user if request.user.is_authenticated else None,
             )
+            try:
+                alt = float(proprietes.get('altitude') or '')
+                point.altitude = alt
+                point.save(update_fields=['altitude'])
+            except (ValueError, TypeError):
+                pass
+            HistoriquePoint.objects.create(point=point, type='creation',
+                                           action=f"Point créé par import : {point.code or point.nom}",
+                                           utilisateur=request.user if request.user.is_authenticated else None)
             inserer += 1
         except (ValueError, TypeError, KeyError):
             continue
@@ -5146,13 +5221,31 @@ def point_edit(request, pk):
         messages.error(request, "Vous ne pouvez modifier que vos propres points.")
         return redirect('index_cartographie')
     if request.method == "POST":
+        modifications = {}
         point.nom = request.POST.get('nom', point.nom)[:200]
         point.description = request.POST.get('description', '')
         point.categorie = request.POST.get('categorie', point.categorie)
         point.statut = request.POST.get('statut', point.statut)
+        point.etat_avancement = request.POST.get('etat_avancement', '')[:40]
         point.province = request.POST.get('province', '')
+        point.territoire = request.POST.get('territoire', '')
         point.commune = request.POST.get('commune', '')
+        point.secteur = request.POST.get('secteur', '')
         point.quartier = request.POST.get('quartier', '')
+        point.village = request.POST.get('village', '')
+        point.adresse = request.POST.get('adresse', '')
+        point.observations = request.POST.get('observations', '')
+        point.altitude = _float_ou_nul(request.POST.get('altitude'))
+        point.precision_gps_m = _float_ou_nul(request.POST.get('precision_gps_m'))
+        agent_id = request.POST.get('agent') or ''
+        point.agent = User.objects.filter(pk=agent_id).first() if agent_id else None
+        date_visite = request.POST.get('date_visite') or ''
+        if date_visite:
+            try:
+                point.date_visite = timezone.datetime.fromisoformat(date_visite.replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                pass
+        lat_ancienne, lng_ancienne = point.latitude, point.longitude
         lat, lng = _valider_coordonnees_wgs84(
             request.POST.get('latitude', point.latitude),
             request.POST.get('longitude', point.longitude))
@@ -5164,16 +5257,390 @@ def point_edit(request, pk):
         if request.FILES.get('photo'):
             point.photo = request.FILES['photo']
         point.save()
+        if lat != lat_ancienne or lng != lng_ancienne:
+            HistoriquePoint.objects.create(point=point, type='coordonnees',
+                                           action="Coordonnées modifiées",
+                                           utilisateur=request.user,
+                                           details={'avant': [lat_ancienne, lng_ancienne],
+                                                    'apres': [lat, lng]})
+        HistoriquePoint.objects.create(point=point, type='modification',
+                                       action=f"Point modifié : {point.code or point.nom}",
+                                       utilisateur=request.user,
+                                       details=modifications or {'champs': 'informations'})
         _creer_medias_point(point, request.FILES.getlist('medias'), utilisateur=request.user, commentaire=request.POST.get('commentaire_medias', ''), date_prise_defaut=timezone.now())
         _audit(request, "Modification de point", f"Point #{pk} - {point.nom}")
         messages.success(request, "Point mis à jour.")
+        if request.POST.get('retour_detail'):
+            return redirect('point_detail', pk=pk)
         return redirect('index_cartographie')
     return render(request, 'cartographie/point_form.html', {
         'point': point,
         'medias': point.medias.all(),
         'categories': PointGeographique.CATEGORIE_CHOICES,
         'statuts': PointGeographique.STATUT_CHOICES,
+        'agents': User.objects.filter(is_active=True).order_by('username'),
+        'projets': Projet.objects.filter(statut='actif').order_by('nom'),
+        'mode_creation': False,
     })
+
+
+# ─── POINTS : CRÉATION DÉDIÉE (cahier des charges §2) ───────────
+
+
+@login_required
+def point_create(request):
+    """Création d'un point avec toutes les informations professionnelles :
+    coordonnées manuelles / GPS (navigator.geolocation) / carte (clic) / import."""
+    if _projet_actif(request) is None and not _est_admin(request.user):
+        messages.error(request, "Veuillez sélectionner un projet avant de créer un point.")
+        return redirect('index_cartographie')
+    if request.method == "POST":
+        nom = (request.POST.get('nom') or '').strip()
+        if not nom:
+            messages.error(request, "Le nom du point est requis.")
+            return redirect('point_create')
+        lat, lng = _valider_coordonnees_wgs84(
+            request.POST.get('latitude'), request.POST.get('longitude'))
+        if lat is None:
+            messages.error(request, "Coordonnées invalides (hors plage WGS84).")
+            return redirect('point_create')
+        projet_id = request.POST.get('projet') or ''
+        projet = None
+        if projet_id:
+            projet = Projet.objects.filter(pk=projet_id, statut='actif').first()
+        elif _projet_actif(request) is not None:
+            projet = _projet_actif(request)
+        agent_id = request.POST.get('agent') or ''
+        agent = User.objects.filter(pk=agent_id, is_active=True).first() if agent_id else None
+        statut = (request.POST.get('statut') or 'nouveau').strip().lower()
+        if statut not in dict(PointGeographique.STATUT_CHOICES):
+            statut = 'nouveau'
+        point = PointGeographique.objects.create(
+            nom=nom[:200],
+            code=(request.POST.get('code') or '').strip()[:30],
+            identifiant=(request.POST.get('identifiant') or '').strip()[:64],
+            description=request.POST.get('description', ''),
+            latitude=lat, longitude=lng,
+            precision_gps_m=_float_ou_nul(request.POST.get('precision_gps_m')),
+            altitude=_float_ou_nul(request.POST.get('altitude')),
+            adresse=(request.POST.get('adresse') or '').strip(),
+            categorie=(request.POST.get('categorie') or 'autre'),
+            statut=statut,
+            etat_avancement=(request.POST.get('etat_avancement') or '').strip(),
+            province=(request.POST.get('province') or '').strip(),
+            territoire=(request.POST.get('territoire') or '').strip(),
+            commune=(request.POST.get('commune') or '').strip(),
+            secteur=(request.POST.get('secteur') or '').strip(),
+            quartier=(request.POST.get('quartier') or '').strip(),
+            village=(request.POST.get('village') or '').strip(),
+            observations=request.POST.get('observations', ''),
+            projet=projet,
+            activite_id=request.POST.get('activite') or None,
+            auteur=request.user,
+            agent=agent,
+        )
+        date_visite = request.POST.get('date_visite') or ''
+        if date_visite:
+            try:
+                point.date_visite = timezone.datetime.fromisoformat(date_visite.replace('Z', '+00:00'))
+                point.save(update_fields=['date_visite'])
+            except (ValueError, TypeError):
+                pass
+        if request.FILES.get('photo'):
+            point.photo = request.FILES['photo']
+            point.save()
+        _creer_medias_point(point, request.FILES.getlist('medias'), utilisateur=request.user,
+                            commentaire=request.POST.get('commentaire_medias', ''),
+                            date_prise_defaut=timezone.now())
+        HistoriquePoint.objects.create(
+            point=point, type='creation', action=f"Point créé : {point.code or point.nom}",
+            utilisateur=request.user,
+            details={'nom': point.nom, 'latitude': lat, 'longitude': lng, 'statut': statut})
+        _audit(request, "Création de point", f"Point #{point.pk} - {point.code or nom}")
+        messages.success(request, f"Point « {point.code or nom} » enregistré.")
+        if request.POST.get('retour_detail'):
+            return redirect('point_detail', pk=point.pk)
+        return redirect('index_cartographie')
+    return render(request, 'cartographie/point_form.html', {
+        'point': None,
+        'categories': PointGeographique.CATEGORIE_CHOICES,
+        'statuts': PointGeographique.STATUT_CHOICES,
+        'agents': User.objects.filter(is_active=True).order_by('username'),
+        'projets': Projet.objects.filter(statut='actif').order_by('nom'),
+        'projet_defaut': _projet_actif(request),
+        'mode_creation': True,
+    })
+
+
+# ─── POINTS : PAGE DÉTAILS EN ONGLETS (cahier des charges §5) ───
+
+
+@login_required
+def point_detail(request, pk):
+    """Fiche complète du point : informations, localisation, données,
+    activités, photos, documents, historique, visites."""
+    point = get_object_or_404(
+        PointGeographique.objects.select_related('projet', 'auteur', 'agent', 'activite')
+        .prefetch_related('medias', 'historique', 'visites'),
+        pk=pk)
+    activites = [point.activite] if point.activite_id else []
+    donnees = point.donnees or {}
+    sections_donnees = []
+    for cle, valeur in donnees.items():
+        if isinstance(valeur, (dict, list)):
+            continue
+        if valeur in (None, ''):
+            continue
+        sections_donnees.append({'cle': cle, 'valeur': valeur})
+    historique = list(point.historique.select_related('utilisateur').all()[:100])
+    audite_objet = JournalAudit.objects.filter(details__icontains=f"Point #{point.pk}").order_by('-date')[:50]
+    return render(request, 'cartographie/point_detail.html', {
+        'point': point,
+        'medias': point.medias.all(),
+        'photos': point.medias.filter(type='photo'),
+        'documents': point.medias.filter(type__in=['pdf', 'audio', 'video']),
+        'activites': activites,
+        'sections_donnees': sections_donnees,
+        'historique': historique,
+        'audit_objet': audite_objet,
+        'categories': dict(PointGeographique.CATEGORIE_CHOICES),
+        'statuts': dict(PointGeographique.STATUT_CHOICES),
+        'statut_couleur': _couleur_statut_point(point.statut),
+        'statut_nom': _nom_statut_point(point.statut),
+        'peut_modifier': _est_admin(request.user) or point.auteur == request.user,
+        'est_admin': _est_admin(request.user),
+        'agents': User.objects.filter(is_active=True).order_by('username'),
+    })
+
+
+@login_required
+def point_archive(request, pk):
+    """Archivage du point (privilégié à la suppression, §16)."""
+    point = get_object_or_404(PointGeographique, pk=pk)
+    if not (_est_admin(request.user) or point.auteur == request.user):
+        messages.error(request, "Vous ne pouvez archiver que vos propres points.")
+        return redirect('point_detail', pk=pk)
+    if request.method == "POST":
+        point.archive = True
+        point.save(update_fields=['archive'])
+        HistoriquePoint.objects.create(point=point, type='archive',
+                                       action=f"Point archivé : {point.code or point.nom}",
+                                       utilisateur=request.user)
+        _audit(request, "Archivage de point", f"Point #{pk} - {point.code or point.nom}")
+        messages.success(request, "Point archivé.")
+        return redirect(request.POST.get('retour') or 'index_cartographie')
+    return render(request, 'cartographie/point_confirm_delete.html', {'point': point, 'mode': 'archive'})
+
+
+@login_required
+def point_restore(request, pk):
+    point = get_object_or_404(PointGeographique, pk=pk)
+    if not _est_admin(request.user):
+        messages.error(request, "Seul un administrateur peut restaurer un point.")
+        return redirect('index_cartographie')
+    if request.method == "POST":
+        point.archive = False
+        point.save(update_fields=['archive'])
+        HistoriquePoint.objects.create(point=point, type='restauration',
+                                       action=f"Point restauré : {point.code or point.nom}",
+                                       utilisateur=request.user)
+        _audit(request, "Restauration de point", f"Point #{pk} - {point.code or point.nom}")
+        messages.success(request, "Point restauré.")
+        return redirect('point_detail', pk=pk)
+    return redirect('point_detail', pk=pk)
+
+
+# ─── POINTS : VISITES + MÉDIAS RAPIDES (cahier des charges §12/§20) ─
+
+
+@login_required
+def visite_add(request, pk):
+    point = get_object_or_404(PointGeographique, pk=pk)
+    if request.method == "POST":
+        date_v = request.POST.get('date_visite') or ''
+        try:
+            date_v = timezone.datetime.fromisoformat(date_v.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            date_v = timezone.now()
+        agent_id = request.POST.get('agent') or ''
+        agent = User.objects.filter(pk=agent_id).first() if agent_id else request.user
+        visite = Visite.objects.create(
+            point=point, agent=agent, date_visite=date_v,
+            notes=request.POST.get('notes', ''),
+            resultats=request.POST.get('resultats', ''),
+            statut=(request.POST.get('statut') or 'effectuee'),
+            cree_par=request.user)
+        point.date_visite = date_v
+        point.agent = agent
+        point.save(update_fields=['date_visite', 'agent'])
+        HistoriquePoint.objects.create(
+            point=point, type='visite',
+            action=f"Visite enregistrée le {date_v.strftime('%d/%m/%Y %H:%M')}",
+            utilisateur=request.user,
+            details={'visite_id': visite.pk, 'statut': visite.statut})
+        _audit(request, "Visite de point", f"Point #{pk} - {point.code or point.nom}")
+        messages.success(request, "Visite enregistrée.")
+        return redirect('point_detail', pk=pk)
+    return redirect('point_detail', pk=pk)
+
+
+@login_required
+def point_media_add(request, pk):
+    point = get_object_or_404(PointGeographique, pk=pk)
+    if request.method == "POST":
+        fichiers = request.FILES.getlist('medias')
+        _creer_medias_point(point, fichiers, utilisateur=request.user,
+                            commentaire=request.POST.get('commentaire_medias', ''),
+                            date_prise_defaut=timezone.now())
+        if fichiers:
+            HistoriquePoint.objects.create(
+                point=point, type='photo' if request.POST.get('type') != 'document' else 'document',
+                action=f"{len(fichiers)} média(s) ajouté(s)",
+                utilisateur=request.user,
+                details={'noms': [f.name for f in fichiers]})
+            _audit(request, "Ajout de médias", f"{len(fichiers)} média(s) - Point #{pk}")
+            messages.success(request, f"{len(fichiers)} média(s) ajouté(s).")
+        return redirect('point_detail', pk=pk)
+    return redirect('point_detail', pk=pk)
+
+
+# ─── POINTS : STATISTIQUES PAR PROJET (cahier des charges §14) ───
+
+
+@login_required
+def api_points_stats(request):
+    """Statistiques professionnelles : total, statuts, catégories, zones,
+    agents, évolution mensuelle, répartition géographique."""
+    projet_id = request.GET.get('projet') or ''
+    qs = PointGeographique.objects.filter(supprime=False)
+    if projet_id and projet_id != 'tous':
+        qs = qs.filter(projet_id=projet_id)
+    elif projet_id != 'tous':
+        pa = _projet_actif(request)
+        if pa is not None:
+            qs = qs.filter(projet=pa)
+    debut = request.GET.get('debut') or ''
+    fin = request.GET.get('fin') or ''
+    if debut:
+        try:
+            qs = qs.filter(date_creation__gte=timezone.datetime.fromisoformat(debut))
+        except ValueError:
+            pass
+    if fin:
+        try:
+            qs = qs.filter(date_creation__lte=timezone.datetime.fromisoformat(fin))
+        except ValueError:
+            pass
+
+    total = qs.count()
+    par_statut = [
+        {'statut': s['statut'], 'nom': _nom_statut_point(s['statut']),
+         'couleur': _couleur_statut_point(s['statut']), 'nb': s['nb']}
+        for s in qs.values('statut').annotate(nb=db_models.Count('id')).order_by('-nb')
+    ]
+    cat_noms = dict(PointGeographique.CATEGORIE_CHOICES)
+    par_categorie = [
+        {'categorie': c['categorie'], 'nom': cat_noms.get(c['categorie'], c['categorie']), 'nb': c['nb']}
+        for c in qs.values('categorie').annotate(nb=db_models.Count('id')).order_by('-nb')
+    ]
+    par_province = [
+        {'zone': z['province'], 'nb': z['nb']}
+        for z in qs.exclude(province='').values('province').annotate(nb=db_models.Count('id')).order_by('-nb')
+    ]
+    par_agent = [
+        {'agent': a['agent'] or 'Non attribué', 'nb': a['nb']}
+        for a in qs.exclude(agent__isnull=True).values('agent').annotate(nb=db_models.Count('id')).order_by('-nb')
+    ]
+    par_mois = [
+        {'mois': m['mois'].strftime('%Y-%m'), 'nb': m['nb']}
+        for m in qs.annotate(mois=TruncMonth('date_creation')).values('mois').annotate(nb=db_models.Count('id')).order_by('mois')
+    ]
+    visites = qs.exclude(date_visite__isnull=True).count()
+    photos = qs.aggregate(nb=db_models.Count('medias', filter=db_models.Q(medias__type='photo')))['nb'] or 0
+    return JsonResponse({
+        'ok': True, 'total': total,
+        'visites': visites, 'photos': photos,
+        'avec_photos': qs.filter(medias__type='photo').distinct().count(),
+        'par_statut': par_statut,
+        'par_categorie': par_categorie,
+        'par_province': par_province,
+        'par_agent': par_agent,
+        'par_mois': par_mois,
+    })
+
+
+# ─── POINTS : STATUTS CONFIGURABLES (cahier des charges §13) ─────
+
+
+@login_required
+def api_statuts_points(request):
+    """Lecture : statuts configurables (globaux + projet)."""
+    projet_id = request.GET.get('projet') or ''
+    qs = StatutPoint.objects.filter(projet__isnull=True)
+    if projet_id:
+        qs = StatutPoint.objects.filter(db_models.Q(projet__isnull=True) | db_models.Q(projet_id=projet_id))
+    return JsonResponse({
+        'ok': True,
+        'statuts': [
+            {'id': s.pk, 'code': s.code, 'nom': s.nom, 'couleur': s.couleur,
+             'ordre': s.ordre, 'actif': s.actif,
+             'projet': s.projet.nom if s.projet else '',
+             'projet_id': s.projet_id}
+            for s in qs.order_by('ordre', 'nom')
+        ],
+    })
+
+
+@login_required
+def api_statut_point_modifier(request, pk=None):
+    """Création / modification / suppression d'un statut configurable (admin)."""
+    global _cache_statuts_points_val
+    if not _est_admin(request.user):
+        return JsonResponse({'ok': False, 'erreur': "Administrateur requis."}, status=403)
+    if request.method == "POST":
+        data = json.loads(request.body or '{}')
+        if pk:
+            statut = get_object_or_404(StatutPoint, pk=pk)
+        else:
+            statut = StatutPoint(projet=None, cree_par=request.user)
+        statut.code = (data.get('code') or '').strip()[:30]
+        statut.nom = (data.get('nom') or '').strip()[:80]
+        statut.couleur = (data.get('couleur') or '#6b729c').strip()[:7]
+        statut.ordre = int(data.get('ordre') or 0)
+        statut.actif = bool(data.get('actif', True))
+        statut.save()
+        _cache_statuts_points_val = None
+        _audit(request, "Configuration de statut", f"{statut.nom} ({statut.code})")
+        return JsonResponse({'ok': True, 'id': statut.pk})
+    if pk and request.method == "DELETE":
+        statut = get_object_or_404(StatutPoint, pk=pk)
+        _audit(request, "Suppression de statut configuré", statut.nom)
+        statut.delete()
+        _cache_statuts_points_val = None
+        return JsonResponse({'ok': True})
+    return JsonResponse({'ok': False, 'erreur': "Méthode non autorisée."}, status=405)
+
+
+# ─── POINTS : STATUT EN MASSE (cahier des charges §9) ────────────
+
+
+@login_required
+def api_points_statut_masse(request):
+    if request.method != "POST":
+        return JsonResponse({'ok': False, 'erreur': "POST requis."}, status=405)
+    data = json.loads(request.body or '{}')
+    ids = [int(i) for i in (data.get('ids') or []) if str(i).isdigit()]
+    statut = (data.get('statut') or '').strip().lower()
+    if not ids or statut not in dict(PointGeographique.STATUT_CHOICES):
+        return JsonResponse({'ok': False, 'erreur': "Sélection et statut requis."}, status=400)
+    points = PointGeographique.objects.filter(pk__in=ids)
+    nb = points.update(statut=statut)
+    for p in points:
+        HistoriquePoint.objects.create(point=p, type='statut',
+                                       action=f"Statut changé → {_nom_statut_point(statut)}",
+                                       utilisateur=request.user)
+    _audit(request, "Changement de statut en masse", f"{nb} points → {statut}")
+    return JsonResponse({'ok': True, 'nb': nb})
 
 
 @login_required
@@ -5256,15 +5723,35 @@ def importer_excel_v2(request):
         province = str(row[idx['province']]) if 'province' in idx and row[idx['province']] else ''
         commune = str(row[idx['commune']]) if 'commune' in idx and row[idx['commune']] else ''
 
+        # POINTS : champs professionnels issus de l'import
+        code_import = str(row[idx['code']]) if 'code' in idx and row[idx['code']] else ''
+        identifiant_import = str(row[idx['identifiant']]) if 'identifiant' in idx and row[idx['identifiant']] else ''
+        adresse = str(row[idx['adresse']]) if 'adresse' in idx and row[idx['adresse']] else ''
+        territoire = str(row[idx['territoire']]) if 'territoire' in idx and row[idx['territoire']] else ''
+        secteur = str(row[idx['secteur']]) if 'secteur' in idx and row[idx['secteur']] else ''
+        quartier = str(row[idx['quartier']]) if 'quartier' in idx and row[idx['quartier']] else ''
+        village = str(row[idx['village']]) if 'village' in idx and row[idx['village']] else ''
+        observations = str(row[idx['observations']]) if 'observations' in idx and row[idx['observations']] else ''
+        try:
+            altitude = float(str(row[idx['altitude']]).replace(',', '.')) if 'altitude' in idx and row[idx['altitude']] else None
+        except (ValueError, TypeError):
+            altitude = None
+        etat_avancement = str(row[idx['etat_avancement']]) if 'etat_avancement' in idx and row[idx['etat_avancement']] else ''
+
         donnees_pt = {}
         for i, h in enumerate(entetes):
             v = row[i] if i < len(row) else ''
             if h:
                 donnees_pt[str(h).strip()] = (str(v) if v is not None else '').strip()
 
-        existe = PointGeographique.objects.filter(
-            nom=nom, latitude=lat, longitude=lng
-        ).first()
+        # POINTS : détection des doublons (code / identifiant / nom+coordonnées)
+        existe = None
+        if identifiant_import:
+            existe = PointGeographique.objects.filter(identifiant=identifiant_import).first()
+        if existe is None and code_import:
+            existe = PointGeographique.objects.filter(code=code_import).first()
+        if existe is None:
+            existe = PointGeographique.objects.filter(nom=nom, latitude=lat, longitude=lng).first()
         if existe:
             doublons += 1
             if not projet_doublons and existe.projet is not None:
@@ -5277,15 +5764,21 @@ def importer_excel_v2(request):
                 doublons_maj += 1
             continue
 
-        PointGeographique.objects.create(
+        point = PointGeographique.objects.create(
             nom=nom, description=description, latitude=lat, longitude=lng,
-            categorie=categorie, statut=statut,
-            province=province, commune=commune,
+            code=code_import[:30], identifiant=identifiant_import[:64],
+            categorie=categorie, statut=statut, etat_avancement=etat_avancement[:40],
+            province=province, territoire=territoire, commune=commune, secteur=secteur,
+            quartier=quartier, village=village, adresse=adresse, observations=observations,
+            altitude=altitude,
             donnees=donnees_pt,
             source_fichier=nom_fichier, source_format=format_fichier,
             projet=_projet_actif(request),
             auteur=request.user if request.user.is_authenticated else None,
         )
+        HistoriquePoint.objects.create(point=point, type='creation',
+                                       action=f"Point créé par import : {point.code or nom}",
+                                       utilisateur=request.user if request.user.is_authenticated else None)
         importes += 1
 
     _audit(request, "Import Excel intelligent", f"{importes} importés, {doublons} doublons ({doublons_maj} actualisés), {invalides} invalides")
@@ -5299,8 +5792,10 @@ def importer_excel_v2(request):
 
 @login_required
 def points_liste(request):
-    """Tableau de tous les points géographiques, tous projets confondus."""
-    qs = PointGeographique.objects.select_related('projet', 'auteur', 'activite').annotate(
+    """Tableau de tous les points géographiques, tous projets confondus.
+    POINTS : pagination, tri, filtres étendus (territoire, secteur, village,
+    agent, archivés), statistiques par statut."""
+    qs = PointGeographique.objects.select_related('projet', 'auteur', 'activite', 'agent').annotate(
         nb_photos=db_models.Count('medias', filter=db_models.Q(medias__type='photo')),
         nb_medias=db_models.Count('medias'),
     )
@@ -5308,7 +5803,10 @@ def points_liste(request):
     q = (request.GET.get('q') or '').strip()
     if q:
         qs = qs.filter(db_models.Q(nom__icontains=q) | db_models.Q(province__icontains=q) |
-                       db_models.Q(commune__icontains=q) | db_models.Q(description__icontains=q))
+                       db_models.Q(commune__icontains=q) | db_models.Q(description__icontains=q) |
+                       db_models.Q(code__icontains=q) | db_models.Q(identifiant__icontains=q) |
+                       db_models.Q(adresse__icontains=q) | db_models.Q(village__icontains=q) |
+                       db_models.Q(territoire__icontains=q))
     projet_id = request.GET.get('projet') or ''
     if projet_id:
         qs = qs.filter(projet_id=projet_id)
@@ -5318,15 +5816,58 @@ def points_liste(request):
     statut = request.GET.get('statut') or ''
     if statut:
         qs = qs.filter(statut=statut)
+    territoire = request.GET.get('territoire') or ''
+    if territoire:
+        qs = qs.filter(territoire__icontains=territoire)
+    secteur = request.GET.get('secteur') or ''
+    if secteur:
+        qs = qs.filter(secteur__icontains=secteur)
+    agent = request.GET.get('agent') or ''
+    if agent:
+        qs = qs.filter(agent_id=agent)
+    afficher_archives = request.GET.get('archives') == '1'
+    if not afficher_archives:
+        qs = qs.filter(archive=False)
 
-    points = qs.all()
+    # POINTS : tri (sections triables)
+    tri = request.GET.get('tri') or '-date_creation'
+    tris_valides = {'nom', '-nom', 'code', '-code', 'statut', '-statut',
+                    'province', '-province', 'date_creation', '-date_creation',
+                    'updated_at', '-updated_at', 'latitude', '-latitude'}
+    if tri not in tris_valides:
+        tri = '-date_creation'
+    qs = qs.order_by(tri)
+
+    # POINTS : statistiques par statut (pastilles)
+    stats_par_statut = {
+        s['statut']: s['nb'] for s in qs.values('statut').annotate(nb=db_models.Count('id'))
+    }
+
+    # POINTS : pagination (50 par page)
+    from django.core.paginator import Paginator
+    paginator = Paginator(qs.all(), 50)
+    page = request.GET.get('page') or '1'
+    try:
+        page = int(page)
+    except ValueError:
+        page = 1
+    points_page = paginator.get_page(page)
+
     return render(request, 'cartographie/points_liste.html', {
-        'points': points,
-        'total': points.count(),
+        'points': points_page.object_list,
+        'total': paginator.count,
+        'paginator': paginator,
+        'page': points_page,
         'projets': Projet.objects.all().order_by('nom'),
         'categories': PointGeographique.CATEGORIE_CHOICES,
         'statuts': PointGeographique.STATUT_CHOICES,
+        'agents_liste': User.objects.filter(is_active=True).order_by('username'),
         'f_q': q, 'f_projet': projet_id, 'f_categorie': categorie, 'f_statut': statut,
+        'f_territoire': territoire, 'f_secteur': secteur, 'f_agent': agent,
+        'f_archives': afficher_archives, 'f_tri': tri,
+        'stats_par_statut': stats_par_statut,
+        'territoires': [t['territoire'] for t in
+                        PointGeographique.objects.exclude(territoire='').values('territoire').distinct().order_by('territoire')],
     })
 
 

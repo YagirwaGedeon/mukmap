@@ -580,11 +580,16 @@
             <div class="projet-actif">
                 <div class="pa-icone"><span data-lucide="folder-kanban"></span></div>
                 <div class="pa-texte">
-                    <div class="pa-nom">{{ projet_actif.nom|default:'' }}</div>
+                    <div class="pa-nom">{% if projets_tous %}🌐 Tous les projets{% else %}{{ projet_actif.nom|default:'' }}{% endif %}</div>
                     <div class="pa-act">{{ activite_actuelle.nom|default:'' }}</div>
                 </div>
                 <button class="btn btn-sm btn-ghost" id="btn-changer-projet" title="Changer" data-i18n-title="changer" style="color:var(--accent);"><span data-lucide="refresh-cw"></span></button>
             </div>
+            {% if est_admin and not projets_tous %}
+            <a href="?projets=tous" class="btn btn-sm" style="width:100%;margin-top:6px;" title="Voir les points de tous les projets">🌐 <span data-i18n="voir_tous_projets">Voir tous les projets</span></a>
+            {% elif est_admin %}
+            <a href="{% url 'index_cartographie' %}" class="btn btn-sm" style="width:100%;margin-top:6px;">📁 <span data-i18n="revenir_projet">Revenir au projet actif</span></a>
+            {% endif %}
         </div>
         {% endif %}
 
@@ -638,6 +643,9 @@
                     <select id="f-categorie"><option value="" data-i18n="toutes_categories">Toutes les catégories</option></select>
                     <select id="f-statut"><option value="" data-i18n="tous_etats">Tous les états</option></select>
                     <select id="f-province"><option value="" data-i18n="toutes_provinces">Toutes les provinces</option></select>
+                    <select id="f-territoire"><option value="">Territoire / district</option></select>
+                    <select id="f-secteur"><option value="">Secteur / chefferie</option></select>
+                    <select id="f-village"><option value="">Village / localité</option></select>
                     <select id="f-agent"><option value="" data-i18n="tous_agents">Tous les agents</option></select>
                     <div class="filtre-row">
                         <input type="date" id="f-debut" title="Du" data-i18n-title="du">
@@ -1576,6 +1584,8 @@ let donneesPoints = {{ points_json|safe }};
 const agents = {{ agents_json|safe }};
 const activites = {{ activites_json|safe }};
 const zones = {{ zones_json|safe }};
+const STATUTS_CONFIG = {{ statuts_config|safe }};
+const AGENTS_RESPONSABLES = {{ agents_responsables|safe }};
 const rapportImport = {% if rapport_import %}{{ rapport_import|safe }}{% else %}null{% endif %};
 let coucheImporteeCible = '{{ couche_importee }}';
 
@@ -1728,7 +1738,7 @@ map.on('load', () => {
         'text-field':['get','point_count_abbreviated'],'text-size':12,'text-font':FONT},
         paint:{'text-color':'#ffffff'}});
     map.addLayer({id:'points', type:'circle', source:'points', filter:['!',['has','point_count']], paint:{
-        'circle-color':matchCategorie('categorie'),
+        'circle-color':['coalesce',['get','statut_couleur'],matchCategorie('categorie')],
         'circle-radius':['case',['boolean',['feature-state','hover'],false],10,7],
         'circle-stroke-color':'#ffffff','circle-stroke-width':2,
         'circle-opacity':['case',['boolean',['feature-state','hover'],false],1,.9]}});
@@ -2665,7 +2675,7 @@ async function paysRegion(lat, lng) {
 }
 
 // ─── FILTRES + CLUSTERS ───────────────────────────────────────
-let filtres = {categorie:'', statut:'', province:'', agent:'', debut:'', fin:''};
+let filtres = {categorie:'', statut:'', province:'', agent:'', debut:'', fin:'', territoire:'', secteur:'', village:''};
 function datePoint(p) {
     const [jour, heure] = p.date.split(' ');
     const [j, m, a] = jour.split('/');
@@ -2678,6 +2688,9 @@ function pointsFiltres() {
         if (filtres.statut && p.statut !== filtres.statut) return false;
         if (filtres.province && p.province !== filtres.province) return false;
         if (filtres.agent && p.auteur !== filtres.agent) return false;
+        if (filtres.territoire && p.territoire !== filtres.territoire) return false;
+        if (filtres.secteur && p.secteur !== filtres.secteur) return false;
+        if (filtres.village && p.village !== filtres.village) return false;
         if (filtres.debut && datePoint(p) < new Date(filtres.debut).getTime()) return false;
         if (filtres.fin && datePoint(p) > new Date(filtres.fin).getTime() + 86399000) return false;
         return true;
@@ -2693,28 +2706,52 @@ function majSourcePoints() {
 function peuplerFiltres() {
     const cats = new Set(donneesPoints.map(p => p.categorie));
     const prov = new Set(donneesPoints.map(p => p.province).filter(Boolean));
+    const terr = new Set(donneesPoints.map(p => p.territoire).filter(Boolean));
+    const sect = new Set(donneesPoints.map(p => p.secteur).filter(Boolean));
+    const vill = new Set(donneesPoints.map(p => p.village).filter(Boolean));
     const agentsSet = new Set(donneesPoints.map(p => p.auteur).filter(Boolean));
     const selCat = document.getElementById('f-categorie');
     cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = (CATS[c]?.emoji || '📍') + ' ' + (mukmapT ? mukmapT('cat_' + c) || (CATS[c]?.nom || c) : (CATS[c]?.nom || c)); selCat.appendChild(o); });
     prov.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; document.getElementById('f-province').appendChild(o); });
+    terr.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; const el = document.getElementById('f-territoire'); if (el) el.appendChild(o); });
+    sect.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; const el = document.getElementById('f-secteur'); if (el) el.appendChild(o); });
+    vill.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; const el = document.getElementById('f-village'); if (el) el.appendChild(o); });
     agentsSet.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; document.getElementById('f-agent').appendChild(o); });
-    ['f-categorie','f-statut','f-province','f-agent','f-debut','f-fin'].forEach(id => {
-        document.getElementById(id).addEventListener('change', e => {
-            const champs = {f_categorie:'categorie', f_statut:'statut', f_province:'province', f_agent:'agent', f_debut:'debut', f_fin:'fin'};
+    ['f-categorie','f-statut','f-province','f-agent','f-debut','f-fin','f-territoire','f-secteur','f-village'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', e => {
+            const champs = {f_categorie:'categorie', f_statut:'statut', f_province:'province', f_agent:'agent', f_debut:'debut', f_fin:'fin', f_territoire:'territoire', f_secteur:'secteur', f_village:'village'};
             filtres[champs[id]] = e.target.value;
             majSourcePoints();
         });
     });
 }
 function reinitialiserFiltres() {
-    filtres = {categorie:'', statut:'', province:'', agent:'', debut:'', fin:''};
-    ['f-categorie','f-statut','f-province','f-agent','f-debut','f-fin'].forEach(id => document.getElementById(id).value = '');
+    filtres = {categorie:'', statut:'', province:'', agent:'', debut:'', fin:'', territoire:'', secteur:'', village:''};
+    ['f-categorie','f-statut','f-province','f-agent','f-debut','f-fin','f-territoire','f-secteur','f-village'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     majSourcePoints();
 }
 function construireLegende() {
     const leg = document.getElementById('legende');
     if (!leg) return;
     leg.innerHTML = '';
+    // POINTS : légende des statuts configurables (couleurs par statut)
+    if (STATUTS_CONFIG && STATUTS_CONFIG.length) {
+        const sep = document.createElement('div');
+        sep.className = 'leg-sep';
+        sep.style.cssText = 'margin-top:8px;padding-top:6px;border-top:1px dashed var(--border);font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--text-3);';
+        sep.textContent = '● ' + ((mukmapT && mukmapT('statuts_points', 'Statuts des points')) || 'Statuts des points');
+        leg.appendChild(sep);
+        const comptes = {};
+        donneesPoints.forEach(p => comptes[p.statut] = (comptes[p.statut] || 0) + 1);
+        STATUTS_CONFIG.forEach(s => {
+            const div = document.createElement('div');
+            div.className = 'leg-item';
+            div.innerHTML = `<span class="puces" style="background:${s.couleur || '#6b729c'}"></span> ${s.nom || s.code} <span class="compte">${comptes[s.code] || 0}</span>`;
+            leg.appendChild(div);
+        });
+    }
     const comptes = {};
     donneesPoints.forEach(p => comptes[p.categorie] = (comptes[p.categorie] || 0) + 1);
     Object.keys(CATS).forEach(c => {
@@ -2825,7 +2862,7 @@ function afficherResultats(res) {
     zoneResultats.innerHTML = res.map(r => {
         if (r.type === 'coord') return `<div class="res-item" data-type="coord" data-lat="${r.lat}" data-lng="${r.lng}"><div class="res-emoji">📍</div><div><b>${r.nom}</b></div></div>`;
         if (r.type === 'geo') return `<div class="res-item" data-type="geo" data-lat="${r.lat}" data-lng="${r.lng}" data-z="${r.z || 12}"><div class="res-emoji">${r.emoji || '🌍'}</div><div><b>${r.nom}</b><br><span style="font-size:.72rem;color:var(--text-3)">${r.sous || ''}</span></div></div>`;
-        return `<div class="res-item" data-type="point" data-id="${r.p.id}">${r.p.photo ? `<img src="${r.p.photo}">` : `<div class="res-emoji">${CATS[r.p.categorie]?.emoji || '📍'}</div>`}<div><b>${r.p.nom}</b><br><span style="font-size:.72rem;color:var(--text-3)">${r.p.province || ''} ${r.p.commune ? '· ' + r.p.commune : ''}</span></div></div>`;
+        return `<div class="res-item" data-type="point" data-id="${r.p.id}">${r.p.photo ? `<img src="${r.p.photo}">` : `<div class="res-emoji">${CATS[r.p.categorie]?.emoji || '📍'}</div>`}<div><b>${r.p.nom}</b><br><span style="font-size:.72rem;color:var(--text-3)">${r.p.code ? r.p.code + ' · ' : ''}${r.p.province || ''} ${r.p.commune ? '· ' + r.p.commune : ''}</span></div></div>`;
     }).join('');
     zoneResultats.style.display = 'block';
 }
@@ -2840,8 +2877,12 @@ inpRecherche.addEventListener('input', () => {
         return;
     }
     const locaux = pointsFiltres().filter(p =>
-        (p.nom||'').toLowerCase().includes(q) || (p.province||'').toLowerCase().includes(q) ||
-        (p.commune||'').toLowerCase().includes(q) || (p.quartier||'').toLowerCase().includes(q) ||
+        (p.nom||'').toLowerCase().includes(q) || (p.code||'').toLowerCase().includes(q) ||
+        (p.identifiant||'').toLowerCase().includes(q) ||
+        (p.province||'').toLowerCase().includes(q) || (p.territoire||'').toLowerCase().includes(q) ||
+        (p.commune||'').toLowerCase().includes(q) || (p.secteur||'').toLowerCase().includes(q) ||
+        (p.quartier||'').toLowerCase().includes(q) || (p.village||'').toLowerCase().includes(q) ||
+        (p.adresse||'').toLowerCase().includes(q) ||
         (p.categorie||'').toLowerCase().includes(q) || (p.auteur||'').toLowerCase().includes(q))
         .slice(0, 8).map(p => ({type:'point', p}));
     if (locaux.length) { afficherResultats(locaux); return; }
@@ -2956,19 +2997,21 @@ function popupPoint(p) {
         ${p.photo ? `<img src="${p.photo}" style="width:100%;height:150px;object-fit:cover;border-radius:10px;margin-bottom:10px;">` : ''}
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <b style="font-size:.95rem;">${p.nom}</b>
+            ${p.code ? `<span class="badge" style="font-size:.6rem;">${p.code}</span>` : ''}
             <span class="badge badge-cat" style="background:${CATS[p.categorie]?.couleur}">${CATS[p.categorie]?.emoji} ${(mukmapT && mukmapT('cat_' + p.categorie)) || CATS[p.categorie]?.nom || p.categorie}</span>
-            <span class="badge">${(mukmapT && mukmapT('statut_' + p.statut)) || p.statut}</span>
+            <span class="badge" style="color:${p.statut_couleur || '#fff'};border-color:${p.statut_couleur || '#888'}66;">● ${(mukmapT && mukmapT('statut_' + p.statut)) || p.statut_nom || p.statut}</span>
             ${nbPhotos ? `<span class="badge" title="${(mukmapT && mukmapT('photos')) || 'Photos'}">📷 ${nbPhotos}</span>` : ''}
         </div>
         ${p.projet ? `<div style="font-size:.72rem;color:var(--accent);margin-top:4px;">📁 ${p.projet}</div>` : ''}
-        ${p.province ? `<div style="font-size:.75rem;color:var(--text-2);margin-top:4px;">📍 ${[p.province, p.commune, p.quartier].filter(Boolean).join(' · ')}</div>` : ''}
+        ${(p.province || p.territoire || p.commune || p.village) ? `<div style="font-size:.75rem;color:var(--text-2);margin-top:4px;">📍 ${[p.province, p.territoire, p.commune, p.village].filter(Boolean).join(' · ')}</div>` : ''}
         ${p.description ? `<div style="font-size:.8rem;color:var(--text-2);margin-top:6px;">${p.description}</div>` : ''}
         ${extras.length ? `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">${htmlSectionsCompactes(extrasObj)}</div>` : ''}
-        <div style="font-size:.72rem;color:var(--text-3);margin-top:6px;">👤 ${p.auteur} · 📅 ${p.date}<br>🌐 ${p.latitude}, ${p.longitude}</div>
+        <div style="font-size:.72rem;color:var(--text-3);margin-top:6px;">👤 ${p.auteur} · 📅 ${p.date}<br>🌐 ${p.latitude}, ${p.longitude}${p.altitude ? `<br>⛰️ ${p.altitude} m` : ''}</div>
         ${(p.medias || []).length ? gallerieHTML(p) : ''}
         <div style="display:flex;gap:6px;margin-top:10px;">
+            <a href="/point/${p.id}/" class="btn btn-sm btn-primary" style="flex:1;text-decoration:none;color:#fff;">📋 ${(mukmapT && mukmapT('voir_details')) || 'Détails'}</a>
             <a href="#" class="btn btn-sm btn-primary popup-edit" style="flex:1;text-decoration:none;color:#fff;">${(mukmapT && mukmapT('modifier')) || 'Modifier'}</a>
-            <a href="/point/${p.id}/supprimer/" class="btn btn-sm btn-danger" style="flex:1;text-decoration:none;">${(mukmapT && mukmapT('supprimer')) || 'Supprimer'}</a>
+            <a href="/point/${p.id}/supprimer/" class="btn btn-sm btn-danger" style="text-decoration:none;">${(mukmapT && mukmapT('supprimer')) || 'Supprimer'}</a>
         </div>
     </div>`;
 }

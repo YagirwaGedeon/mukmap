@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modifier le point — MUKMAP v1.0</title>
+    <title>{% if mode_creation %}Nouveau point — MUKMAP v1.0{% else %}Modifier le point — MUKMAP v1.0{% endif %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
     <style>
         :root {
             --bg: #0f1220; --bg-2: #171a2e; --bg-3: #1f2340; --border: #2a2f52; --border-2: #343a63;
@@ -21,18 +22,21 @@
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
         body { background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
-        .conteneur { max-width: 900px; margin: 0 auto; padding: 26px 18px; }
+        .conteneur { max-width: 920px; margin: 0 auto; padding: 26px 18px; }
         .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; margin-bottom: 18px; }
-        h1 { font-size: 1.1rem; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+        h1 { font-size: 1.1rem; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .sous { color: var(--text-3); font-size: .8rem; margin-bottom: 18px; }
         label { display: block; font-size: .72rem; font-weight: 600; color: var(--text-2); margin: 12px 0 5px; text-transform: uppercase; letter-spacing: .5px; }
         input, select, textarea { width: 100%; padding: 10px 12px; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); border-radius: 10px; font-size: .85rem; outline: none; transition: border .2s; font-family: 'Inter', Arial, sans-serif; }
         input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(109,93,246,.18); }
         .grille { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+        .tiers { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 14px; }
         .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: .85rem; background: var(--bg-3); color: var(--text); border: 1px solid var(--border); transition: all .2s; text-decoration: none; cursor: pointer; font-family: 'Inter', Arial, sans-serif; }
         .btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
         .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
         .btn-primary:hover { color: #fff; box-shadow: 0 6px 20px rgba(79,70,229,.4); }
+        .btn-green { background: rgba(34,197,94,.12); color: var(--green); border: 1px solid rgba(34,197,94,.35); }
+        .btn-green:hover { color: var(--green); }
         .btn-danger { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
         .galerie { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
         .g-item { position: relative; border-radius: 12px; overflow: hidden; background: var(--bg-3); border: 1px solid var(--border); display: flex; flex-direction: column; }
@@ -43,19 +47,62 @@
         .g-item .del { position: absolute; bottom: 6px; right: 6px; background: rgba(239,68,68,.9); color: #fff; width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: .8rem; }
         .g-item .fichier { width: 100%; height: 110px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; font-size: .7rem; color: var(--text-2); }
         .hint { font-size: .72rem; color: var(--text-3); margin-top: 5px; }
-        @media (max-width: 700px) { .grille { grid-template-columns: 1fr; } }
+        #carte-capture { width: 100%; height: 300px; border-radius: 12px; border: 1px solid var(--border); margin-top: 6px; }
+        .barre-coords { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+        .coord-info { font-size: .78rem; color: var(--text-2); background: var(--bg-3); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); }
+        .badge { display: inline-block; font-size: .62rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--bg-3); border: 1px solid var(--border); color: var(--text-2); }
+        .section-titre { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin: 22px 0 4px; display: flex; align-items: center; gap: 8px; }
+        .section-titre::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        @media (max-width: 700px) { .grille, .tiers { grid-template-columns: 1fr; } }
     </style>
 {% include 'cartographie/_pwa_head.html' %}
 </head>
 <body>
 <main class="conteneur">
     <div class="card">
-        <h1>✏️ <span data-i18n="modifier_point">Modifier le point</span> « {{ point.nom }} »</h1>
-        <p class="sous" data-i18n="point_form_sub">Éditez les informations et la galerie multimédia, puis enregistrez.</p>
+        <h1>
+            {% if mode_creation %}📍 <span data-i18n="nouveau_point">Nouveau point</span>
+            {% else %}✏️ <span data-i18n="modifier_point">Modifier le point</span> « {{ point.nom }} »{% endif %}
+            {% if point %}<span class="badge">{{ point.code }}</span>{% endif %}
+        </h1>
+        <p class="sous" data-i18n="point_form_sub">Renseignez les informations professionnelles : coordonnées (manuelles, GPS ou clic sur la carte), localisation administrative et médias.</p>
         <form method="POST" enctype="multipart/form-data">{% csrf_token %}
+
+            <div class="section-titre">🔤 Identité</div>
+            {% if mode_creation %}
+            <div class="grille">
+                <div>
+                    <label><span data-i18n="nom_lieu">Nom du lieu</span> *</label>
+                    <input type="text" name="nom" value="{{ point.nom }}" required>
+                </div>
+                <div>
+                    <label>Code (optionnel)</label>
+                    <input type="text" name="code" value="{{ point.code }}" placeholder="Laissez vide pour un code automatique (P-0001)">
+                </div>
+            </div>
+            <div class="grille">
+                <div>
+                    <label>Identifiant unique</label>
+                    <input type="text" name="identifiant" value="{{ point.identifiant }}" placeholder="Laissez vide pour l'identifiant automatique">
+                </div>
+                <div>
+                    <label><span data-i18n="projet">Projet</span></label>
+                    <select name="projet">
+                        {% for p in projets %}
+                            <option value="{{ p.pk }}" {% if projet_defaut and projet_defaut.pk == p.pk %}selected{% endif %}>{{ p.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            {% else %}
             <label><span data-i18n="nom_lieu">Nom du lieu</span> *</label>
             <input type="text" name="nom" value="{{ point.nom }}" required>
             <div class="grille">
+                <div><label>Code</label><input type="text" name="code" value="{{ point.code }}" readonly title="Le code est attribué automatiquement"></div>
+                <div><label>Identifiant unique</label><input type="text" name="identifiant" value="{{ point.identifiant }}"></div>
+            </div>
+            {% endif %}
+            <div class="tiers">
                 <div>
                     <label data-i18n="categorie">Catégorie</label>
                     <select name="categorie">
@@ -63,24 +110,65 @@
                     </select>
                 </div>
                 <div>
-                    <label data-i18n="etat">État</label>
+                    <label data-i18n="etat">Statut</label>
                     <select name="statut">
                         {% for cle, lib in statuts %}<option value="{{ cle }}" {% if point.statut == cle %}selected{% endif %}>{{ lib }}</option>{% endfor %}
                     </select>
                 </div>
+                <div>
+                    <label>État d'avancement</label>
+                    <input type="text" name="etat_avancement" value="{{ point.etat_avancement }}" placeholder="Ex : 50 %">
+                </div>
             </div>
+
+            <div class="section-titre">🗺️ Localisation</div>
             <div class="grille">
-                <div><label data-i18n="province">Province</label><input type="text" name="province" value="{{ point.province }}"></div>
-                <div><label data-i18n="commune">Commune</label><input type="text" name="commune" value="{{ point.commune }}"></div>
+                <div><label><span data-i18n="latitude">Latitude</span> *</label><input type="number" step="any" name="latitude" id="f-latitude" value="{{ point.latitude }}" required></div>
+                <div><label><span data-i18n="longitude">Longitude</span> *</label><input type="number" step="any" name="longitude" id="f-longitude" value="{{ point.longitude }}" required></div>
             </div>
-            <label data-i18n="quartier_village">Quartier / Village</label>
-            <input type="text" name="quartier" value="{{ point.quartier }}">
+            <div class="tiers">
+                <div><label>Précision GPS (m)</label><input type="number" step="any" name="precision_gps_m" value="{{ point.precision_gps_m }}"></div>
+                <div><label>Altitude (m)</label><input type="number" step="any" name="altitude" value="{{ point.altitude }}"></div>
+                <div><label>Date de visite</label><input type="datetime-local" name="date_visite" value="{% if point.date_visite %}{{ point.date_visite|date:'Y-m-d\TH:i' }}{% endif %}"></div>
+            </div>
+            <div class="barre-coords">
+                <button type="button" class="btn btn-green" id="btn-gps">🛰️ <span data-i18n="position_gps">Utiliser ma position GPS</span></button>
+                <span class="coord-info" id="info-coords" data-i18n="cliquez_carte">Cliquez sur la carte pour remplir les coordonnées.</span>
+            </div>
+            <div id="carte-capture"></div>
+            <div class="grille">
+                <div><label>Adresse / localisation</label><input type="text" name="adresse" value="{{ point.adresse }}" placeholder="Ex : Avenue du Marché, n°12"></div>
+                <div><label>Province</label><input type="text" name="province" value="{{ point.province }}"></div>
+                <div><label>Territoire / district</label><input type="text" name="territoire" value="{{ point.territoire }}"></div>
+                <div><label>Commune / secteur</label><input type="text" name="commune" value="{{ point.commune }}"></div>
+                <div><label>Secteur / chefferie</label><input type="text" name="secteur" value="{{ point.secteur }}"></div>
+                <div><label>Quartier</label><input type="text" name="quartier" value="{{ point.quartier }}"></div>
+            </div>
+            <label>Village / localité</label>
+            <input type="text" name="village" value="{{ point.village }}">
+
+            <div class="section-titre">📋 Informations</div>
             <label data-i18n="description">Description</label>
             <textarea name="description" rows="3">{{ point.description }}</textarea>
+            <label>Observations</label>
+            <textarea name="observations" rows="3" placeholder="Observations de terrain, remarques…">{{ point.observations }}</textarea>
             <div class="grille">
-                <div><label><span data-i18n="latitude">Latitude</span> *</label><input type="number" step="any" name="latitude" value="{{ point.latitude }}" required></div>
-                <div><label><span data-i18n="longitude">Longitude</span> *</label><input type="number" step="any" name="longitude" value="{{ point.longitude }}" required></div>
+                <div>
+                    <label>Agent responsable</label>
+                    <select name="agent">
+                        <option value="">— Non attribué —</option>
+                        {% for a in agents %}<option value="{{ a.pk }}" {% if point.agent_id == a.pk %}selected{% endif %}>{{ a.get_full_name|default:a.username }}</option>{% endfor %}
+                    </select>
+                </div>
+                {% if mode_creation %}
+                <div>
+                    <label>Activité liée</label>
+                    <input type="number" name="activite" placeholder="ID de l'activité (optionnel)">
+                </div>
+                {% endif %}
             </div>
+
+            <div class="section-titre">🖼️ Médias</div>
             <label data-i18n="photo_principale">Photo principale</label>
             <input type="file" name="photo" accept="image/*">
             {% if point.photo %}<div class="hint"><span data-i18n="photo_actuelle">Photo actuelle :</span> {{ point.photo.name }}</div>{% endif %}
@@ -89,9 +177,13 @@
             <label data-i18n="commentaire_medias">Commentaire (photos géoréférencées)</label>
             <input type="text" name="commentaire_medias" placeholder="Ex : Vue de la source, 12/03/2026">
             <div class="hint" data-i18n="georef_hint">📍 La date, l'heure et la position GPS sont lues automatiquement dans les photos (EXIF) ; le commentaire est appliqué à toutes les photos ajoutées.</div>
-            <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
+
+            <div style="display:flex;gap:10px;margin-top:24px;flex-wrap:wrap;">
                 <button type="submit" class="btn btn-primary">💾 <span data-i18n="enregistrer">Enregistrer</span></button>
-                <a class="btn" href="{% url 'index_cartographie' %}" data-i18n="annuler">Annuler</a>
+                {% if mode_creation %}
+                <button type="submit" name="retour_detail" value="1" class="btn btn-green">💾 <span data-i18n="enregistrer">Enregistrer et voir la fiche</span></button>
+                {% endif %}
+                <a class="btn" href="{% if point %}{% url 'point_detail' point.pk %}{% else %}{% url 'index_cartographie' %}{% endif %}" data-i18n="annuler">Annuler</a>
             </div>
         </form>
     </div>
@@ -128,7 +220,53 @@
     </div>
     {% endif %}
 </main>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
+const fLat = document.getElementById('f-latitude');
+const fLng = document.getElementById('f-longitude');
+const info = document.getElementById('info-coords');
+let marqueur = null;
+
+const styleBase = {
+    version: 8,
+    sources: {
+        osm: {type:'raster', tiles:['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize:256, attribution:'© OpenStreetMap'}
+    },
+    layers: [{id:'osm', type:'raster', source:'osm'}]
+};
+const carte = new maplibregl.Map({container:'carte-capture', style:styleBase, center:[29.22, -1.67], zoom:7, attributionControl:false});
+carte.addControl(new maplibregl.NavigationControl({showCompass:false}), 'top-right');
+
+function centrerCarte() {
+    const lat = parseFloat(fLat.value), lng = parseFloat(fLng.value);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        carte.flyTo({center:[lng, lat], zoom:13});
+        poserMarqueur(lng, lat);
+    }
+}
+function poserMarqueur(lng, lat) {
+    if (marqueur) marqueur.remove();
+    marqueur = new maplibregl.Marker({color:'#ef4444'}).setLngLat([lng, lat]).addTo(carte);
+}
+carte.on('click', e => {
+    fLat.value = e.lngLat.lat.toFixed(6);
+    fLng.value = e.lngLat.lng.toFixed(6);
+    poserMarqueur(e.lngLat.lng, e.lngLat.lat);
+    info.textContent = '📍 ' + e.lngLat.lat.toFixed(6) + ', ' + e.lngLat.lng.toFixed(6);
+});
+document.getElementById('btn-gps').addEventListener('click', () => {
+    if (!navigator.geolocation) { info.textContent = 'GPS non disponible.'; return; }
+    info.textContent = 'Localisation GPS en cours…';
+    navigator.geolocation.getCurrentPosition(pos => {
+        fLat.value = pos.coords.latitude.toFixed(6);
+        fLng.value = pos.coords.longitude.toFixed(6);
+        poserMarqueur(pos.coords.longitude, pos.coords.latitude);
+        carte.flyTo({center:[pos.coords.longitude, pos.coords.latitude], zoom:15});
+        info.textContent = '🛰️ Position GPS : ' + pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6) + ' (±' + Math.round(pos.coords.accuracy) + ' m)';
+    }, () => { info.textContent = '⚠️ Impossible d\'obtenir la position GPS.'; }, {enableHighAccuracy:true, timeout:15000});
+});
+centrerCarte();
+
 document.querySelectorAll('a[data-confirm-cle]').forEach(a => {
     a.addEventListener('click', function(e) {
         const t = mukmapT(this.dataset.confirmCle);

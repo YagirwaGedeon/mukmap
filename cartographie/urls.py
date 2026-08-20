@@ -42,9 +42,23 @@ urlpatterns = [
     path('qualite/', views.tableau_qualite, name='qualite_tableau'),
     path('adduction/dashboard/', views.adduction_dashboard, name='adduction_dashboard'),
 
+    path('point/ajouter/', views.point_create, name='point_create'),
+    path('point/<int:pk>/', views.point_detail, name='point_detail'),
     path('point/<int:pk>/edit/', views.point_edit, name='point_edit'),
     path('point/<int:pk>/supprimer/', views.point_delete, name='point_delete'),
+    path('point/<int:pk>/archiver/', views.point_archive, name='point_archive'),
+    path('point/<int:pk>/restaurer/', views.point_restore, name='point_restore'),
+    path('point/<int:pk>/visite/ajouter/', views.visite_add, name='visite_add'),
+    path('point/<int:pk>/media/ajouter/', views.point_media_add, name='point_media_add'),
     path('media/<int:pk>/supprimer/', views.media_delete, name='media_delete'),
+
+    # ── POINTS : statistiques + statuts configurables + statut en masse ──
+    path('api/points/stats/', views.api_points_stats, name='api_points_stats'),
+    path('api/points/statuts/', views.api_statuts_points, name='api_statuts_points'),
+    path('api/points/statuts/creer/', views.api_statut_point_modifier, name='api_statut_point_creer'),
+    path('api/points/statuts/<int:pk>/modifier/', views.api_statut_point_modifier, name='api_statut_point_modifier'),
+    path('api/points/statuts/<int:pk>/supprimer/', views.api_statut_point_modifier, name='api_statut_point_supprimer'),
+    path('api/points/statut-masse/', views.api_points_statut_masse, name='api_points_statut_masse'),
 
     path('activite/ajouter/', views.activite_create, name='activite_create'),
     path('activite/<int:pk>/', views.activite_detail, name='activite_detail'),

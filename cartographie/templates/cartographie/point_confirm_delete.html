@@ -22,6 +22,15 @@
 </head>
 <body>
 <div class="card">
+    {% if mode == 'archive' %}
+    <div class="ico">🗄️</div>
+    <h1><span data-i18n="archiver_point">Archiver le point</span> « {{ point.nom }} » ?</h1>
+    <p data-i18n="archiver_point_texte">Le point sera masqué de la carte et de la liste, mais restera conservé. Vous pourrez le restaurer à tout moment.</p>
+    <form method="POST">{% csrf_token %}
+        <button type="submit" class="btn btn-danger" data-i18n="oui_archiver">Oui, archiver</button>
+        <a href="{% url 'point_detail' point.pk %}" class="btn btn-ghost" data-i18n="annuler">Annuler</a>
+    </form>
+    {% else %}
     <div class="ico">🗑️</div>
     <h1><span data-i18n="supprimer_point">Supprimer le point</span> « {{ point.nom }} » ?</h1>
     <p data-i18n="supprimer_point_texte">Cette action supprimera définitivement le point, sa photo et sa galerie multimédia.</p>
@@ -29,6 +38,7 @@
         <button type="submit" class="btn btn-danger" data-i18n="oui_supprimer">Oui, supprimer</button>
         <a href="{% url 'index_cartographie' %}" class="btn btn-ghost" data-i18n="annuler">Annuler</a>
     </form>
+    {% endif %}
 </div>
 {% include 'cartographie/_i18n.html' %}
 {% include 'cartographie/_pwa_body.html' %}

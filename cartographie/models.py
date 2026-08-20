@@ -25,24 +25,45 @@ class PointGeographique(models.Model):
     STATUT_CHOICES = [
         ('actif', 'Actif'), ('inactif', 'Inactif'),
         ('en_cours', 'En cours'), ('termine', 'Terminé'),
+        ('nouveau', 'Nouveau'), ('planifie', 'Planifié'),
+        ('a_visiter', 'À visiter'), ('visite', 'Visité'),
+        ('verifie', 'Vérifié'), ('suspendu', 'Suspendu'),
+        ('archive', 'Archivé'),
     ]
+    # POINTS : identifiants et champs administratifs professionnels
+    code = models.CharField(max_length=30, blank=True, default='', db_index=True,
+                            verbose_name="Code du point", help_text="Code unique du point dans son projet (ex. P-0001)")
+    identifiant = models.CharField(max_length=64, blank=True, default='', db_index=True,
+                                   verbose_name="Identifiant unique",
+                                   help_text="Identifiant unique global (issu de l'import ou attribué automatiquement)")
     nom = models.CharField(max_length=200, verbose_name="Nom du lieu")
     description = models.TextField(blank=True, verbose_name="Description")
     latitude = models.FloatField(verbose_name="Latitude")
     longitude = models.FloatField(verbose_name="Longitude")
     precision_gps_m = models.FloatField(null=True, blank=True, verbose_name="Précision GPS (m)")
+    altitude = models.FloatField(null=True, blank=True, verbose_name="Altitude (m)")
+    adresse = models.CharField(max_length=255, blank=True, verbose_name="Adresse / localisation")
     photo = models.ImageField(upload_to='photos_lieux/', blank=True, verbose_name="Photo du lieu")
     categorie = models.CharField(max_length=20, choices=CATEGORIE_CHOICES, default='autre', verbose_name="Catégorie")
-    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='actif', verbose_name="État")
+    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='nouveau', verbose_name="État")
+    etat_avancement = models.CharField(max_length=40, blank=True, default='', verbose_name="État d'avancement")
     province = models.CharField(max_length=100, blank=True, verbose_name="Province")
-    commune = models.CharField(max_length=100, blank=True, verbose_name="Commune")
+    territoire = models.CharField(max_length=100, blank=True, verbose_name="Territoire / district")
+    commune = models.CharField(max_length=100, blank=True, verbose_name="Commune / secteur")
+    secteur = models.CharField(max_length=100, blank=True, verbose_name="Secteur / chefferie")
     quartier = models.CharField(max_length=100, blank=True, verbose_name="Quartier")
+    village = models.CharField(max_length=100, blank=True, verbose_name="Village / localité")
+    observations = models.TextField(blank=True, verbose_name="Observations")
     projet = models.ForeignKey('Projet', on_delete=models.SET_NULL, null=True, blank=True, related_name='points', verbose_name="Projet")
     activite = models.ForeignKey('Activite', on_delete=models.SET_NULL, null=True, blank=True, related_name='points', verbose_name="Activité")
-    auteur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Auteur")
+    auteur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='points_crees', verbose_name="Agent créateur")
+    agent = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='points_responsables',
+                              verbose_name="Agent responsable")
+    date_visite = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name="Date de visite")
     date_creation = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="Date d'encodage")
     updated_at = models.DateTimeField(auto_now=True, null=True, db_index=True, verbose_name="Dernière modification")
     supprime = models.BooleanField(default=False, db_index=True, verbose_name="Supprimé (corbeille)")
+    archive = models.BooleanField(default=False, db_index=True, verbose_name="Archivé")
     synchro_id = models.CharField(max_length=64, blank=True, default='', db_index=True,
                                   verbose_name="Identifiant de synchronisation (client)")
     donnees = models.JSONField(default=dict, blank=True, verbose_name="Données complètes (import)")
@@ -54,8 +75,20 @@ class PointGeographique(models.Model):
         verbose_name = "Point Géographique"
         verbose_name_plural = "Points Géographiques"
 
+    def save(self, *args, **kwargs):
+        # POINTS : attribue automatiquement code + identifiant au premier enregistrement
+        if not self.code:
+            super().save(*args, **kwargs)
+            prefix = (self.projet.code if self.projet and self.projet.code else 'P').upper().replace(' ', '_')
+            self.code = f"{prefix}-{self.pk:04d}"
+            if not self.identifiant:
+                self.identifiant = self.code
+            super().save(update_fields=['code', 'identifiant'])
+        else:
+            super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.nom} ({self.latitude}, {self.longitude})"
+        return f"{self.code or self.nom} ({self.latitude}, {self.longitude})"
 
 
 class Projet(models.Model):
@@ -357,6 +390,98 @@ class MediaPoint(models.Model):
 
     def __str__(self):
         return f"{self.get_type_display()} {self.pk} - {self.point.nom}"
+
+
+class StatutPoint(models.Model):
+    """Statut configurable d'un point (cahier des charges POINTS, §13)."""
+    code = models.CharField(max_length=30, verbose_name="Code du statut")
+    nom = models.CharField(max_length=80, verbose_name="Nom affiché")
+    couleur = models.CharField(max_length=7, default='#6b729c', verbose_name="Couleur (hex)")
+    ordre = models.IntegerField(default=0, verbose_name="Ordre d'affichage")
+    projet = models.ForeignKey(Projet, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='statuts_points', verbose_name="Projet (portée)",
+                               help_text="Si défini, le statut est propre au projet ; sinon il est global.")
+    actif = models.BooleanField(default=True, verbose_name="Actif")
+    cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='statuts_points_crees', verbose_name="Créé par")
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+
+    class Meta:
+        ordering = ['ordre', 'nom']
+        constraints = [
+            models.UniqueConstraint(fields=['projet', 'code'], name='uniq_statut_point_projet_code'),
+            models.UniqueConstraint(fields=['code'], condition=models.Q(projet__isnull=True),
+                                    name='uniq_statut_point_global_code'),
+        ]
+        verbose_name = "Statut de point"
+        verbose_name_plural = "Statuts de points"
+
+    def __str__(self):
+        portee = self.projet.nom if self.projet else 'Global'
+        return f"{self.nom} ({portee})"
+
+    def couleur_css(self):
+        return self.couleur or '#6b729c'
+
+
+class HistoriquePoint(models.Model):
+    """Historique complet des modifications d'un point (cahier des charges POINTS, §5G)."""
+    TYPE_CHOICES = [
+        ('creation', 'Point créé'),
+        ('modification', 'Information modifiée'),
+        ('coordonnees', 'Coordonnées modifiées'),
+        ('statut', 'Statut modifié'),
+        ('photo', 'Photo ajoutée'),
+        ('document', 'Document ajouté'),
+        ('donnee', 'Donnée enregistrée'),
+        ('activite', 'Activité ajoutée'),
+        ('visite', 'Visite enregistrée'),
+        ('deplacement', 'Point déplacé'),
+        ('archive', 'Point archivé'),
+        ('restauration', 'Point restauré'),
+    ]
+    point = models.ForeignKey(PointGeographique, on_delete=models.CASCADE, related_name='historique',
+                              verbose_name="Point")
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='modification', verbose_name="Type")
+    action = models.CharField(max_length=300, verbose_name="Action réalisée")
+    details = models.JSONField(default=dict, blank=True, verbose_name="Détails")
+    utilisateur = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                    verbose_name="Utilisateur")
+    date = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="Date et heure")
+
+    class Meta:
+        ordering = ['-date']
+        verbose_name = "Entrée d'historique du point"
+        verbose_name_plural = "Historique des points"
+
+    def __str__(self):
+        return f"{self.date.strftime('%d/%m/%Y %H:%M')} — {self.action[:60]}"
+
+
+class Visite(models.Model):
+    """Visite de terrain d'un point par un agent (cahier des charges POINTS, §12 et §20)."""
+    STATUT_CHOICES = [
+        ('planifiee', 'Planifiée'), ('effectuee', 'Effectuée'),
+        ('partielle', 'Partielle'), ('annulee', 'Annulée'),
+    ]
+    point = models.ForeignKey(PointGeographique, on_delete=models.CASCADE, related_name='visites', verbose_name="Point")
+    agent = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='visites_points',
+                              verbose_name="Agent")
+    date_visite = models.DateTimeField(default=timezone.now, verbose_name="Date de la visite")
+    notes = models.TextField(blank=True, verbose_name="Notes / observations")
+    resultats = models.TextField(blank=True, verbose_name="Résultats de la visite")
+    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='planifiee', verbose_name="Statut")
+    cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='visites_creees',
+                                 verbose_name="Créé par")
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date d'enregistrement")
+
+    class Meta:
+        ordering = ['-date_visite']
+        verbose_name = "Visite de point"
+        verbose_name_plural = "Visites de points"
+
+    def __str__(self):
+        return f"Visite de {self.point} le {self.date_visite.strftime('%d/%m/%Y %H:%M')}"
 
 
 class JournalAudit(models.Model):
