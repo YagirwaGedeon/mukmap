@@ -82,6 +82,9 @@ urlpatterns = [
 
     path('geometrie/importer/', views.importer_geometrie, name='importer_geometrie'),
     path('geometrie/gpkg/infos/', views.gpkg_infos, name='gpkg_infos'),
+    path('geometrie/sources/', views.sources_geometries, name='sources_geometries'),
+    path('geometrie/source/<int:pk>/modifier/', views.source_geometrie_update, name='source_geometrie_update'),
+    path('geometrie/source/<int:pk>/supprimer/', views.source_geometrie_delete, name='source_geometrie_delete'),
     path('import/choix-colonnes/', views.import_choix_colonnes, name='import_choix_colonnes'),
     path('geometrie/couche/<int:pk>/supprimer/', views.couche_delete, name='couche_delete'),
     path('geometrie/couche/<int:pk>/export-shp/', views.couche_export_shp, name='couche_export_shp'),

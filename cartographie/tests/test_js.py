@@ -94,6 +94,9 @@ class TestsJSPanneauIdentifier(BaseCartographieTest):
     def test_thematic_core(self):
         self._lancer(DOSSIER_JS / 'test_thematic.js')
 
+    def test_gestionnaire_sources_core(self):
+        self._lancer(DOSSIER_JS / 'test_gestionnaire_sources.js')
+
     def test_fiche_core(self):
         self._lancer(DOSSIER_JS / 'test_fiche.js')
 

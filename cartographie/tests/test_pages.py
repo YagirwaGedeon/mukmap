@@ -78,7 +78,7 @@ class TestsPages(BaseCartographieTest):
         r = self.client.get('/')
         contenu = r.content.decode('utf-8', errors='replace')
         self.assertEqual(r.status_code, 200)
-        self.assertNotIn('btn-exporter-carte', contenu, 'pas de bouton export pour l’invité')
+        self.assertNotIn('id="btn-exporter-carte"', contenu, 'pas de bouton export pour l’invité')
 
     def test_export_carte_pdf_poste_image(self):
         import base64

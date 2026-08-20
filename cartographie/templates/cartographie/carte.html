@@ -250,6 +250,29 @@
         .couche-item .couche-ordre { display: flex; gap: 4px; }
         .couche-item .couche-ordre button { flex: 1; border: 1px solid var(--border); background: var(--bg-2); border-radius: 6px; font-size: .68rem; cursor: pointer; color: var(--text-2); padding: 2px 0; }
         .couche-item .couche-ordre button:hover { color: var(--accent); border-color: var(--accent); }
+        .gs-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px; }
+        .gs-actions button { border: 1px solid var(--border); background: var(--bg-3); color: var(--text-2); border-radius: 7px; padding: 4px 0; font-size: .66rem; cursor: pointer; }
+        .gs-actions button:hover { color: var(--accent); border-color: var(--accent); }
+        .gs-recherche { width: 100%; box-sizing: border-box; border: 1px solid var(--border); background: var(--bg-2); color: var(--text); border-radius: 8px; padding: 5px 8px; font-size: .7rem; margin: 4px 0; }
+        .gs-resume { font-size: .64rem; color: var(--text-3); padding: 2px 2px 4px; }
+        .gs-noeud { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 4px 6px; border-radius: 7px; background: var(--bg-3); border: 1px solid var(--border); margin-bottom: 3px; }
+        .gs-noeud.off { opacity: .5; }
+        .gs-chevron { width: 13px; height: 13px; display: inline-flex; align-items: center; justify-content: center; font-size: .6rem; color: var(--text-3); cursor: pointer; flex-shrink: 0; }
+        .gs-oeil { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+        .gs-puce { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; cursor: pointer; position: relative; overflow: hidden; }
+        .gs-puce input[type="color"] { position: absolute; inset: -6px; width: 23px; height: 23px; opacity: 0; cursor: pointer; border: none; padding: 0; }
+        .gs-badge { font-size: .58rem; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 6px; padding: 1px 5px; flex-shrink: 0; }
+        .gs-nom { flex: 1; min-width: 0; font-size: .72rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+        .gs-nom:hover { color: var(--accent); }
+        .gs-compte { font-size: .6rem; color: var(--text-3); flex-shrink: 0; }
+        .gs-enfants { flex: 1 0 100%; display: grid; gap: 3px; padding: 3px 0 0 12px; border-left: 1px dashed var(--border); margin-left: 3px; }
+        .gs-fic .gs-nom { font-weight: 500; }
+        .gs-cats { flex: 1 0 100%; display: grid; gap: 3px; padding: 4px 0 0 14px; }
+        .gs-cat { display: flex; align-items: center; gap: 5px; font-size: .66rem; color: var(--text-2); }
+        .gs-cat .gs-oeil { width: 13px; height: 13px; }
+        .gs-cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .gs-cat-nom { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .gs-cat-nb { font-size: .6rem; color: var(--text-3); }
         .co-details { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: .72rem; padding: 8px 10px; background: var(--bg-3); border-radius: 10px; border: 1px solid var(--border); }
         .co-details .co-det-cle { color: var(--text-3); }
         .co-details .co-det-val { font-weight: 600; color: var(--text); }
@@ -1120,6 +1143,7 @@
 <script src="{% static 'js/imagerie.js' %}?v=27"></script>
 <script src="{% static 'js/couches-wms.js' %}?v=27"></script>
 <script src="{% static 'js/offline.js' %}?v=33"></script>
+<script src="{% static 'js/gestionnaire-sources.js' %}?v=34"></script>
   <script src="{% static 'js/gps.js' %}?v=29"></script>
 <script src="{% static 'js/ui-deplacer.js' %}?v=1"></script>
 <script src="{% static 'js/ui-panneaux.js' %}?v=1"></script>
@@ -1655,6 +1679,13 @@ function rechargerCouches() {
         Object.keys(map.getStyle().sources).forEach(s => { if (s.startsWith('couche-')) map.removeSource(s); });
         couchesDonnees.length = 0;
         couchePointLayers.length = 0;
+        etatVisibilite.couches = new Map();
+        etatVisibilite.sources = new Map();
+        etatVisibilite.fichiers = new Map();
+        etatVisibilite.categories = new Map();
+        arbreOuvert = new Set(['__racine__']);
+        arbreRecherche = '';
+        derniereSelection = null;
         data.forEach(c => {
             couchesDonnees.push(c);
             const srcId = 'couche-' + c.id;
@@ -1695,7 +1726,341 @@ function rechargerCouches() {
     }).catch(() => {});
 }
 
-/* ─── Couches : liste + visibilité + gestion (infos, zoom, opacité, ordre, export) ── */
+/* ─── Gestionnaire des couches et des sources : arbre hiérarchique
+     Projet → Sources → Fichiers → Couches → Catégories → entités.
+     Le filtrage ne supprime jamais de données (setFilter / layoutProperty). ── */
+const etatVisibilite = { couches: new Map(), sources: new Map(), fichiers: new Map(), categories: new Map() };
+let arbreOuvert = new Set(['__racine__']);
+let derniereSelection = null;
+let arbreRecherche = '';
+
+function nomFichierCouche(c) { return c.fichier || c.nom_original || c.fichier_source || '(inconnu)'; }
+
+function definirTout(valeur) {
+    couchesDonnees.forEach(c => {
+        etatVisibilite.couches.set(c.id, valeur);
+        if (c.source_obj) etatVisibilite.sources.set(c.source_obj.id, valeur);
+        etatVisibilite.fichiers.set(nomFichierCouche(c), valeur);
+        (c.categories || []).forEach(cat => etatVisibilite.categories.set(GS.cleCategorie(c.id, cat.nom), valeur));
+    });
+}
+
+function appliquerFiltres() {
+    couchesDonnees.forEach(c => {
+        const r = GS.filtrePourCouche(c, etatVisibilite);
+        ['ligne', 'fill', 'point', 'glyphe', 'symbole'].forEach(t => {
+            const l = map.getLayer('couche-' + t + '-' + c.id);
+            if (!l) return;
+            try { map.setLayoutProperty(l.id, 'visibility', r.visible ? 'visible' : 'none'); } catch (e) {}
+            try { map.setFilter(l.id, r.filtreCats); } catch (e) {}
+        });
+        const item = document.getElementById('couche-item-' + c.id);
+        if (item) item.classList.toggle('off', !r.visible);
+    });
+}
+
+function inverserTout() {
+    couchesDonnees.forEach(c => {
+        etatVisibilite.couches.set(c.id, etatVisibilite.couches.get(c.id) !== false);
+        if (c.source_obj) etatVisibilite.sources.set(c.source_obj.id, etatVisibilite.sources.get(c.source_obj.id) !== false);
+        etatVisibilite.fichiers.set(nomFichierCouche(c), etatVisibilite.fichiers.get(nomFichierCouche(c)) !== false);
+        (c.categories || []).forEach(cat => {
+            const cle = GS.cleCategorie(c.id, cat.nom);
+            etatVisibilite.categories.set(cle, etatVisibilite.categories.get(cle) !== false);
+        });
+    });
+    rendreListeCouches();
+}
+
+function activerAncetres(cle, type) {
+    if (type === 'source') { etatVisibilite.sources.set(cle, true); return; }
+    if (type === 'fichier') {
+        etatVisibilite.fichiers.set(cle, true);
+        const c = couchesDonnees.find(x => nomFichierCouche(x) === cle);
+        if (c && c.source_obj) etatVisibilite.sources.set(c.source_obj.id, true);
+        return;
+    }
+    if (type === 'couche') {
+        etatVisibilite.couches.set(cle, true);
+        const c = couchesDonnees.find(x => String(x.id) === String(cle));
+        if (!c) return;
+        if (c.source_obj) etatVisibilite.sources.set(c.source_obj.id, true);
+        etatVisibilite.fichiers.set(nomFichierCouche(c), true);
+        return;
+    }
+    if (type === 'categorie') {
+        const sep = cle.indexOf('\u0000');
+        const cid = cle.slice(0, sep);
+        etatVisibilite.categories.set(cle, true);
+        const c = couchesDonnees.find(x => String(x.id) === String(cid));
+        if (!c) return;
+        etatVisibilite.couches.set(c.id, true);
+        if (c.source_obj) etatVisibilite.sources.set(c.source_obj.id, true);
+        etatVisibilite.fichiers.set(nomFichierCouche(c), true);
+    }
+}
+
+function afficherSelectionSeule() {
+    if (!derniereSelection) return;
+    definirTout(false);
+    activerAncetres(derniereSelection.cle, derniereSelection.type);
+    rendreListeCouches();
+}
+
+function basculerArbreOuvert(cle) {
+    if (arbreOuvert.has(cle)) arbreOuvert.delete(cle); else arbreOuvert.add(cle);
+    rendreListeCouches();
+}
+
+function chevronNoeud(cle) {
+    const ch = document.createElement('span');
+    ch.className = 'gs-chevron';
+    ch.textContent = arbreOuvert.has(cle) ? '▾' : '▸';
+    ch.addEventListener('click', () => basculerArbreOuvert(cle));
+    return ch;
+}
+
+function oeilNoeud(etatMap, cle, type, titre) {
+    const oeil = document.createElement('input');
+    oeil.type = 'checkbox';
+    oeil.className = 'gs-oeil';
+    oeil.title = titre || '';
+    oeil.checked = etatMap.get(cle) !== false;
+    oeil.addEventListener('change', () => {
+        etatMap.set(cle, oeil.checked);
+        derniereSelection = { type: type, cle: cle };
+        rendreListeCouches();
+    });
+    return oeil;
+}
+
+function noeudSource(s) {
+    const cont = document.createElement('div');
+    cont.className = 'gs-noeud gs-src' + (etatVisibilite.sources.get(s.id) === false ? ' off' : '');
+    const cle = 'src-' + s.id;
+    cont.appendChild(chevronNoeud(cle));
+    cont.appendChild(oeilNoeud(etatVisibilite.sources, s.id, 'source', (mukmapT && mukmapT('visible', 'Visible')) || 'Visible'));
+    const puce = document.createElement('label');
+    puce.className = 'gs-puce';
+    puce.style.background = s.couleur || '#3388ff';
+    const col = document.createElement('input');
+    col.type = 'color';
+    col.value = s.couleur || '#3388ff';
+    col.title = (mukmapT && mukmapT('changer_couleur', 'Changer la couleur')) || 'Changer la couleur';
+    col.addEventListener('change', () => {
+        fetch('{% url "source_geometrie_update" 0 %}'.replace('/0/', '/' + s.id + '/'), {
+            method: 'POST',
+            headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'couleur=' + encodeURIComponent(col.value)
+        }).then(() => {
+            couchesDonnees.forEach(x => { if (x.source_obj && x.source_obj.id === s.id) x.source_obj.couleur = col.value; });
+            rendreListeCouches();
+        });
+    });
+    puce.appendChild(col);
+    cont.appendChild(puce);
+    const badge = document.createElement('span');
+    badge.className = 'gs-badge';
+    badge.textContent = s.identifiant;
+    cont.appendChild(badge);
+    const nom = document.createElement('span');
+    nom.className = 'gs-nom';
+    nom.textContent = s.nom;
+    nom.title = (mukmapT && mukmapT('renommer_source', 'Renommer la source')) || 'Renommer la source';
+    nom.addEventListener('click', () => {
+        const nouveau = prompt(((mukmapT && mukmapT('renommer_source', 'Nom de la source :')) || 'Nom de la source :'), s.nom);
+        if (!nouveau || nouveau.trim() === s.nom) return;
+        fetch('{% url "source_geometrie_update" 0 %}'.replace('/0/', '/' + s.id + '/'), {
+            method: 'POST',
+            headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'nom=' + encodeURIComponent(nouveau.trim())
+        }).then(() => {
+            couchesDonnees.forEach(x => { if (x.source_obj && x.source_obj.id === s.id) x.source_obj.nom = nouveau.trim(); });
+            rendreListeCouches();
+        });
+    });
+    cont.appendChild(nom);
+    const nb = s.fichiers.reduce((n, f) => n + f.couches.reduce((m, c) => m + (c.nb || 0), 0), 0);
+    const compte = document.createElement('span');
+    compte.className = 'gs-compte';
+    compte.textContent = ((mukmapT && mukmapT('entites_compte', '{n} entité(s)')) || '{n} entité(s)').replace('{n}', nb);
+    cont.appendChild(compte);
+    const det = document.createElement('button');
+    det.className = 'couche-del';
+    det.type = 'button';
+    det.textContent = '✕';
+    det.title = (mukmapT && mukmapT('detacher_source', 'Détacher la source (les données restent)')) || 'Détacher la source (les données restent)';
+    det.addEventListener('click', () => {
+        if (!confirm(((mukmapT && mukmapT('confirmer_detacher_source', 'Détacher la source « {n} » ? Les couches et données restent intactes.')) || 'Détacher la source « {n} » ? Les couches et données restent intactes.').replace('{n}', s.nom))) return;
+        fetch('{% url "source_geometrie_delete" 0 %}'.replace('/0/', '/' + s.id + '/'), {
+            method: 'POST', headers: { 'X-CSRFToken': CSRF }
+        }).then(() => rechargerCouches()).catch(() => rechargerCouches());
+    });
+    cont.appendChild(det);
+    if (arbreOuvert.has(cle)) {
+        const enfants = document.createElement('div');
+        enfants.className = 'gs-enfants';
+        s.fichiers.forEach(f => enfants.appendChild(noeudFichier(s, f.nom, f.couches)));
+        cont.appendChild(enfants);
+    }
+    return cont;
+}
+
+function noeudFichier(src, nomF, couches) {
+    const cont = document.createElement('div');
+    cont.className = 'gs-noeud gs-fic' + (etatVisibilite.fichiers.get(nomF) === false ? ' off' : '');
+    const cle = 'fic-' + (src ? src.id + '-' : 'x-') + nomF;
+    cont.appendChild(chevronNoeud(cle));
+    cont.appendChild(oeilNoeud(etatVisibilite.fichiers, nomF, 'fichier', (mukmapT && mukmapT('visible', 'Visible')) || 'Visible'));
+    const icone = document.createElement('span');
+    icone.textContent = '📄';
+    cont.appendChild(icone);
+    const nom = document.createElement('span');
+    nom.className = 'gs-nom';
+    nom.textContent = nomF;
+    cont.appendChild(nom);
+    const nb = couches.reduce((m, c) => m + (c.nb || 0), 0);
+    const compte = document.createElement('span');
+    compte.className = 'gs-compte';
+    compte.textContent = ((mukmapT && mukmapT('entites_compte', '{n} entité(s)')) || '{n} entité(s)').replace('{n}', nb);
+    cont.appendChild(compte);
+    if (arbreOuvert.has(cle)) {
+        const enfants = document.createElement('div');
+        enfants.className = 'gs-enfants';
+        couches.forEach(c => enfants.appendChild(noeudCouche(c)));
+        cont.appendChild(enfants);
+    }
+    return cont;
+}
+
+function noeudCouche(c) {
+    const item = document.createElement('div');
+    item.className = 'couche-item' + (etatVisibilite.couches.get(c.id) === false ? ' off' : '');
+    item.id = 'couche-item-' + c.id;
+    const lbl = document.createElement('label');
+    lbl.className = 'couche-lbl';
+    const vis = document.createElement('input');
+    vis.type = 'checkbox';
+    vis.className = 'couche-vis';
+    vis.checked = etatVisibilite.couches.get(c.id) !== false;
+    vis.dataset.id = String(c.id);
+    vis.addEventListener('change', () => {
+        etatVisibilite.couches.set(c.id, vis.checked);
+        derniereSelection = { type: 'couche', cle: c.id };
+        rendreListeCouches();
+    });
+    const puce = document.createElement('span');
+    puce.className = 'couche-puce';
+    puce.style.background = c.couleur || '#3388ff';
+    const nom = document.createElement('span');
+    nom.className = 'couche-nom';
+    nom.textContent = c.nom || 'Couche ' + c.id;
+    nom.title = (mukmapT && mukmapT('infos_couche_titre', 'Informations sur la couche')) || 'Informations sur la couche';
+    nom.style.cursor = 'pointer';
+    nom.addEventListener('click', () => ouvrirInfosCouche(c.id));
+    lbl.appendChild(vis);
+    lbl.appendChild(puce);
+    lbl.appendChild(nom);
+    const meta = document.createElement('span');
+    meta.className = 'couche-meta';
+    meta.textContent = (c.type || '?') + ' · ' + (c.nb_geometries || 0);
+    const boutons = document.createElement('div');
+    boutons.className = 'couche-boutons';
+    const bInfo = document.createElement('button');
+    bInfo.type = 'button';
+    bInfo.textContent = 'ℹ';
+    bInfo.title = (mukmapT && mukmapT('infos', 'Infos')) || 'Infos';
+    bInfo.addEventListener('click', () => ouvrirInfosCouche(c.id));
+    const bZoom = document.createElement('button');
+    bZoom.type = 'button';
+    bZoom.textContent = '⤢';
+    bZoom.title = (mukmapT && mukmapT('zoom_couche', 'Zoom sur la couche')) || 'Zoom sur la couche';
+    bZoom.addEventListener('click', () => zoomerSurCouche(c.id));
+    const bExp = document.createElement('button');
+    bExp.type = 'button';
+    bExp.textContent = '⭳';
+    bExp.title = (mukmapT && mukmapT('exporter_couche', 'Exporter (Shapefile / GeoJSON)')) || 'Exporter (Shapefile / GeoJSON)';
+    bExp.addEventListener('click', () => exporterCouche(c.id));
+    const del = document.createElement('button');
+    del.className = 'couche-del';
+    del.type = 'button';
+    del.title = (mukmapT && mukmapT('supprimer', 'Supprimer')) || 'Supprimer';
+    del.textContent = '✕';
+    del.addEventListener('click', () => supprimerCouche(c.id));
+    boutons.appendChild(bInfo);
+    boutons.appendChild(bZoom);
+    boutons.appendChild(bExp);
+    boutons.appendChild(del);
+    const reglages = document.createElement('div');
+    reglages.className = 'couche-reglages';
+    reglages.style.display = 'none';
+    const reglTitre = document.createElement('button');
+    reglTitre.type = 'button';
+    reglTitre.textContent = (mukmapT && mukmapT('regler_couche', 'Style, opacité, ordre…')) || 'Style, opacité, ordre…';
+    reglTitre.addEventListener('click', () => { reglages.style.display = reglages.style.display === 'none' ? 'grid' : 'none'; });
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = '0'; range.max = '100'; range.value = '100';
+    range.className = 'couche-opacite';
+    range.title = (mukmapT && mukmapT('opacite', 'Opacité')) || 'Opacité';
+    range.addEventListener('input', () => { setOpaciteCouche(c.id, Number(range.value) / 100); });
+    const lblOp = document.createElement('label');
+    lblOp.className = 'couche-op-lbl';
+    const iconeOp = document.createElement('span');
+    iconeOp.textContent = '◐';
+    const emOp = document.createElement('em');
+    emOp.textContent = '100%';
+    range.addEventListener('input', () => { emOp.textContent = range.value + '%'; });
+    lblOp.appendChild(iconeOp);
+    lblOp.appendChild(range);
+    lblOp.appendChild(emOp);
+    const ordre = document.createElement('div');
+    ordre.className = 'couche-ordre';
+    const bHaut = document.createElement('button');
+    bHaut.type = 'button'; bHaut.textContent = '↑';
+    bHaut.title = (mukmapT && mukmapT('monter', 'Monter')) || 'Monter';
+    bHaut.addEventListener('click', () => deplacerCouche(c.id, 1));
+    const bBas = document.createElement('button');
+    bBas.type = 'button'; bBas.textContent = '↓';
+    bBas.title = (mukmapT && mukmapT('descendre', 'Descendre')) || 'Descendre';
+    bBas.addEventListener('click', () => deplacerCouche(c.id, -1));
+    ordre.appendChild(bHaut);
+    ordre.appendChild(bBas);
+    reglages.appendChild(reglTitre);
+    reglages.appendChild(lblOp);
+    reglages.appendChild(ordre);
+    item.appendChild(lbl);
+    item.appendChild(meta);
+    item.appendChild(boutons);
+    item.appendChild(reglages);
+    const cats = c.categories || [];
+    if (cats.length) {
+        const zoneCats = document.createElement('div');
+        zoneCats.className = 'gs-cats';
+        cats.forEach(cat => {
+            const ligne = document.createElement('label');
+            ligne.className = 'gs-cat';
+            const cle = GS.cleCategorie(c.id, cat.nom);
+            ligne.appendChild(oeilNoeud(etatVisibilite.categories, cle, 'categorie', (mukmapT && mukmapT('visible', 'Visible')) || 'Visible'));
+            const dot = document.createElement('span');
+            dot.className = 'gs-cat-dot';
+            dot.style.background = cat.couleur || c.couleur || '#3388ff';
+            ligne.appendChild(dot);
+            const cn = document.createElement('span');
+            cn.className = 'gs-cat-nom';
+            cn.textContent = cat.nom;
+            ligne.appendChild(cn);
+            const nbCat = document.createElement('span');
+            nbCat.className = 'gs-cat-nb';
+            nbCat.textContent = cat.nb || 0;
+            ligne.appendChild(nbCat);
+            zoneCats.appendChild(ligne);
+        });
+        item.appendChild(zoneCats);
+    }
+    return item;
+}
+
 function rendreListeCouches() {
     const zone = document.getElementById('liste-couches');
     if (!zone) return;
@@ -1704,121 +2069,61 @@ function rendreListeCouches() {
         zone.innerHTML = '<div class="couche-vide" style="font-size:.72rem;color:var(--text-3);padding:4px 6px;">' + ((mukmapT && mukmapT('aucune_couche', 'Aucune couche — importez un GeoJSON, SHP, KML, GPX…')) || 'Aucune couche — importez un GeoJSON, SHP, KML, GPX…') + '</div>';
         return;
     }
-    couchesDonnees.forEach(c => {
-        const item = document.createElement('div');
-        item.className = 'couche-item';
-        item.id = 'couche-item-' + c.id;
-        const lbl = document.createElement('label');
-        lbl.className = 'couche-lbl';
-        const vis = document.createElement('input');
-        vis.type = 'checkbox';
-        vis.className = 'couche-vis';
-        vis.checked = true;
-        vis.dataset.id = String(c.id);
-        vis.addEventListener('change', () => visibiliteCouche(c.id, vis.checked));
-        const puce = document.createElement('span');
-        puce.className = 'couche-puce';
-        puce.style.background = c.couleur || '#3388ff';
-        const nom = document.createElement('span');
-        nom.className = 'couche-nom';
-        nom.textContent = c.nom || 'Couche ' + c.id;
-        nom.title = (mukmapT && mukmapT('infos_couche_titre', 'Informations sur la couche')) || 'Informations sur la couche';
-        nom.style.cursor = 'pointer';
-        nom.addEventListener('click', () => ouvrirInfosCouche(c.id));
-        lbl.appendChild(vis);
-        lbl.appendChild(puce);
-        lbl.appendChild(nom);
-        const meta = document.createElement('span');
-        meta.className = 'couche-meta';
-        meta.textContent = (c.type || '?') + ' · ' + (c.nb_geometries || 0);
-        const boutons = document.createElement('div');
-        boutons.className = 'couche-boutons';
-        const bInfo = document.createElement('button');
-        bInfo.type = 'button';
-        bInfo.textContent = 'ℹ';
-        bInfo.title = (mukmapT && mukmapT('infos', 'Infos')) || 'Infos';
-        bInfo.addEventListener('click', () => ouvrirInfosCouche(c.id));
-        const bZoom = document.createElement('button');
-        bZoom.type = 'button';
-        bZoom.textContent = '⤢';
-        bZoom.title = (mukmapT && mukmapT('zoom_couche', 'Zoom sur la couche')) || 'Zoom sur la couche';
-        bZoom.addEventListener('click', () => zoomerSurCouche(c.id));
-        const bExp = document.createElement('button');
-        bExp.type = 'button';
-        bExp.textContent = '⭳';
-        bExp.title = (mukmapT && mukmapT('exporter_couche', 'Exporter (Shapefile / GeoJSON)')) || 'Exporter (Shapefile / GeoJSON)';
-        bExp.addEventListener('click', () => exporterCouche(c.id));
-        const del = document.createElement('button');
-        del.className = 'couche-del';
-        del.type = 'button';
-        del.title = (mukmapT && mukmapT('supprimer', 'Supprimer')) || 'Supprimer';
-        del.textContent = '✕';
-        del.addEventListener('click', () => supprimerCouche(c.id));
-        boutons.appendChild(bInfo);
-        boutons.appendChild(bZoom);
-        boutons.appendChild(bExp);
-        boutons.appendChild(del);
-        const reglages = document.createElement('div');
-        reglages.className = 'couche-reglages';
-        reglages.style.display = 'none';
-        const reglTitre = document.createElement('button');
-        reglTitre.type = 'button';
-        reglTitre.textContent = (mukmapT && mukmapT('regler_couche', 'Style, opacité, ordre…')) || 'Style, opacité, ordre…';
-        reglTitre.addEventListener('click', () => { reglages.style.display = reglages.style.display === 'none' ? 'grid' : 'none'; });
-        const range = document.createElement('input');
-        range.type = 'range';
-        range.min = '0'; range.max = '100'; range.value = '100';
-        range.className = 'couche-opacite';
-        range.title = (mukmapT && mukmapT('opacite', 'Opacité')) || 'Opacité';
-        range.addEventListener('input', () => { setOpaciteCouche(c.id, Number(range.value) / 100); });
-        const lblOp = document.createElement('label');
-        lblOp.className = 'couche-op-lbl';
-        const iconeOp = document.createElement('span');
-        iconeOp.textContent = '◐';
-        const emOp = document.createElement('em');
-        emOp.textContent = '100%';
-        range.addEventListener('input', () => { emOp.textContent = range.value + '%'; });
-        lblOp.appendChild(iconeOp);
-        lblOp.appendChild(range);
-        lblOp.appendChild(emOp);
-        const ordre = document.createElement('div');
-        ordre.className = 'couche-ordre';
-        const bHaut = document.createElement('button');
-        bHaut.type = 'button'; bHaut.textContent = '↑';
-        bHaut.title = (mukmapT && mukmapT('monter', 'Monter')) || 'Monter';
-        bHaut.addEventListener('click', () => deplacerCouche(c.id, 1));
-        const bBas = document.createElement('button');
-        bBas.type = 'button'; bBas.textContent = '↓';
-        bBas.title = (mukmapT && mukmapT('descendre', 'Descendre')) || 'Descendre';
-        bBas.addEventListener('click', () => deplacerCouche(c.id, -1));
-        ordre.appendChild(bHaut);
-        ordre.appendChild(bBas);
-        reglages.appendChild(reglTitre);
-        reglages.appendChild(lblOp);
-        reglages.appendChild(ordre);
-        item.appendChild(lbl);
-        item.appendChild(meta);
-        item.appendChild(boutons);
-        item.appendChild(reglages);
-        zone.appendChild(item);
-    });
+    const arbre = GS.filtrerRecherche(GS.construireArbre(couchesDonnees), arbreRecherche);
+    const tot = GS.compter(arbre);
+    const resume = document.createElement('div');
+    resume.className = 'gs-resume';
+    resume.textContent = ((mukmapT && mukmapT('resume_gestionnaire', '{s} source(s) · {f} fichier(s) · {c} couche(s) · {g} catégorie(s) · {e} entité(s)')) || '{s} source(s) · {f} fichier(s) · {c} couche(s) · {g} catégorie(s) · {e} entité(s)')
+        .replace('{s}', tot.sources).replace('{f}', tot.fichiers).replace('{c}', tot.couches).replace('{g}', tot.categories).replace('{e}', tot.entites);
+    zone.appendChild(resume);
+    const rech = document.createElement('input');
+    rech.type = 'search';
+    rech.className = 'gs-recherche';
+    rech.placeholder = (mukmapT && mukmapT('rechercher_gestionnaire', 'Rechercher source, fichier, couche, catégorie…')) || 'Rechercher source, fichier, couche, catégorie…';
+    rech.value = arbreRecherche;
+    rech.addEventListener('input', () => { arbreRecherche = rech.value; rendreListeCouches(); });
+    zone.appendChild(rech);
     const actions = document.createElement('div');
-    actions.className = 'couche-actions';
-    const toutA = document.createElement('button');
-    toutA.type = 'button';
-    toutA.textContent = (mukmapT && mukmapT('tout_afficher', 'Tout afficher')) || 'Tout afficher';
-    toutA.addEventListener('click', () => {
-        couchesDonnees.forEach(c => { visibiliteCouche(c.id, true); const v = document.querySelector('#couche-item-' + c.id + ' .couche-vis'); if (v) { v.checked = true; } });
-    });
-    const toutM = document.createElement('button');
-    toutM.type = 'button';
-    toutM.textContent = (mukmapT && mukmapT('tout_masquer', 'Tout masquer')) || 'Tout masquer';
-    toutM.addEventListener('click', () => {
-        couchesDonnees.forEach(c => { visibiliteCouche(c.id, false); const v = document.querySelector('#couche-item-' + c.id + ' .couche-vis'); if (v) { v.checked = false; } });
-    });
-    actions.appendChild(toutA);
-    actions.appendChild(toutM);
+    actions.className = 'gs-actions';
+    const mkBtn = (texte, titre, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = texte;
+        b.title = titre || '';
+        b.addEventListener('click', fn);
+        return b;
+    };
+    actions.appendChild(mkBtn((mukmapT && mukmapT('tout_afficher', 'Tout afficher')) || 'Tout afficher', '', () => {
+        etatVisibilite.couches = new Map();
+        etatVisibilite.sources = new Map();
+        etatVisibilite.fichiers = new Map();
+        etatVisibilite.categories = new Map();
+        rendreListeCouches();
+    }));
+    actions.appendChild(mkBtn((mukmapT && mukmapT('tout_masquer', 'Tout masquer')) || 'Tout masquer', '', () => { definirTout(false); rendreListeCouches(); }));
+    actions.appendChild(mkBtn((mukmapT && mukmapT('selection_seule', 'Sélection seule')) || 'Sélection seule', '', afficherSelectionSeule));
+    actions.appendChild(mkBtn((mukmapT && mukmapT('inverser_selection', 'Inverser')) || 'Inverser', '', inverserTout));
+    actions.appendChild(mkBtn((mukmapT && mukmapT('developper_tout', '⊞ Tout développer')) || '⊞ Tout développer', '', () => {
+        couchesDonnees.forEach(c => {
+            if (c.source_obj) arbreOuvert.add('src-' + c.source_obj.id);
+            arbreOuvert.add('fic-' + (c.source_obj ? c.source_obj.id + '-' : 'x-') + nomFichierCouche(c));
+        });
+        rendreListeCouches();
+    }));
+    actions.appendChild(mkBtn((mukmapT && mukmapT('reduire_tout', '⊟ Tout réduire')) || '⊟ Tout réduire', '', () => {
+        arbreOuvert = new Set(['__racine__']);
+        rendreListeCouches();
+    }));
     zone.appendChild(actions);
+    arbre.sources.forEach(s => zone.appendChild(noeudSource(s)));
+    arbre.sansSource.forEach(g => zone.appendChild(noeudFichier(null, g.fichier, g.couches)));
+    if (!arbre.sources.length && !arbre.sansSource.length) {
+        const rien = document.createElement('div');
+        rien.className = 'couche-vide';
+        rien.style.cssText = 'font-size:.72rem;color:var(--text-3);padding:4px 6px;';
+        rien.textContent = ((mukmapT && mukmapT('aucun_resultat', 'Aucun résultat pour « {q} ».') || 'Aucun résultat pour « {q} ».')).replace('{q}', arbreRecherche);
+        zone.appendChild(rien);
+    }
 }
 function setOpaciteCouche(id, facteur) {
     const c = couchesDonnees.find(x => String(x.id) === String(id));
@@ -2076,14 +2381,10 @@ function sauverInfosCouche() {
     }).catch(() => alert((mukmapT && mukmapT('enregistrer_echec', "Erreur d'enregistrement.")) || "Erreur d'enregistrement."));
 }
 function visibiliteCouche(id, visible) {
-    ['ligne', 'fill', 'point', 'glyphe', 'symbole'].forEach(t => {
-        const l = map.getLayer('couche-' + t + '-' + id);
-        if (l) {
-            try { map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none'); } catch (e) {}
-        }
-    });
-    const item = document.getElementById('couche-item-' + id);
-    if (item) item.classList.toggle('off', !visible);
+    etatVisibilite.couches.set(id, visible);
+    const c = couchesDonnees.find(x => String(x.id) === String(id));
+    if (c && !visible && c.categories) c.categories.forEach(cat => etatVisibilite.categories.set(GS.cleCategorie(c.id, cat.nom), false));
+    appliquerFiltres();
 }
 function supprimerCouche(id) {
     const c = couchesDonnees.find(x => String(x.id) === String(id));

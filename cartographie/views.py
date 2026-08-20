@@ -29,7 +29,7 @@ from django.utils import timezone
 from .models import (
     PointGeographique, Projet, Activite, ActiviteModele, PhotoActivite,
     ProfilAgent, ZoneSecurite, Itineraire,
-    CoucheGeometrie, Geometrie, JournalAudit, MediaPoint,
+    CoucheGeometrie, Geometrie, JournalAudit, MediaPoint, SourceGeometrie,
     CodeAccesAvance, PreferenceUtilisateur, FondCartePersonnalise, CoucheWMS, ImageAerienne,
     SessionTravail, MeteoActivite
 )
@@ -581,22 +581,43 @@ def geometrie_donnees(request):
     donnees = []
     for couche in couches_qs:
         features = []
+        categories_map = {}
         for geom in couche.geometries.all():
+            cat = geom.categorie or ''
+            if cat:
+                categories_map[cat] = categories_map.get(cat, 0) + 1
             features.append({
                 "type": "Feature",
                 "geometry": {"type": geom.type, "coordinates": geom.coordonnees},
-                "properties": {**geom.proprietes, "couche_nom": couche.nom, "couche_id": couche.pk, "couleur": couche.style_couleur, "geom_id": geom.pk},
+                "properties": {**geom.proprietes, "categorie": cat,
+                               "couche_nom": couche.nom, "couche_id": couche.pk,
+                               "couleur": couche.style_couleur, "geom_id": geom.pk},
             })
+        so = couche.style_options or {}
+        classes = {}
+        if isinstance(so.get('categories'), dict):
+            for cl in (so['categories'].get('classes') or []):
+                if isinstance(cl, dict) and cl.get('valeur') is not None:
+                    classes[str(cl['valeur'])] = cl.get('couleur') or couche.style_couleur
+        categories = [{'nom': c, 'nb': n, 'couleur': classes.get(c, couche.style_couleur)}
+                      for c, n in sorted(categories_map.items())]
+        source = couche.source_liee
         donnees.append({
             "id": couche.pk, "nom": couche.nom, "type": couche.type_geometrie,
             "couleur": couche.style_couleur,
-            "style_options": couche.style_options or {},
+            "style_options": so,
             "fichier_source": couche.fichier_source or '',
             "nom_original": couche.nom_original or '',
+            "fichier": couche.nom_original or couche.fichier_source or '',
             "encodage": couche.encodage or '',
             "epsg": couche.epsg,
             "srid": couche.srid,
             "source": couche.source or '',
+            "source_obj": {
+                "id": source.pk, "identifiant": source.identifiant, "nom": source.nom,
+                "couleur": source.couleur, "symbole": source.symbole,
+            } if source else None,
+            "categories": categories,
             "description": couche.description or '',
             "nb_entites": couche.nb_entites,
             "taille_octets": couche.taille_octets,
@@ -612,7 +633,7 @@ def geometrie_donnees(request):
                 couche.fichier_cpg.name if couche.fichier_cpg else '',
                 couche.fichier_qmd.name if couche.fichier_qmd else '',
             ] if u],
-            "nb_geometries": couche.geometries.count(),
+            "nb_geometries": len(features),
             "geojson": {"type": "FeatureCollection", "features": features},
         })
     return JsonResponse(donnees, safe=False)
@@ -3350,7 +3371,95 @@ def _generer_excel(ctx, nom_fichier, lang='fr'):
 # ─── IMPORT SIG ──────────────────────────────────────────────────
 
 
-@login_required
+# ─── SOURCES & CATÉGORIES (gestionnaire des couches et des sources) ──────
+
+_COULEURS_SOURCES = ['#3388ff', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
+                     '#ec4899', '#14b8a6', '#f97316', '#eab308', '#64748b']
+_CLES_CATEGORIE = ('categorie', 'category', 'cat', 'categorie_nom',
+                   'categorie_terrain', 'usage', 'objet', 'type_objet')
+
+
+def _prochain_identifiant_source(projet):
+    num = SourceGeometrie.objects.filter(projet=projet).count() + 1
+    while SourceGeometrie.objects.filter(projet=projet, identifiant=f'Source {num:03d}').exists():
+        num += 1
+    return f'Source {num:03d}'
+
+
+def _assigner_source(couche, nom_hint, projet, utilisateur=None):
+    """Rattache la couche à une SourceGeometrie (trouvée par nom ou créée)
+    du projet. L'identifiant est unique : Source 001, Source 002, …"""
+    if projet is None or couche.source_liee_id:
+        return None
+    hint = (nom_hint or '').strip()
+    if not hint and couche.source:
+        hint = couche.source.strip()
+    if not hint and (couche.nom_original or couche.fichier_source):
+        hint = os.path.splitext(os.path.basename(couche.nom_original or couche.fichier_source))[0]
+    if not hint:
+        hint = couche.nom
+    hint = hint[:200]
+    source = SourceGeometrie.objects.filter(projet=projet, nom__iexact=hint).first()
+    if source is None:
+        identifiant = _prochain_identifiant_source(projet)
+        source = SourceGeometrie.objects.create(
+            projet=projet, identifiant=identifiant, nom=hint,
+            couleur=_COULEURS_SOURCES[(int(identifiant.split()[-1]) - 1) % len(_COULEURS_SOURCES)],
+            cree_par=utilisateur)
+    couche.source_liee = source
+    couche.save(update_fields=['source_liee'])
+    return source
+
+
+def _affecter_categories(couche):
+    """Détecte la catégorie de chaque géométrie de la couche depuis ses
+    propriétés (champ style_options.categories.champ ou clés candidates)
+    et la stocke dans Geometrie.categorie."""
+    if not couche.geometries.exists():
+        return
+    champ = None
+    so = couche.style_options or {}
+    if isinstance(so.get('categories'), dict) and str(so['categories'].get('champ') or '').strip():
+        champ = str(so['categories']['champ'])
+    else:
+        premier = couche.geometries.first()
+        props = premier.proprietes if isinstance(premier.proprietes, dict) else {}
+        for cle in _CLES_CATEGORIE:
+            for k, v in props.items():
+                if str(k).strip().lower() == cle and not isinstance(v, (dict, list)):
+                    champ = k
+                    break
+            if champ:
+                break
+    if not champ:
+        return
+    groupes = {}
+    for g in couche.geometries.only('pk', 'proprietes'):
+        props = g.proprietes if isinstance(g.proprietes, dict) else {}
+        val = props.get(champ)
+        if isinstance(val, (dict, list)):
+            val = None
+        cat = '' if val is None or str(val).strip() == '' else str(val).strip()[:120]
+        if cat:
+            groupes.setdefault(cat, []).append(g.pk)
+    for cat, pks in groupes.items():
+        Geometrie.objects.filter(pk__in=pks).update(categorie=cat)
+
+
+def _source_json(source):
+    return {
+        'id': source.pk,
+        'identifiant': source.identifiant,
+        'nom': source.nom,
+        'couleur': source.couleur,
+        'symbole': source.symbole,
+        'description': source.description,
+        'nb_couches': source.couches.count(),
+        'nb_entites': Geometrie.objects.filter(couche__source_liee=source).count(),
+        'date_creation': source.date_creation.isoformat() if source.date_creation else '',
+    }
+
+
 def importer_geometrie(request):
     if request.method != "POST":
         return redirect('index_cartographie')
@@ -3451,6 +3560,13 @@ def importer_geometrie(request):
         messages.error(request, "Aucune couche n'a pu être importée.")
         return redirect('index_cartographie')
 
+    projet_actif = _projet_actif(request)
+    hint_source = (request.POST.get('source') or '').strip()[:300]
+    utilisateur = request.user if request.user.is_authenticated else None
+    for couche in couches_importees:
+        if projet_actif is not None:
+            _assigner_source(couche, hint_source, projet_actif, utilisateur)
+
     for couche in couches_importees:
         if not (isinstance(couche.style_options, dict) and couche.style_options.get('couleur')) and style_valide:
             try:
@@ -3458,8 +3574,10 @@ def importer_geometrie(request):
             except (ValueError, TypeError):
                 pass
 
+    for couche in couches_importees:
+        _affecter_categories(couche)
+
     if est_ajax:
-        projet_actif = _projet_actif(request)
         premiere = couches_importees[0]
         if projet_actif is not None:
             for couche in couches_importees:
@@ -4702,6 +4820,69 @@ def admin_couches(request):
         'couches': couches, 'statut_filtre': statut, 'projet_id': projet_id,
         'projets': projets,
     })
+
+
+# ─── SOURCES DE DONNÉES (gestionnaire des couches et des sources) ────────
+
+
+@login_required
+def sources_geometries(request):
+    """Liste (GET) ou création (POST) d'une source de données du projet actif."""
+    projet_actif = _projet_actif(request)
+    if request.method == "POST":
+        if projet_actif is None:
+            return JsonResponse({'ok': False, 'erreur': "Aucun projet actif."}, status=400)
+        nom = (request.POST.get('nom') or '').strip()[:200]
+        if not nom:
+            return JsonResponse({'ok': False, 'erreur': "Nom de source requis."}, status=400)
+        source = SourceGeometrie.objects.filter(projet=projet_actif, nom__iexact=nom).first()
+        if source is None:
+            source = SourceGeometrie.objects.create(
+                projet=projet_actif, identifiant=_prochain_identifiant_source(projet_actif),
+                nom=nom,
+                couleur=_COULEURS_SOURCES[(SourceGeometrie.objects.filter(projet=projet_actif).count() - 1) % len(_COULEURS_SOURCES)],
+                cree_par=request.user if request.user.is_authenticated else None)
+            _audit(request, "Création source de données", f"{source.identifiant} → {source.nom}")
+        return JsonResponse({'ok': True, 'source': _source_json(source)})
+    if projet_actif is None:
+        return JsonResponse([], safe=False)
+    sources = [_source_json(s) for s in SourceGeometrie.objects.filter(projet=projet_actif)]
+    return JsonResponse(sources, safe=False)
+
+
+@login_required
+def source_geometrie_update(request, pk):
+    """Renomme / recolorie une source (identifiant inchangé)."""
+    source = get_object_or_404(SourceGeometrie, pk=pk)
+    projet_actif = _projet_actif(request)
+    if projet_actif is None or source.projet_id != projet_actif.pk:
+        return JsonResponse({'ok': False, 'erreur': "Source introuvable dans le projet actif."}, status=404)
+    nom = (request.POST.get('nom') or '').strip()[:200]
+    couleur = (request.POST.get('couleur') or '').strip()[:7]
+    symbole = (request.POST.get('symbole') or '').strip()[:30]
+    if nom:
+        source.nom = nom
+    if couleur:
+        source.couleur = couleur if couleur.startswith('#') else '#' + couleur
+    source.symbole = symbole
+    source.save()
+    _audit(request, "Modification source de données", f"{source.identifiant} → {source.nom}")
+    return JsonResponse({'ok': True, 'source': _source_json(source)})
+
+
+@login_required
+def source_geometrie_delete(request, pk):
+    """Supprime la source en DÉTACHANT ses couches :
+    les données (couches + géométries) ne sont jamais supprimées."""
+    source = get_object_or_404(SourceGeometrie, pk=pk)
+    projet_actif = _projet_actif(request)
+    if projet_actif is None or source.projet_id != projet_actif.pk:
+        return JsonResponse({'ok': False, 'erreur': "Source introuvable dans le projet actif."}, status=404)
+    nb_couches = CoucheGeometrie.objects.filter(source_liee=source).update(source_liee=None)
+    _audit(request, "Suppression source de données (détachement)",
+           f"{source.identifiant} → {source.nom} ({nb_couches} couche(s) détachée(s))")
+    source.delete()
+    return JsonResponse({'ok': True, 'nb_couches_detachees': nb_couches})
 
 
 def _creer_zip_shapefile(couche):

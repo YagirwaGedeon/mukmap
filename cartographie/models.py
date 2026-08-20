@@ -255,6 +255,8 @@ class CoucheGeometrie(models.Model):
     encodage = models.CharField(max_length=50, blank=True, default='UTF-8', verbose_name="Encodage")
     epsg = models.IntegerField(default=4326, verbose_name="EPSG de la projection source")
     source = models.CharField(max_length=300, blank=True, verbose_name="Source / provenance")
+    source_liee = models.ForeignKey('SourceGeometrie', on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='couches', verbose_name="Source (gestionnaire)")
     description = models.TextField(blank=True, verbose_name="Description")
     nb_entites = models.IntegerField(default=0, verbose_name="Nombre d'entités")
     taille_octets = models.BigIntegerField(default=0, verbose_name="Taille (octets)")
@@ -290,6 +292,9 @@ class Geometrie(models.Model):
     type = models.CharField(max_length=50, verbose_name="Type GeoJSON")
     coordonnees = models.JSONField(verbose_name="Coordonnées")
     proprietes = models.JSONField(default=dict, blank=True, verbose_name="Propriétés")
+    categorie = models.CharField(max_length=120, blank=True, default='', db_index=True,
+                                 verbose_name="Catégorie",
+                                 help_text="Catégorie détectée à l'import (propriété du fichier)")
 
     class Meta:
         verbose_name = "Géométrie"
@@ -297,6 +302,37 @@ class Geometrie(models.Model):
 
     def __str__(self):
         return f"{self.couche.nom} - {self.type}"
+
+
+class SourceGeometrie(models.Model):
+    """Source de données importée : identifiant unique + nom identifiable.
+
+    Exemple : « Source 001 → Points d'eau », « Source 002 → Bornes-fontaines ».
+    Une couche est rattachée à une source ; masquer une source masque ses
+    couches (les données ne sont jamais supprimées).
+    """
+    projet = models.ForeignKey(Projet, on_delete=models.CASCADE, related_name='sources_geometries',
+                               verbose_name="Projet")
+    identifiant = models.CharField(max_length=20, verbose_name="Identifiant unique",
+                                   help_text="Ex. : Source 001 (attribué automatiquement)")
+    nom = models.CharField(max_length=200, verbose_name="Nom de la source")
+    couleur = models.CharField(max_length=7, default='#3388ff', verbose_name="Couleur")
+    symbole = models.CharField(max_length=30, blank=True, default='', verbose_name="Symbole / icône")
+    description = models.TextField(blank=True, verbose_name="Description")
+    cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='sources_geometries', verbose_name="Créé par")
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+
+    class Meta:
+        ordering = ['identifiant']
+        constraints = [
+            models.UniqueConstraint(fields=['projet', 'identifiant'], name='uniq_source_projet_identifiant'),
+        ]
+        verbose_name = "Source de données"
+        verbose_name_plural = "Sources de données"
+
+    def __str__(self):
+        return f"{self.identifiant} → {self.nom}"
 
 
 class MediaPoint(models.Model):
