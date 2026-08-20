@@ -167,7 +167,7 @@
 
     function installer(opts) {
         if (opts && opts.map) mapRef = opts.map;
-        listeEl = document.getElementById('liste-couches');
+        listeEl = document.getElementById('liste-couches-wms');
         panelEl = document.getElementById('panel-couches');
         titreEl = document.getElementById('titre-couches');
         var etat = window.ETAT_MODE || {};

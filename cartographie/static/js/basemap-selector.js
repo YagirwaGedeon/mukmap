@@ -97,6 +97,47 @@
         mine_exploitation: { cat: 'mines', nom: 'Zones d’exploitation (données requises)', sw: 'linear-gradient(135deg,#fcd34d,#b45309)', tiles: null, attribution: 'Emprises d’extraction actives — concessions et sites via WMS ou import' }
     };
 
+    /* Métadonnées professionnelles : fournisseur, licence, zoom max,
+     * et fond de secours (fallback) si la source devient indisponible.
+     * Chaînes acycliques : chaque fond bascule sur une infrastructure
+     * différente quand la sienne tombe. */
+    var METADATA = {
+        osm: { fournisseur: 'OpenStreetMap', licence: 'ODbL / CC-BY-SA', zoomMax: 19, fallback: 'hot' },
+        hot: { fournisseur: 'HOT (OSM France)', licence: 'ODbL / CC-BY-SA', zoomMax: 19, fallback: 'osm' },
+        rue: { fournisseur: 'Esri', licence: 'Esri Master Agreement', zoomMax: 19, fallback: 'osm' },
+        voyager: { fournisseur: 'CARTO', licence: '© CARTO © OpenStreetMap', zoomMax: 20, fallback: 'osm' },
+        light: { fournisseur: 'CARTO', licence: '© CARTO © OpenStreetMap', zoomMax: 20, fallback: 'osm' },
+        dark: { fournisseur: 'CARTO', licence: '© CARTO © OpenStreetMap', zoomMax: 20, fallback: 'osm' },
+        admin: { fournisseur: 'Esri', licence: 'Esri Master Agreement', zoomMax: 19, fallback: 'osm' },
+        natgeo: { fournisseur: 'Esri / National Geographic', licence: 'Esri Master Agreement', zoomMax: 19, fallback: 'osm' },
+        minimal: { fournisseur: 'Esri', licence: 'Esri Master Agreement', zoomMax: 19, fallback: 'osm' },
+        sat: { fournisseur: 'Esri (Maxar, Earthstar)', licence: 'Esri Master Agreement', zoomMax: 19, fallback: 's2' },
+        sat_firefly: { fournisseur: 'Esri (Maxar, Earthstar)', licence: 'Esri Master Agreement', zoomMax: 19, fallback: 's2' },
+        s2: { fournisseur: 'EOX', licence: 'CC-BY (Sentinel-2)', zoomMax: 18, fallback: 'osm' },
+        blue_marble: { fournisseur: 'NASA GIBS', licence: 'NASA — usage public', zoomMax: 8, fallback: 'sat' },
+        sat_labels: { fournisseur: 'Esri', licence: 'Esri Master Agreement', zoomMax: 19, fallback: 'sat' },
+        s2_2018: { fournisseur: 'EOX', licence: 'CC-BY (Sentinel-2)', zoomMax: 18, fallback: 's2' },
+        wayback: { fournisseur: 'Esri Wayback', licence: 'Esri Master Agreement', zoomMax: 19, fallback: 'sat' },
+        topo: { fournisseur: 'OpenTopoMap', licence: 'CC-BY-SA / ODbL', zoomMax: 17, fallback: 'esri_topo' },
+        esri_topo: { fournisseur: 'Esri', licence: 'Esri Master Agreement', zoomMax: 19, fallback: 'topo' },
+        relief: { fournisseur: 'Esri (SRTM)', licence: 'Esri Master Agreement', zoomMax: 13, fallback: 'hillshade' },
+        hillshade: { fournisseur: 'Esri (SRTM DEM)', licence: 'Esri Master Agreement', zoomMax: 13, fallback: 'topo' },
+        terrain_eox: { fournisseur: 'EOX (SRTM, EUDEM)', licence: 'CC-BY (SRTM, EUDEM)', zoomMax: 17, fallback: 'esri_topo' },
+        hypsometrie: { fournisseur: 'EOX (SRTM, EUDEM)', licence: 'CC-BY (SRTM, EUDEM)', zoomMax: 17, fallback: 'esri_topo' },
+        couverture_sol: { fournisseur: 'ESA WorldCover / FAO', licence: 'CC-BY 4.0', zoomMax: 10, fallback: 'osm' },
+        eaux_surface: { fournisseur: 'JRC GSW / FAO', licence: 'JRC GSW — gratuit', zoomMax: 12, fallback: 'osm' },
+        ocean: { fournisseur: 'Esri', licence: 'Esri Master Agreement', zoomMax: 16, fallback: 'osm' },
+        physique: { fournisseur: 'Esri', licence: 'Esri Master Agreement', zoomMax: 16, fallback: 'osm' },
+        geo_unites: { fournisseur: 'CGMW / BRGM', licence: 'CGMW — attribution', zoomMax: 10, fallback: 'osm' },
+        geo_structures: { fournisseur: 'CGMW / BRGM', licence: 'CGMW — attribution', zoomMax: 10, fallback: 'osm' },
+        geo_gisements: { fournisseur: 'USGS', licence: 'USGS — domaine public', zoomMax: 10, fallback: 'osm' },
+        geo_indices: { fournisseur: 'USGS MRDS', licence: 'USGS — domaine public', zoomMax: 10, fallback: 'osm' },
+        mine_sites: { fournisseur: 'USGS', licence: 'USGS — domaine public', zoomMax: 10, fallback: 'osm' },
+        mine_indices: { fournisseur: 'USGS MRDS', licence: 'USGS — domaine public', zoomMax: 10, fallback: 'osm' },
+        mine_gisements: { fournisseur: 'USGS', licence: 'USGS — domaine public', zoomMax: 10, fallback: 'osm' },
+        mine_cu_cobalt: { fournisseur: 'USGS', licence: 'USGS — domaine public', zoomMax: 10, fallback: 'osm' }
+    };
+
     /* Fonds personnalisés chargés depuis l'API (/api/fonds-personnalises/).
      * Chaque entrée reçoit un id "ext-<pk>". */
     var EXTERNES = {};
@@ -163,6 +204,26 @@
         if (FONDS[id]) return Object.assign({ id: id }, FONDS[id]);
         if (EXTERNES[id]) return Object.assign({ id: id }, EXTERNES[id]);
         return null;
+    }
+
+    /* Fond de secours d'un fond donné (défaut : OSM). */
+    function fallbackDe(id) {
+        if (METADATA[id] && METADATA[id].fallback) return METADATA[id].fallback;
+        return 'osm';
+    }
+
+    /* Métadonnées professionnelles (fournisseur, licence, zoom max).
+     * Défauts raisonnables pour les fonds non documentés. */
+    function infos(id) {
+        var f = trouver(id);
+        if (!f) return null;
+        var m = METADATA[id] || {};
+        return {
+            fournisseur: m.fournisseur || '—',
+            licence: m.licence || (f.attribution || '—'),
+            zoomMax: m.zoomMax || 19,
+            fallback: fallbackDe(id)
+        };
     }
 
     function construireCatalogue() {
@@ -327,7 +388,9 @@
         idsExistants: idsExistants,
         chargerExternes: chargerExternes,
         tousIds: tousIds,
-        trouver: trouver
+        trouver: trouver,
+        fallbackDe: fallbackDe,
+        infos: infos
     };
 
     if (typeof document === 'undefined') return;

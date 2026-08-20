@@ -97,6 +97,9 @@ class TestsJSPanneauIdentifier(BaseCartographieTest):
     def test_gestionnaire_sources_core(self):
         self._lancer(DOSSIER_JS / 'test_gestionnaire_sources.js')
 
+    def test_sources_cartographiques_core(self):
+        self._lancer(DOSSIER_JS / 'test_sources_cartographiques.js')
+
     def test_fiche_core(self):
         self._lancer(DOSSIER_JS / 'test_fiche.js')
 

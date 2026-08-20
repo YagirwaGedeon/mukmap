@@ -1474,4 +1474,21 @@ TRADUCTIONS = {
     'confirmer_detacher_source': {'fr': 'Détacher la source « {n} » ? Les couches et données restent intactes.', 'en': 'Detach the source "{n}"? Layers and data stay intact.', 'sw': 'Tenganisha chanzo "{n}"? Tabaka na data zinabaki.', 'ln': 'Kolangola source « {n} » ? Ba-couche mpe ba-données ebateli.', 'pt': 'Desassociar a fonte "{n}"? As camadas e dados permanecem intactos.', 'zh': '分离来源“{n}”？图层和数据保持不变。'},
     'entites_compte': {'fr': '{n} entité(s)', 'en': '{n} feature(s)', 'sw': 'vipengele {n}', 'ln': 'ba-entité {n}', 'pt': '{n} elemento(s)', 'zh': '{n} 要素'},
     'aucun_resultat': {'fr': 'Aucun résultat pour « {q} ».', 'en': 'No results for "{q}".', 'sw': 'Hakuna matokeo ya "{q}".', 'ln': 'Résultat moko te mpo na « {q} ».', 'pt': 'Sem resultados para "{q}".', 'zh': '没有“{q}”的结果。'},
-    'resume_gestionnaire': {'fr': '{s} source(s) · {f} fichier(s) · {c} couche(s) · {g} catégorie(s) · {e} entité(s)', 'en': '{s} source(s) · {f} file(s) · {c} layer(s) · {g} category(ies) · {e} feature(s)', 'sw': 'vyanzo {s} · faili {f} · tabaka {c} · aina {g} · vipengele {e}', 'ln': 'ba-source {s} · ba-fichier {f} · ba-couche {c} · ba-katégorí {g} · ba-entité {e}', 'pt': '{s} fonte(s) · {f} arquivo(s) · {c} camada(s) · {g} categoria(s) · {e} elemento(s)', 'zh': '{s} 来源 · {f} 文件 · {c} 图层 · {g} 类别 · {e} 要素'},}
+    'resume_gestionnaire': {'fr': '{s} source(s) · {f} fichier(s) · {c} couche(s) · {g} catégorie(s) · {e} entité(s)', 'en': '{s} source(s) · {f} file(s) · {c} layer(s) · {g} category(ies) · {e} feature(s)', 'sw': 'vyanzo {s} · faili {f} · tabaka {c} · aina {g} · vipengele {e}', 'ln': 'ba-source {s} · ba-fichier {f} · ba-couche {c} · ba-katégorí {g} · ba-entité {e}', 'pt': '{s} fonte(s) · {f} arquivo(s) · {c} camada(s) · {g} categoria(s) · {e} elemento(s)', 'zh': '{s} 来源 · {f} 文件 · {c} 图层 · {g} 类别 · {e} 要素'},
+    # ── Système cartographique professionnel (CARTES) ────────────
+    'geocoder_indisponible': {'fr': 'Géocodage indisponible — vérifiez votre connexion.', 'en': 'Geocoding unavailable — check your connection.', 'sw': 'Utafutaji wa maeneo haupatikani — angalia muunganisho wako.', 'ln': 'Boluki ya esika ezali te — tala connexion na yo.', 'pt': 'Geocodificação indisponível — verifique a ligação.', 'zh': '地理编码不可用 — 请检查您的网络连接。'},
+    'fallback_basemap': {'fr': 'Fond « {n} » indisponible — bascule sur « {a} ».', 'en': 'Basemap "{n}" unavailable — switching to "{a}".', 'sw': 'Ramani "{n}" haipatikani — inabadilika kuwa "{a}".', 'ln': 'Fond « {n} » ezali te — ekomi « {a} ».', 'pt': 'Mapa "{n}" indisponível — a mudar para "{a}".', 'zh': '底图“{n}”不可用 — 切换到“{a}”。'},
+    'statut_sources': {'fr': 'Statut des sources', 'en': 'Sources status', 'sw': 'Hali ya vyanzo', 'ln': 'Statut ya ba-source', 'pt': 'Estado das fontes', 'zh': '来源状态'},
+    'statut_ok': {'fr': 'Disponible', 'en': 'Available', 'sw': 'Inapatikana', 'ln': 'Ezali', 'pt': 'Disponível', 'zh': '可用'},
+    'statut_echec': {'fr': 'Indisponible', 'en': 'Unavailable', 'sw': 'Haipatikani', 'ln': 'Ezali te', 'pt': 'Indisponível', 'zh': '不可用'},
+    'statut_inconnu': {'fr': 'Non testé', 'en': 'Not tested', 'sw': 'Haijajaribiwa', 'ln': 'Emechami te', 'pt': 'Não testado', 'zh': '未测试'},
+    'statut_tester': {'fr': 'Tester', 'en': 'Test', 'sw': 'Jaribu', 'ln': 'Meka', 'pt': 'Testar', 'zh': '测试'},
+    'statut_alternative': {'fr': 'Alternative', 'en': 'Alternative', 'sw': 'Mbadala', 'ln': 'Mosangani', 'pt': 'Alternativa', 'zh': '替代方案'},
+    'statut_fournisseur': {'fr': 'Fournisseur', 'en': 'Provider', 'sw': 'Mtoa huduma', 'ln': 'Fournisseur', 'pt': 'Fornecedor', 'zh': '提供商'},
+    'statut_licence': {'fr': 'Licence', 'en': 'License', 'sw': 'Leseni', 'ln': 'Licence', 'pt': 'Licença', 'zh': '许可'},
+    'statut_zoom_max': {'fr': 'Zoom max', 'en': 'Max zoom', 'sw': 'Zoom ya juu', 'ln': 'Zoom max', 'pt': 'Zoom máx.', 'zh': '最大缩放'},
+    'statut_derniere_verification': {'fr': 'Dernière vérification', 'en': 'Last check', 'sw': 'Ukaguzi wa mwisho', 'ln': 'Meka ya suka', 'pt': 'Última verificação', 'zh': '上次检查'},
+    'ombrage_relief': {'fr': 'Ombrage du relief', 'en': 'Hillshade relief', 'sw': 'Kivuli cha ardhi', 'ln': 'Elili ya mabwela', 'pt': 'Sombreado do relevo', 'zh': '地形阴影'},
+    'zoom_label': {'fr': 'Zoom', 'en': 'Zoom', 'sw': 'Zoom', 'ln': 'Zoom', 'pt': 'Zoom', 'zh': '缩放'},
+    'chargement_tuiles': {'fr': 'Chargement des tuiles…', 'en': 'Loading tiles…', 'sw': 'Inapakia tiles…', 'ln': 'Bazali ko charger tuiles…', 'pt': 'A carregar mosaicos…', 'zh': '正在加载瓦片…'},
+}

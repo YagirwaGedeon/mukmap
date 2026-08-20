@@ -199,6 +199,25 @@
             border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px;
             font-size: .74rem; font-family: monospace; color: var(--text-2); pointer-events: none;
         }
+        #pro-barre-statut {
+            position: absolute; right: 14px; bottom: 168px; z-index: 1002;
+            background: color-mix(in srgb, var(--bg-2) 88%, transparent); backdrop-filter: blur(8px);
+            border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px;
+            font-size: .7rem; font-family: monospace; color: var(--text-2); pointer-events: none;
+            max-width: 46vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #chargement-tuiles {
+            position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1004;
+            background: color-mix(in srgb, var(--bg-2) 90%, transparent); backdrop-filter: blur(8px);
+            border: 1px solid var(--border); border-radius: 999px; padding: 7px 16px;
+            font-size: .72rem; font-weight: 700; color: var(--text-2);
+            display: none; align-items: center; gap: 8px;
+        }
+        #chargement-tuiles .ct-spin {
+            width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border);
+            border-top-color: var(--accent); animation: ct-rotation .8s linear infinite;
+        }
+        @keyframes ct-rotation { to { transform: rotate(360deg); } }
         #minimap { position: absolute; right: 14px; bottom: 16px; width: 200px; height: 140px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; z-index: 1001; }
         #minimap .maplibregl-canvas-container { pointer-events: none; }
 
@@ -595,7 +614,7 @@
         <div class="titre-section" data-i18n="couches_titre" id="titre-couches" style="display:none">🗺️ Couches WMS</div>
         <div id="panel-couches" style="display:none">
             <button class="btn btn-sm" id="btn-couches-ajouter" style="width:100%;"><span data-lucide="plus"></span> <span data-i18n="couches_ajouter">Ajouter une couche</span></button>
-            <div id="liste-couches" style="display:grid;gap:6px;margin-top:6px;"></div>
+            <div id="liste-couches-wms" style="display:grid;gap:6px;margin-top:6px;"></div>
         </div>
         <style>
             .wms-item { display:flex; flex-wrap:wrap; align-items:center; gap:6px; background:var(--bg-3); border:1px solid var(--border); border-radius:9px; padding:6px 8px; }
@@ -834,6 +853,8 @@
     <div id="map"></div>
     <div id="minimap"></div>
     <div id="coords-barre">— , —</div>
+    <div id="pro-barre-statut" style="display:none"></div>
+    <div id="chargement-tuiles" style="display:none"></div>
     <div id="tooltip"></div>
     <div id="mesure-barre">
         <span data-lucide="ruler" style="color:var(--accent);"></span>
@@ -1139,7 +1160,8 @@
 <script src="{% static 'js/mode-avance.js' %}?v=27"></script>
 <script src="{% static 'js/mode-3d.js' %}?v=28"></script>
 <script src="{% static 'js/topographie.js' %}?v=28"></script>
-<script src="{% static 'js/basemap-selector.js' %}?v=27"></script>
+<script src="{% static 'js/basemap-selector.js' %}?v=28"></script>
+  <script src="{% static 'js/sources-cartographiques.js' %}?v=1"></script>
 <script src="{% static 'js/imagerie.js' %}?v=27"></script>
 <script src="{% static 'js/couches-wms.js' %}?v=27"></script>
 <script src="{% static 'js/offline.js' %}?v=33"></script>
@@ -1424,6 +1446,64 @@ conteneurBasemaps.appendChild(btnFondsPro);
 const etatModeInitial = window.ETAT_MODE || {};
 btnFondsPro.style.display = (etatModeInitial.mode === 'avance' && etatModeInitial.acces_avance) ? '' : 'none';
 
+// ── CARTES : ombrage du relief en superposition + statut des sources ──
+let ombrageReliefActif = false;
+try { ombrageReliefActif = localStorage.getItem('mukmap_ombrage') === '1'; } catch (e) {}
+const btnOmbrage = document.createElement('button');
+btnOmbrage.id = 'btn-ombrage';
+btnOmbrage.className = 'bm-btn' + (ombrageReliefActif ? ' active' : '');
+btnOmbrage.innerHTML = `<span data-lucide="mountain"></span><span id="label-ombrage">${((mukmapT && mukmapT('ombrage_relief', 'Relief')) || 'Relief')}</span>`;
+btnOmbrage.title = ((mukmapT && mukmapT('ombrage_relief', 'Ombrage du relief')) || 'Ombrage du relief');
+btnOmbrage.addEventListener('click', () => {
+    appliquerOmbrageRelief(!ombrageReliefActif);
+    btnOmbrage.classList.toggle('active', ombrageReliefActif);
+});
+conteneurBasemaps.appendChild(btnOmbrage);
+
+const btnStatutSources = document.createElement('button');
+btnStatutSources.id = 'btn-statut-sources';
+btnStatutSources.className = 'bm-btn';
+btnStatutSources.innerHTML = `<span data-lucide="activity"></span><span id="label-statut-sources">${((mukmapT && mukmapT('statut_sources', 'Statut')) || 'Statut')}</span>`;
+btnStatutSources.title = ((mukmapT && mukmapT('statut_sources', 'Statut des sources')) || 'Statut des sources');
+btnStatutSources.addEventListener('click', () => {
+    if (!window.SourcesCartographiques) return;
+    SourcesCartographiques.demarrer({map, fonds: fondsPourStatut(), appliquerBasemap, actifId: basemapActif});
+    SourcesCartographiques.ouvrir();
+});
+conteneurBasemaps.appendChild(btnStatutSources);
+
+function fondsPourStatut() {
+    const liste = [];
+    Object.keys(BASEMAPS).forEach(k => {
+        const m = window.BasemapSelectorCore && BasemapSelectorCore.infos ? BasemapSelectorCore.infos(k) : null;
+        liste.push({
+            id: k, nom: BASEMAPS[k].nom, attribution: BASEMAPS[k].attribution,
+            fournisseur: m ? m.fournisseur : '—',
+            licence: m ? m.licence : (BASEMAPS[k].attribution || '—'),
+            zoomMax: m ? m.zoomMax : 19,
+            fallback: m ? m.fallback : 'osm'
+        });
+    });
+    return liste;
+}
+
+function appliquerOmbrageRelief(actif) {
+    ombrageReliefActif = !!actif;
+    try { localStorage.setItem('mukmap_ombrage', ombrageReliefActif ? '1' : '0'); } catch (e) {}
+    if (!map || !map.getStyle) return;
+    const SOURCE = 'bm-ombrage';
+    if (ombrageReliefActif) {
+        try {
+            if (!map.getSource(SOURCE)) map.addSource(SOURCE, {type:'raster', tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}'], tileSize:256, attribution:'© Esri — World Hillshade (DEM)'});
+            if (!map.getLayer(SOURCE)) map.addLayer({id:SOURCE, type:'raster', source:SOURCE, layout:{visibility:'visible'}, paint:{'raster-opacity':0.55}}, 'clusters');
+            else map.setLayoutProperty(SOURCE, 'visibility', 'visible');
+        } catch (e) {}
+    } else if (map.getLayer) {
+        try { map.setLayoutProperty(SOURCE, 'visibility', 'none'); } catch (e) {}
+    }
+}
+window.appliquerOmbrageRelief = appliquerOmbrageRelief;
+
 // ─── MODE HORS CONNEXION : formulaire de point ──────────────
 // Sans réseau, la soumission du formulaire « Nouveau point » est
 // détournée vers le stockage local ; les photos sont mises en file,
@@ -1508,8 +1588,76 @@ map.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'top-rig
 map.addControl(new maplibregl.ScaleControl({maxWidth:120, unit:'metric'}), 'bottom-left');
 map.addControl(new maplibregl.FullscreenControl());
 
+// ─── CARTES : barre de statut professionnelle (zoom, coordonnées, DMS) ──
+const proBarre = document.getElementById('pro-barre-statut');
+const chargementTuiles = document.getElementById('chargement-tuiles');
+if (chargementTuiles) {
+    chargementTuiles.innerHTML = `<span class="ct-spin"></span>${((mukmapT && mukmapT('chargement_tuiles', 'Chargement des tuiles…')) || 'Chargement des tuiles…')}`;
+}
+function versDMS(deg, lat) {
+    const abs = Math.abs(deg);
+    const d = Math.floor(abs);
+    const mnF = (abs - d) * 60;
+    const m = Math.floor(mnF);
+    const s = Math.round((mnF - m) * 60);
+    const h = lat ? (deg >= 0 ? 'N' : 'S') : (deg >= 0 ? 'E' : 'O');
+    return `${d}°${m}'${s}"${h}`;
+}
+function majProBarre() {
+    if (!proBarre || !map || !map.getCenter) return;
+    try {
+        const c = map.getCenter();
+        const z = map.getZoom();
+        proBarre.textContent = ((mukmapT && mukmapT('zoom_label', 'Zoom')) || 'Zoom') + ' ' + z.toFixed(1) +
+            '  ·  ' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) +
+            '  ·  ' + versDMS(c.lat, true) + ' ' + versDMS(c.lng, false);
+        proBarre.style.display = '';
+    } catch (e) {}
+}
+window.majProBarre = majProBarre;
+
 map.on('load', () => {
     if (window.BasemapSelector) BasemapSelector.installer({map, actif: basemapActif, appliquerExterne: appliquerBasemap});
+    // ── CARTES : bascule automatique (fallback) si le fond actif tombe ──
+    let erreursTuilesFonds = {};
+    let fallbackDejaPropose = {};
+    map.on('error', (e) => {
+        if (!e || !e.error) return;
+        const src = e.sourceId || (e.sourceCache && e.sourceCache.id) || '';
+        if (src.indexOf('bm-') !== 0) return;
+        const id = src.slice(3);
+        if (id !== basemapActif) return;
+        erreursTuilesFonds[id] = (erreursTuilesFonds[id] || 0) + 1;
+        if (erreursTuilesFonds[id] >= 4 && !fallbackDejaPropose[id]) {
+            fallbackDejaPropose[id] = true;
+            const alt = (window.BasemapSelectorCore && BasemapSelectorCore.fallbackDe)
+                ? BasemapSelectorCore.fallbackDe(id) : 'osm';
+            if (alt && alt !== id) {
+                const nomN = (BASEMAPS[id] && BASEMAPS[id].nom) || id;
+                const nomA = (BASEMAPS[alt] && BASEMAPS[alt].nom) || alt;
+                toast(((mukmapT && mukmapT('fallback_basemap', 'Fond « {n} » indisponible — bascule sur « {a} ».')) || 'Fond « {n} » indisponible — bascule sur « {a} ».').replace('{n}', nomN).replace('{a}', nomA), 'warning');
+                appliquerBasemap(alt);
+            }
+        }
+    });
+    // ── CARTES : ombrage du relief mémorisé ──
+    appliquerOmbrageRelief(ombrageReliefActif);
+    if (btnOmbrage) btnOmbrage.classList.toggle('active', ombrageReliefActif);
+    // ── CARTES : barre de statut professionnelle (zoom + coordonnées + DMS) ──
+    map.on('move', majProBarre);
+    majProBarre();
+    // ── CARTES : état de chargement des tuiles ──
+    let tuilesEnAttente = false;
+    map.on('dataloading', (e) => {
+        if (e.dataType !== 'source') return;
+        tuilesEnAttente = true;
+        if (chargementTuiles) chargementTuiles.style.display = 'flex';
+    });
+    map.on('idle', () => {
+        if (!tuilesEnAttente) return;
+        tuilesEnAttente = false;
+        if (chargementTuiles) chargementTuiles.style.display = 'none';
+    });
     if (window.Imagerie) Imagerie.installer({map});
     if (window.CouchesWMS) CouchesWMS.installer({map});
     if (window.MukmapOffline && window.MukmapOffline.demarrer) {
@@ -1723,6 +1871,7 @@ function rechargerCouches() {
         initialiserCouchesClic();
         zoomerApresImport();
         rendreListeCouches();
+        if (typeof construireLegende === 'function') construireLegende();
     }).catch(() => {});
 }
 
@@ -2565,6 +2714,7 @@ function reinitialiserFiltres() {
 function construireLegende() {
     const leg = document.getElementById('legende');
     if (!leg) return;
+    leg.innerHTML = '';
     const comptes = {};
     donneesPoints.forEach(p => comptes[p.categorie] = (comptes[p.categorie] || 0) + 1);
     Object.keys(CATS).forEach(c => {
@@ -2573,28 +2723,95 @@ function construireLegende() {
         div.innerHTML = `<span class="puces" style="background:${CATS[c].couleur}"></span> ${CATS[c].emoji} ${(mukmapT && mukmapT('cat_' + c)) || CATS[c].nom || c} <span class="compte">${comptes[c] || 0}</span>`;
         leg.appendChild(div);
     });
+    // CARTES : légende dynamique des couches SIG visibles (catégories + couleurs)
+    const visibles = (typeof couchesDonnees !== 'undefined' ? couchesDonnees : []).filter(c =>
+        !etatVisibilite.couches.has(c.id) || etatVisibilite.couches.get(c.id) !== false);
+    if (visibles.length) {
+        const sep = document.createElement('div');
+        sep.className = 'leg-sep';
+        sep.style.cssText = 'margin-top:8px;padding-top:6px;border-top:1px dashed var(--border);font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--text-3);';
+        sep.textContent = '🗺️ ' + ((mukmapT && mukmapT('couches_chargees', 'Couches chargées')) || 'Couches chargées');
+        leg.appendChild(sep);
+        visibles.forEach(c => {
+            const cats = (c.categories || []).filter(x => x && x.nb > 0);
+            if (cats.length) {
+                cats.forEach(cat => {
+                    const div = document.createElement('div');
+                    div.className = 'leg-item';
+                    div.innerHTML = `<span class="puces" style="background:${cat.couleur || '#3388ff'}"></span> ${c.nom || ''} — ${cat.nom || ''} <span class="compte">${cat.nb || 0}</span>`;
+                    leg.appendChild(div);
+                });
+            } else {
+                const div = document.createElement('div');
+                div.className = 'leg-item';
+                const couleur = (c.style_options && (c.style_options.couleur || c.couleur)) || '#3388ff';
+                div.innerHTML = `<span class="puces" style="background:${couleur}"></span> ${c.nom || ''} <span class="compte">${c.nb_entites || ''}</span>`;
+                leg.appendChild(div);
+            }
+        });
+    }
 }
 
-// ─── RECHERCHE INTELLIGENTE ───────────────────────────────────
+// ─── RECHERCHE INTELLIGENTE (CARTES : géocodage professionnel) ────
 const inpRecherche = document.getElementById('recherche');
 const zoneResultats = document.getElementById('resultats-recherche');
 let marqueurRecherche = null;
 let debounceGeo = null;
+const TYPE_GEO_EMOJI = {
+    country:'🌍', state:'🗺️', province:'🗺️', region:'🗺️', district:'🗺️', administrative:'🗺️',
+    city:'🏙️', town:'🏘️', village:'🏡', hamlet:'🏡', municipality:'🏘️', suburb:'🏘️', quarter:'🏘️', neighbourhood:'🏘️',
+    mountain:'⛰️', peak:'⛰️', volcano:'🌋', hill:'⛰️', valley:'🏞️', plain:'🏞️',
+    river:'🌊', stream:'💧', lake:'💧', water:'💧', reservoir:'💧', wetland:'🌿',
+    forest:'🌲', wood:'🌲', park:'🌳', protected_area:'🌳',
+    highway:'🛣️', road:'🛣️', bridge:'🌉', footway:'🥾', path:'🥾',
+    railway:'🚆', aerodrome:'✈️', airport:'✈️', port:'⚓', harbour:'⚓',
+    school:'🏫', hospital:'🏥', clinic:'🏥', health:'🏥', doctor:'🏥',
+    mine:'⛏️', quarry:'⛏️', cave:'🕳️', boundary:'🚩', border:'🚩'
+};
+function emojiTypeGeo(t) {
+    const c = String(t || '').toLowerCase();
+    if (TYPE_GEO_EMOJI[c]) return TYPE_GEO_EMOJI[c];
+    if (c.indexOf('village') >= 0 || c.indexOf('hamlet') >= 0) return '🏡';
+    if (c.indexOf('city') >= 0 || c.indexOf('town') >= 0 || c.indexOf('ville') >= 0) return '🏙️';
+    if (c.indexOf('mountain') >= 0 || c.indexOf('peak') >= 0 || c.indexOf('hill') >= 0 || c.indexOf('volcan') >= 0) return '⛰️';
+    if (c.indexOf('river') >= 0 || c.indexOf('water') >= 0 || c.indexOf('lake') >= 0 || c.indexOf('rivière') >= 0) return '🌊';
+    if (c.indexOf('forest') >= 0 || c.indexOf('wood') >= 0 || c.indexOf('forêt') >= 0) return '🌲';
+    if (c.indexOf('state') >= 0 || c.indexOf('province') >= 0 || c.indexOf('region') >= 0) return '🗺️';
+    return '📍';
+}
+function zoomPourTypeGeo(t) {
+    const c = String(t || '').toLowerCase();
+    if (c === 'country' || c.indexOf('pays') === 0) return 5;
+    if (c.indexOf('state') >= 0 || c.indexOf('province') >= 0 || c.indexOf('region') >= 0 || c.indexOf('district') >= 0) return 7;
+    if (c.indexOf('city') >= 0 || c.indexOf('town') >= 0 || c.indexOf('ville') >= 0) return 11;
+    if (c.indexOf('village') >= 0 || c.indexOf('hamlet') >= 0 || c.indexOf('suburb') >= 0) return 14;
+    if (c.indexOf('mountain') >= 0 || c.indexOf('peak') >= 0 || c.indexOf('hill') >= 0 || c.indexOf('volcan') >= 0) return 13;
+    return 12;
+}
 
 function rechercherEnLigne(q) {
     zoneResultats.innerHTML = `<div class="res-item" style="cursor:default;color:var(--text-3);"><div class="res-emoji">⏳</div><div>${(mukmapT && mukmapT('recherche_en_ligne')) || 'Recherche en ligne…'}</div></div>`;
     zoneResultats.style.display = 'block';
     debounceGeo = setTimeout(async () => {
         try {
-            const rep = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&accept-language=fr`);
+            const langue = (document.documentElement && document.documentElement.lang) || 'fr';
+            const rep = await fetch(`{% url "geocoder_geographique" %}?q=${encodeURIComponent(q)}&lang=${encodeURIComponent(langue.slice(0, 2))}`);
+            if (!rep.ok) throw new Error('HTTP ' + rep.status);
             const data = await rep.json();
             if (inpRecherche.value.trim().toLowerCase() !== q) return;
-            if (!data.length) { afficherResultats([]); return; }
-            afficherResultats(data.map(d => ({
-                type:'geo', lat:parseFloat(d.lat), lng:parseFloat(d.lon),
-                nom:d.display_name.split(',').slice(0, 3).join(','), sous:d.display_name
-            })));
-        } catch { afficherResultats([]); }
+            const res = (data.resultats || []).map(d => ({
+                type: d.type === 'coord' ? 'coord' : 'geo',
+                lat: d.lat, lng: d.lon,
+                nom: d.nom, sous: d.sous, tgeo: d.type,
+                emoji: d.type === 'coord' ? '📍' : emojiTypeGeo(d.type),
+                z: d.type === 'coord' ? 15 : zoomPourTypeGeo(d.type)
+            }));
+            if (!res.length) { afficherResultats([]); return; }
+            afficherResultats(res);
+        } catch (e) {
+            zoneResultats.innerHTML = `<div class="res-item" style="cursor:default;color:var(--text-3);"><div class="res-emoji">⚠️</div><div>${(mukmapT && mukmapT('geocoder_indisponible', 'Géocodage indisponible — vérifiez votre connexion.')) || 'Géocodage indisponible — vérifiez votre connexion.'}</div></div>`;
+            zoneResultats.style.display = 'block';
+        }
     }, 350);
 }
 
@@ -2607,7 +2824,7 @@ function afficherResultats(res) {
     }
     zoneResultats.innerHTML = res.map(r => {
         if (r.type === 'coord') return `<div class="res-item" data-type="coord" data-lat="${r.lat}" data-lng="${r.lng}"><div class="res-emoji">📍</div><div><b>${r.nom}</b></div></div>`;
-        if (r.type === 'geo') return `<div class="res-item" data-type="geo" data-lat="${r.lat}" data-lng="${r.lng}"><div class="res-emoji">🌍</div><div><b>${r.nom}</b><br><span style="font-size:.72rem;color:var(--text-3)">${r.sous || ''}</span></div></div>`;
+        if (r.type === 'geo') return `<div class="res-item" data-type="geo" data-lat="${r.lat}" data-lng="${r.lng}" data-z="${r.z || 12}"><div class="res-emoji">${r.emoji || '🌍'}</div><div><b>${r.nom}</b><br><span style="font-size:.72rem;color:var(--text-3)">${r.sous || ''}</span></div></div>`;
         return `<div class="res-item" data-type="point" data-id="${r.p.id}">${r.p.photo ? `<img src="${r.p.photo}">` : `<div class="res-emoji">${CATS[r.p.categorie]?.emoji || '📍'}</div>`}<div><b>${r.p.nom}</b><br><span style="font-size:.72rem;color:var(--text-3)">${r.p.province || ''} ${r.p.commune ? '· ' + r.p.commune : ''}</span></div></div>`;
     }).join('');
     zoneResultats.style.display = 'block';
@@ -2650,7 +2867,7 @@ zoneResultats.addEventListener('click', e => {
     if (item.dataset.type === 'geo') {
         if (marqueurRecherche) marqueurRecherche.remove();
         marqueurRecherche = new maplibregl.Marker({color:'#f59e0b'}).setLngLat([lng, lat]).addTo(map);
-        map.flyTo({center:[lng, lat], zoom:12});
+        map.flyTo({center:[lng, lat], zoom:parseInt(item.dataset.z || '12', 10), duration:1200});
         toast(item.querySelector('b').textContent);
         return;
     }

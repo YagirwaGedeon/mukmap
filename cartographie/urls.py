@@ -93,6 +93,7 @@ urlpatterns = [
     path('geometrie/couche/<int:pk>/metadonnees/', views.couche_metadonnees, name='couche_metadonnees'),
     path('administration/couches/', views.admin_couches, name='admin_couches'),
     path('geometrie/donnees/', views.geometrie_donnees, name='geometrie_donnees'),
+    path('geometrie/geocoder/', views.geocoder_geographique, name='geocoder_geographique'),
     path('points/donnees/', views.points_donnees, name='points_donnees'),
     path('dessin/sauvegarder/', views.dessin_save, name='dessin_save'),
     path('geometrie/<int:pk>/supprimer/', views.geometrie_delete, name='geometrie_delete'),

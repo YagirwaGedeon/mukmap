@@ -1,7 +1,10 @@
 import json
 import re
+import time
 import base64
 import codecs
+import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape as _xml_escape
 import zipfile
@@ -6236,3 +6239,175 @@ def api_imagerie_visibilite(request, pk):
     obj.visibilite = bool(data.get('visible', not obj.visibilite))
     obj.save(update_fields=['visibilite'])
     return JsonResponse({'ok': True, 'visible': obj.visibilite})
+
+
+# ─── GÉOCODAGE PROFESSIONNEL (CARTES) ───────────────────────────
+# Proxy serveur : les navigateurs ne peuvent pas interroger Nominatim
+# directement (CORS) ; le proxy centralise le User-Agent (obligatoire),
+# le cache mémoire (5 min) et un fournisseur de secours (Photon).
+
+_GEOCODE_CACHE = {}
+_GEOCODE_CACHE_DUREE = 300
+_GEOCODE_UA = 'Mukmap/1.0 (recherche de lieux cartographiques SIG)'
+
+
+def _dms_vers_decimal(texte):
+    """Convertit une saisie de coordonnées (décimales ou DMS) en (lat, lon).
+
+    Accepte : "6.1257, 29.5611", "6°7'32.4\"S 29°33'40\"E",
+    "6 7 32.4 S 29 33 40 E", "S6.1257 E29.5611".
+    """
+    if not texte:
+        return None
+    t = texte.strip().lower()
+    for a, b in (('°', ' '), ('’', "'"), ('′', ' '), ('″', ' '), ('"', ' '), ("'", ' ')):
+        t = t.replace(a, b)
+    t = re.sub(r'\s+', ' ', t).strip()
+    if not t:
+        return None
+    # 1) Paire décimale simple : -12.34, 45.67
+    m = re.match(r'^(-?\d+(?:[.,]\d+)?)[\s,;]+(-?\d+(?:[.,]\d+)?)$', t)
+    if m:
+        lat = float(m.group(1).replace(',', '.'))
+        lon = float(m.group(2).replace(',', '.'))
+        if -90 <= lat <= 90 and -180 <= lon <= 180:
+            return (lat, lon)
+        return None
+    # 2) DMS : lat [N/S] puis lon [E/O], chaque direction en préfixe ou suffixe.
+    m2 = re.fullmatch(
+        r'^(?P<lat>(?P<lp>[ns]?)\s*(?P<ld>\d+(?:[.,]\d+)?)'
+        r'(?:\s+(?P<lm>\d+(?:[.,]\d+)?))?(?:\s+(?P<ls>\d+(?:[.,]\d+)?))?)'
+        r'(?:\s*(?P<lq>[ns])\s*|\s+)'
+        r'(?P<lon>(?P<ep>[ew]?)\s*(?P<ed>\d+(?:[.,]\d+)?)'
+        r'(?:\s+(?P<em>\d+(?:[.,]\d+)?))?(?:\s+(?P<es>\d+(?:[.,]\d+)?))?)'
+        r'(?:\s*(?P<eq>[ew])\s*)?$', t)
+    if not m2:
+        return None
+
+    def _val(gd, gm, gs, signe_negatif):
+        try:
+            deg = float(gd.replace(',', '.'))
+            if deg > 180:
+                return None
+            mn = float(gm or 0)
+            sec = float(gs or 0)
+        except (TypeError, ValueError):
+            return None
+        if mn >= 60 or sec >= 60:
+            return None
+        val = deg + mn / 60.0 + sec / 3600.0
+        return -val if signe_negatif else val
+
+    lat_dir = (m2.group('lp') or '') + (m2.group('lq') or '')
+    lon_dir = (m2.group('ep') or '') + (m2.group('eq') or '')
+    if not lat_dir or not lon_dir:
+        return None
+    lat = _val(m2.group('ld'), m2.group('lm'), m2.group('ls'), 's' in lat_dir)
+    lon = _val(m2.group('ed'), m2.group('em'), m2.group('es'), 'w' in lon_dir)
+    if lat is None or lon is None:
+        return None
+    if -90 <= lat <= 90 and -180 <= lon <= 180:
+        return (lat, lon)
+    return None
+
+
+def _geocode_nominatim(q, langue):
+    params = {
+        'q': q, 'format': 'jsonv2', 'limit': '6',
+        'addressdetails': '1', 'accept-language': langue or 'fr',
+    }
+    req = urllib.request.Request(
+        'https://nominatim.openstreetmap.org/search?' + urllib.parse.urlencode(params),
+        headers={'User-Agent': _GEOCODE_UA})
+    with urllib.request.urlopen(req, timeout=6) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
+
+def _geocode_photon(q, langue):
+    params = {'q': q, 'limit': '6'}
+    if langue:
+        params['lang'] = langue
+    req = urllib.request.Request(
+        'https://photon.komoot.io/api/?' + urllib.parse.urlencode(params),
+        headers={'User-Agent': _GEOCODE_UA})
+    with urllib.request.urlopen(req, timeout=6) as resp:
+        data = json.loads(resp.read().decode('utf-8'))
+    return data.get('features') or []
+
+
+def geocoder_geographique(request):
+    """Recherche géographique professionnelle : proxy serveur, cache, secours."""
+    if request.method != 'GET':
+        return JsonResponse({'erreur': 'Méthode non autorisée.'}, status=405)
+    q = (request.GET.get('q') or '').strip()[:200]
+    if not q:
+        return JsonResponse({'resultats': []})
+    langue = (request.GET.get('lang') or langue_active(request) or 'fr')[:2]
+
+    coords = _dms_vers_decimal(q)
+    if coords:
+        lat, lon = coords
+        return JsonResponse({'resultats': [{
+            'nom': q, 'lat': lat, 'lon': lon, 'type': 'coord',
+            'sous': '%.6f, %.6f' % (lat, lon),
+        }]})
+
+    cle = (q + '|' + langue).lower()
+    maintenant = time.time()
+    if cle in _GEOCODE_CACHE:
+        ts, donnees = _GEOCODE_CACHE[cle]
+        if maintenant - ts < _GEOCODE_CACHE_DUREE:
+            return JsonResponse({'resultats': donnees})
+
+    try:
+        brut = _geocode_nominatim(q, langue)
+        fournisseur = 'nominatim'
+    except Exception:
+        try:
+            brut = _geocode_photon(q, langue)
+            fournisseur = 'photon'
+        except Exception:
+            return JsonResponse({'erreur': 'Géocodage indisponible.', 'resultats': []}, status=503)
+
+    resultats = []
+    for item in brut:
+        try:
+            if fournisseur == 'nominatim':
+                lat = float(item.get('lat'))
+                lon = float(item.get('lon'))
+                add = item.get('address') or {}
+                type_ = item.get('type') or item.get('class') or 'lieu'
+                nom = item.get('name') or item.get('display_name', '').split(',')[0]
+                sous = item.get('display_name') or ''
+                pays = add.get('country') or ''
+                region = add.get('state') or add.get('province') or ''
+                ville = (add.get('city') or add.get('town')
+                         or add.get('village') or add.get('municipality') or '')
+            else:
+                props = item.get('properties') or {}
+                geom = item.get('geometry') or {}
+                coords_geo = geom.get('coordinates') or []
+                if len(coords_geo) < 2:
+                    continue
+                lon = float(coords_geo[0])
+                lat = float(coords_geo[1])
+                type_ = props.get('osm_value') or props.get('type') or 'lieu'
+                nom = props.get('name') or ''
+                pays = props.get('country') or ''
+                region = props.get('state') or ''
+                ville = (props.get('city') or props.get('town')
+                         or props.get('village') or '')
+                sous = ', '.join(x for x in [ville, region, pays] if x) or nom
+            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                continue
+            resultats.append({
+                'nom': nom or 'Lieu', 'lat': lat, 'lon': lon,
+                'type': type_, 'sous': sous, 'pays': pays,
+                'region': region, 'ville': ville, 'fournisseur': fournisseur,
+            })
+        except (TypeError, ValueError):
+            continue
+    if len(_GEOCODE_CACHE) > 200:
+        _GEOCODE_CACHE.clear()
+    _GEOCODE_CACHE[cle] = (maintenant, resultats)
+    return JsonResponse({'resultats': resultats, 'fournisseur': fournisseur})

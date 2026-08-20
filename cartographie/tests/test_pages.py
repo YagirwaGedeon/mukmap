@@ -73,6 +73,16 @@ class TestsPages(BaseCartographieTest):
                          'window.CATS = CATS;'):
             self.assertIn(marqueur, contenu, f'marqueur export {marqueur}')
 
+    def test_carte_systeme_pro_cartes(self):
+        contenu = self.page_carte()
+        for marqueur in ('btn-statut-sources', 'btn-ombrage', 'pro-barre-statut', 'chargement-tuiles',
+                         'sources-cartographiques.js?v=1', 'basemap-selector.js?v=28',
+                         'geometrie/geocoder/', 'appliquerOmbrageRelief', 'fallback_basemap',
+                         'TYPE_GEO_EMOJI', 'versDMS', 'zoomPourTypeGeo', 'fondsPourStatut'):
+            self.assertIn(marqueur, contenu, f'marqueur CARTES {marqueur}')
+        self.assertNotIn('https://nominatim.openstreetmap.org/search', contenu,
+                         'le géocodage passe par le proxy serveur')
+
     def test_carte_export_modale_cachee_invite(self):
         self.client.logout()
         r = self.client.get('/')
