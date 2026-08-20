@@ -81,9 +81,12 @@ urlpatterns = [
     path('rapport/telecharger/<str:format>/', views.rapport_telecharger, name='rapport_telecharger'),
 
     path('geometrie/importer/', views.importer_geometrie, name='importer_geometrie'),
+    path('geometrie/gpkg/infos/', views.gpkg_infos, name='gpkg_infos'),
     path('import/choix-colonnes/', views.import_choix_colonnes, name='import_choix_colonnes'),
     path('geometrie/couche/<int:pk>/supprimer/', views.couche_delete, name='couche_delete'),
     path('geometrie/couche/<int:pk>/export-shp/', views.couche_export_shp, name='couche_export_shp'),
+    path('geometrie/couche/<int:pk>/export/<str:format>/', views.couche_export, name='couche_export'),
+    path('export/toutes/<str:format>/', views.export_toutes, name='export_toutes'),
     path('geometrie/couche/<int:pk>/metadonnees/', views.couche_metadonnees, name='couche_metadonnees'),
     path('administration/couches/', views.admin_couches, name='admin_couches'),
     path('geometrie/donnees/', views.geometrie_donnees, name='geometrie_donnees'),

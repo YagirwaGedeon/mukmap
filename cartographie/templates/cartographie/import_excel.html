@@ -185,12 +185,12 @@
 
     <div class="card" id="etape-1">
         <h2>📥 <span data-i18n="etape1_titre">1. Choisissez vos fichiers</span></h2>
-        <p class="sous" data-i18n="formats_supportes">Formats supportés : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (points) · <b>.zip</b> ou <b>.shp</b> + <b>.shx</b>/<b>.dbf</b>/<b>.prj</b>/<b>.cpg</b>/<b>.qmd</b> (Shapefile — déposez tous les fichiers ensemble) · <b>.geojson</b>, <b>.kml</b>, <b>.kmz</b>, <b>.gpx</b> (couches SIG).</p>
+        <p class="sous" data-i18n="formats_supportes">Formats supportés : <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b> (points) · <b>.zip</b> ou <b>.shp</b> + <b>.shx</b>/<b>.dbf</b>/<b>.prj</b>/<b>.cpg</b>/<b>.qmd</b> (Shapefile — déposez tous les fichiers ensemble) · <b>.geojson</b>, <b>.kml</b>, <b>.kmz</b>, <b>.gpx</b>, <b>.gpkg</b>, <b>.dxf</b> (couches SIG).</p>
         <div class="zone-drop" id="zone-drop">
             <div class="grand">📂</div>
             <div><span data-i18n="glissez_deposez"><b>Glissez-déposez</b> vos fichiers ici ou cliquez pour parcourir</span></div>
             <div style="font-size:.75rem;margin-top:6px;opacity:.8;" data-i18n="aide_shapefile">Plusieurs fichiers possibles — la nature de chaque fichier est détectée automatiquement.</div>
-            <input type="file" id="fichier" accept=".xlsx,.xls,.csv,.zip,.shp,.shx,.dbf,.prj,.cpg,.qmd,.geojson,.json,.kml,.kmz,.gpx" multiple hidden>
+            <input type="file" id="fichier" accept=".xlsx,.xls,.csv,.zip,.shp,.shx,.dbf,.prj,.cpg,.qmd,.geojson,.json,.kml,.kmz,.gpx,.gpkg,.dxf" multiple hidden>
         </div>
         <div id="liste-fichiers"></div>
         <div class="alerte err" id="err-1"></div>
@@ -241,6 +241,15 @@
         <input id="val-source" placeholder="Ex. : relevé terrain 2026, ministère…" style="margin-bottom:8px;">
         <label data-i18n="description_label">Description (facultatif)</label>
         <textarea id="val-description" rows="2" placeholder="Décrivez le contenu de la couche…"></textarea>
+        <div id="gpkg-couches" style="display:none;margin-top:6px;">
+            <label data-i18n="gpkg_couches_label">Couches du GeoPackage (tout décocher = tout importer)</label>
+            <div id="gpkg-couches-liste" style="display:grid;gap:6px;margin-bottom:10px;"></div>
+        </div>
+        <div id="dxf-crs" style="display:none;margin-top:6px;">
+            <label data-i18n="dxf_crs_label">Projection du dessin (EPSG)</label>
+            <input id="dxf-crs-val" type="number" placeholder="Ex. 4326 (WGS84), 2154 (Lambert-93), 3857…">
+            <p class="sous" data-i18n="dxf_crs_aide">Laissez vide si les coordonnées du dessin sont déjà en WGS84 (lat/long).</p>
+        </div>
         <div class="alerte err" id="err-3"></div>
         <div class="actions">
             <button class="btn" id="retour-3b">← <span data-i18n="retour">Retour</span></button>
@@ -364,10 +373,11 @@
 const CSRF = '{{ csrf_token }}';
 const URL_IMPORT_POINTS = '{% url "importer_excel_v2" %}';
 const URL_IMPORT_COUCHE = '{% url "importer_geometrie" %}';
+const URL_INFOS_GPKG = '{% url "gpkg_infos" %}';
 const URL_CARTE = '{% url "index_cartographie" %}';
 const t = (cle, defaut) => (window.mukmapT ? window.mukmapT(cle, defaut) : (defaut || cle));
 const EXT_POINTS = ['.xlsx', '.xls', '.csv'];
-const EXT_SIG = ['.zip', '.shp', '.geojson', '.json', '.kml', '.kmz', '.gpx'];
+const EXT_SIG = ['.zip', '.shp', '.geojson', '.json', '.kml', '.kmz', '.gpx', '.gpkg', '.dxf'];
 const EXT_SIDECARS = ['.cpg', '.dbf', '.prj', '.qmd', '.shx', '.shpx'];
 const PALETTE = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#ec4899'];
 const PRESETS = ['#3388ff', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#14b8a6'];
@@ -814,10 +824,21 @@ function renderEtape2() {
         $('panneau-points').style.display = 'none';
         $('etape2-sous').textContent = f.file.name;
         renderStructure(f);
-        $('sig-type').textContent = a.sigType ? (TYPES_SIG[a.sigType] || a.sigType) : t('type_inconnu', 'Type inconnu');
-        $('sig-count').textContent = a.sigCount != null ? `${a.sigCount} ${t('geometries', 'géométrie(s)')}` : t('analyse_serveur', 'Analyse côté serveur');
-        $('sig-proj').textContent = f.epsg ? `Projection : EPSG:${f.epsg} ✓` : t('projection_non_fournie', 'Projection : ⚠️ non fournie');
-        $('sig-enc').textContent = f.encodage ? `Encodage : ${f.encodage} ✓` : t('encodage_defaut', 'Encodage : UTF-8 par défaut');
+        if (f.ext === '.gpkg' && f.gpkgCouches && f.gpkgCouches.length) {
+            $('sig-type').textContent = 'GeoPackage';
+            $('sig-count').textContent = `${f.gpkgCouches.length} ${t('gpkg_couches', 'couche(s) dans ce GeoPackage')}`;
+            const srids = [...new Set(f.gpkgCouches.map(c => c.srid).filter(Boolean))];
+            $('sig-proj').textContent = srids.length ? `Projection : ${srids.map(s => 'EPSG:' + s).join(', ')}` : t('projection_non_fournie', 'Projection : ⚠️ non fournie');
+        } else if (f.ext === '.dxf') {
+            $('sig-type').textContent = 'DXF (AutoCAD)';
+            $('sig-count').textContent = t('analyse_serveur', 'Analyse côté serveur');
+            $('sig-proj').textContent = t('dxf_proj_aide', 'Projection : ⚠️ à préciser à l\'étape 3 si le dessin n\'est pas en WGS84');
+        } else {
+            $('sig-type').textContent = a.sigType ? (TYPES_SIG[a.sigType] || a.sigType) : t('type_inconnu', 'Type inconnu');
+            $('sig-count').textContent = a.sigCount != null ? `${a.sigCount} ${t('geometries', 'géométrie(s)')}` : t('analyse_serveur', 'Analyse côté serveur');
+            $('sig-proj').textContent = f.epsg ? `Projection : EPSG:${f.epsg} ✓` : t('projection_non_fournie', 'Projection : ⚠️ non fournie');
+            $('sig-enc').textContent = f.encodage ? `Encodage : ${f.encodage} ✓` : t('encodage_defaut', 'Encodage : UTF-8 par défaut');
+        }
         $('sig-colonnes').innerHTML = a.colonnes.length ? a.colonnes.map(c => `<span class="chip">${c}</span>`).join('') : `<span class="chip">${t('aucune_colonne', 'aucun attribut détecté')}</span>`;
         renderAvertissements(f);
     }
@@ -857,6 +878,26 @@ function renderEtape3() {
             <div class="rv-item"><b>${a.colonnes.length}</b><span>${t('colonnes', 'attribut(s)')}</span></div>
         </div>
         <div style="margin-top:12px;">${fichListe}</div>`;
+    }
+    const gpkgEl = $('gpkg-couches');
+    const dxfEl = $('dxf-crs');
+    if (f.ext === '.gpkg' && f.gpkgCouches && f.gpkgCouches.length) {
+        if (gpkgEl) {
+            gpkgEl.style.display = '';
+            const liste = $('gpkg-couches-liste');
+            if (liste && liste.dataset.init !== f.file.name) {
+                liste.dataset.init = f.file.name;
+                liste.innerHTML = f.gpkgCouches.map(c =>
+                    `<label class="rv-fich ok" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:4px;">
+                        <input type="checkbox" value="${String(c.nom || '').replace(/"/g, '&quot;')}" checked>
+                        <b>${c.nom || '?'}</b> <em style="font-weight:normal;">${c.type || '?'} · ${c.nb != null ? c.nb : '?'} géom.${c.srid ? ' · EPSG:' + c.srid : ''}</em>
+                    </label>`).join('');
+            }
+        }
+        if (dxfEl) dxfEl.style.display = 'none';
+    } else {
+        if (gpkgEl) gpkgEl.style.display = 'none';
+        if (dxfEl) dxfEl.style.display = f.ext === '.dxf' ? '' : 'none';
     }
     $('err-3').style.display = 'none';
 }
@@ -1125,6 +1166,15 @@ async function importerCouche(f) {
     if (src && src.value.trim()) fd.append('source', src.value.trim());
     const desc = $('val-description');
     if (desc && desc.value.trim()) fd.append('description', desc.value.trim());
+    if (f.ext === '.gpkg') {
+        const cases = document.querySelectorAll('#gpkg-couches-liste input[type="checkbox"]:checked');
+        const noms = [...cases].map(c => c.value);
+        if (noms.length) fd.append('couches_gpkg', JSON.stringify(noms));
+    }
+    if (f.ext === '.dxf') {
+        const crs = $('dxf-crs-val');
+        if (crs && crs.value.trim()) fd.append('crs_dxf', crs.value.trim());
+    }
     const rep = await fetch(URL_IMPORT_COUCHE, {
         method: 'POST', credentials: 'same-origin', headers: { 'X-CSRFToken': CSRF }, body: fd
     });
@@ -1185,7 +1235,31 @@ async function lancerImport() {
                     if (donnees.couches && donnees.couches.length) {
                         donnees.couches.forEach(c => res.couches.push(c.nom));
                         donnees.couche_ids.forEach(id => res.coucheIds.push(id));
-                    } else {
+        } else if (entree.type === 'sig' && ext === '.gpkg') {
+            const buf = await lireFichier(entree.file, 'readAsArrayBuffer');
+            const fd = new FormData();
+            fd.append('fichier_geom', new File([buf], entree.file.name, { type: 'application/geopackage+sqlite3' }));
+            const rep = await fetch(URL_INFOS_GPKG, {
+                method: 'POST', credentials: 'same-origin', headers: { 'X-CSRFToken': CSRF }, body: fd
+            });
+            const donnees = await rep.json();
+            if (!donnees.ok) throw new Error(donnees.erreur || 'GeoPackage illisible.');
+            entree.gpkgCouches = donnees.couches;
+            entree.analyse = {
+                type: 'sig', sigType: null,
+                sigCount: donnees.couches.length ? donnees.couches.reduce((s, c) => s + (c.nb || 0), 0) : null,
+                colonnes: [], valeursCat: {}, categoriesDispo: false
+            };
+            entree.structure = structureDe(entree);
+            entree.etat = 'ok';
+        } else if (entree.type === 'sig' && ext === '.dxf') {
+            entree.analyse = {
+                type: 'sig', sigType: null, sigCount: null,
+                colonnes: [], valeursCat: {}, categoriesDispo: false
+            };
+            entree.structure = structureDe(entree);
+            entree.etat = 'ok';
+        } else {
                         res.couches.push(donnees.nom || f.file.name);
                         if (donnees.couche_id) res.coucheIds.push(donnees.couche_id);
                     }

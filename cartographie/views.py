@@ -34,6 +34,7 @@ from .models import (
     SessionTravail, MeteoActivite
 )
 from .i18n import langue_active
+from . import geo_formats
 
 # ─── HELPERS ───────────────────────────────────────────────────
 
@@ -3388,13 +3389,40 @@ def importer_geometrie(request):
                 request.POST.get('description', '').strip()[:2000],
                 style_valide))
         elif nom_fichier.endswith('.geojson') or nom_fichier.endswith('.json'):
-            couches_importees.append(_importer_geojson(nom_couche, contenu, nom_fichier))
+            try:
+                couches_importees.append(_importer_geojson(nom_couche, contenu, nom_fichier))
+            except ValueError as e:
+                if nom_fichier.endswith('.json'):
+                    geometries = geo_formats.analyser_json_generique(contenu)
+                    couches_importees.append(geo_formats._creer_couche(
+                        nom_couche, nom_fichier, geometries, srid=4326, epsg=4326,
+                        crs_nom='WGS84 (EPSG:4326)', format_nom='JSON'))
+                else:
+                    raise e
+        elif nom_fichier.endswith('.gpkg'):
+            noms_gpkg = None
+            brut = request.POST.get('couches_gpkg')
+            if brut:
+                try:
+                    noms_gpkg = json.loads(brut)
+                except (ValueError, TypeError):
+                    noms_gpkg = None
+            couches_importees.extend(geo_formats.importer_gpkg(contenu, nom_couche, nom_fichier, noms_gpkg))
+        elif nom_fichier.endswith('.dxf'):
+            crs_brut = request.POST.get('crs_dxf', '').strip()
+            epsg_dxf = None
+            if crs_brut:
+                try:
+                    epsg_dxf = int(float(crs_brut))
+                except (ValueError, TypeError):
+                    epsg_dxf = None
+            couches_importees.append(geo_formats.importer_dxf(contenu, nom_couche, nom_fichier, epsg_dxf))
         elif nom_fichier.endswith('.csv'):
             couches_importees.append(_importer_csv(nom_couche, contenu, nom_fichier))
         else:
             if est_ajax:
-                return JsonResponse({'ok': False, 'erreur': "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp (avec .shx, .dbf, .prj, .cpg, .qmd)/.zip"}, status=400)
-            messages.error(request, "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.shp (avec .shx, .dbf, .prj, .cpg, .qmd)/.zip")
+                return JsonResponse({'ok': False, 'erreur': "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.gpkg/.dxf/.shp (avec .shx, .dbf, .prj, .cpg, .qmd)/.zip"}, status=400)
+            messages.error(request, "Format non supporté. Utilisez .geojson/.json/.csv/.kml/.kmz/.gpx/.gpkg/.dxf/.shp (avec .shx, .dbf, .prj, .cpg, .qmd)/.zip")
             return redirect('index_cartographie')
     except AmbiguiteCoordonnees as e:
         if est_ajax:
@@ -4746,6 +4774,147 @@ def couche_export_shp(request, pk):
     reponse = HttpResponse(contenu, content_type='application/zip')
     reponse['Content-Disposition'] = f'attachment; filename="{nom}.shp.zip"'
     return reponse
+
+
+@login_required
+def gpkg_infos(request):
+    """Infos des couches d'un GeoPackage (pour la sélection dans le wizard d'import)."""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'erreur': 'Méthode non autorisée.'}, status=405)
+    fichier = request.FILES.get('fichier_geom')
+    if not fichier or not fichier.name.lower().endswith('.gpkg'):
+        return JsonResponse({'ok': False, 'erreur': 'Fichier .gpkg requis.'}, status=400)
+    try:
+        couches = geo_formats.infos_gpkg(fichier.read())
+    except ValueError as e:
+        return JsonResponse({'ok': False, 'erreur': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'ok': False, 'erreur': f"Impossible de lire ce GeoPackage : {e}"}, status=400)
+    return JsonResponse({'ok': True, 'couches': couches})
+
+
+def _reponse_export(couches, format_export, nom_base):
+    """Construit la réponse HTTP de téléchargement pour un format donné."""
+    premier = couches[0]
+    contenu = None
+    content_type = 'application/octet-stream'
+    ext = ''
+    if format_export == 'geojson':
+        data = geo_formats.exporter_geojson(premier) if len(couches) == 1 else {
+            'type': 'FeatureCollection', 'name': 'mukmap',
+            'features': [f for c in couches for f in geo_formats.exporter_geojson(c)['features']]}
+        contenu = json.dumps(data, ensure_ascii=False, indent=1).encode('utf-8')
+        content_type = 'application/geo+json'
+        ext = '.geojson'
+    elif format_export == 'json':
+        data = geo_formats.exporter_geojson(premier) if len(couches) == 1 else {
+            'type': 'FeatureCollection', 'name': 'mukmap',
+            'features': [f for c in couches for f in geo_formats.exporter_geojson(c)['features']]}
+        contenu = json.dumps(data, ensure_ascii=False, indent=1).encode('utf-8')
+        content_type = 'application/json'
+        ext = '.json'
+    elif format_export == 'kml':
+        morceaux = ['<?xml version="1.0" encoding="UTF-8"?>',
+                    '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>']
+        for i, c in enumerate(couches):
+            morceaux.append(f'<Folder><name>{_xml_escape(c.nom or "Couche")}</name>')
+            kml = geo_formats.exporter_kml(c)
+            morceaux.append(kml[kml.index('<Placemark>'):])
+            morceaux.append('</Folder>')
+        morceaux.append('</Document></kml>')
+        contenu = '\n'.join(morceaux).encode('utf-8')
+        content_type = 'application/vnd.google-earth.kml+xml'
+        ext = '.kml'
+    elif format_export == 'kmz':
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+            if len(couches) == 1:
+                z.writestr('doc.kml', geo_formats.exporter_kml(couches[0]))
+            else:
+                morceaux = ['<?xml version="1.0" encoding="UTF-8"?>',
+                            '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>']
+                for i, c in enumerate(couches):
+                    morceaux.append(f'<Folder><name>{_xml_escape(c.nom or "Couche")}</name>')
+                    kml = geo_formats.exporter_kml(c)
+                    morceaux.append(kml[kml.index('<Placemark>'):])
+                    morceaux.append('</Folder>')
+                morceaux.append('</Document></kml>')
+                z.writestr('doc.kml', '\n'.join(morceaux))
+        contenu = buf.getvalue()
+        content_type = 'application/vnd.google-earth.kmz'
+        ext = '.kmz'
+    elif format_export == 'gpx':
+        if len(couches) == 1:
+            contenu = geo_formats.exporter_gpx(couches[0]).encode('utf-8')
+        else:
+            morceaux = ['<?xml version="1.0" encoding="UTF-8"?>',
+                        '<gpx version="1.1" creator="MUKMAP" xmlns="http://www.topografix.com/GPX/1/1">']
+            for c in couches:
+                gpx = geo_formats.exporter_gpx(c)
+                morceaux.append(gpx[gpx.index('<metadata>'):gpx.index('</gpx>')])
+            morceaux.append('</gpx>')
+            contenu = '\n'.join(morceaux).encode('utf-8')
+        content_type = 'application/gpx+xml'
+        ext = '.gpx'
+    elif format_export == 'gpkg':
+        contenu = geo_formats.exporter_gpkg(couches)
+        content_type = 'application/geopackage+sqlite3'
+        ext = '.gpkg'
+    elif format_export == 'dxf':
+        if len(couches) == 1:
+            contenu = geo_formats.exporter_dxf(couches[0]).encode('utf-8')
+        else:
+            morceaux = ['0', 'SECTION', '2', 'ENTITIES']
+            for c in couches:
+                dxf = geo_formats.exporter_dxf(c)
+                entites = dxf.split('\r\n')
+                try:
+                    entites = entites[entites.index('ENTITIES') + 1:entites.index('ENDSEC')]
+                except ValueError:
+                    continue
+                morceaux.extend(entites)
+            morceaux += ['0', 'ENDSEC', '0', 'EOF']
+            contenu = '\r\n'.join(morceaux).encode('utf-8')
+        content_type = 'application/dxf'
+        ext = '.dxf'
+    else:
+        raise ValueError("Format d'export inconnu.")
+    if contenu is None:
+        raise ValueError("Format d'export inconnu.")
+    reponse = HttpResponse(contenu, content_type=content_type)
+    nom = re.sub(r'[^\w\-. ]+', '', nom_base).strip().replace(' ', '_') or 'couche'
+    nom = re.sub(r'[^\x20-\x7e]+', '', nom)
+    reponse['Content-Disposition'] = f'attachment; filename="{nom}{ext}"'
+    return reponse
+
+
+@login_required
+def couche_export(request, pk, format):
+    """Exporte une couche SIG dans le format demandé (geojson, json, kml, kmz, gpx, gpkg, dxf, shapefile)."""
+    couche = get_object_or_404(CoucheGeometrie, pk=pk)
+    if format == 'shapefile':
+        return couche_export_shp(request, pk)
+    try:
+        return _reponse_export([couche], format, couche.nom or 'couche')
+    except Exception as e:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'ajax' in request.GET:
+            return JsonResponse({'ok': False, 'erreur': f"Erreur d'export : {e}"}, status=400)
+        messages.error(request, f"Erreur d'export : {e}")
+        return redirect('index_cartographie')
+
+
+@login_required
+def export_toutes(request, format):
+    """Exporte toutes les couches actives dans le format demandé."""
+    couches = list(CoucheGeometrie.objects.filter(statut='active').order_by('date_import'))
+    if not couches:
+        messages.error(request, "Aucune couche à exporter.")
+        return redirect('index_cartographie')
+    try:
+        return _reponse_export(couches, format, 'mukmap_toutes_couches')
+    except Exception as e:
+        messages.error(request, f"Erreur d'export : {e}")
+        return redirect('index_cartographie')
 
 
 @login_required
