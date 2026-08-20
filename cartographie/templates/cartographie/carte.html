@@ -2064,6 +2064,7 @@ function noeudCouche(c) {
 function rendreListeCouches() {
     const zone = document.getElementById('liste-couches');
     if (!zone) return;
+    appliquerFiltres();
     zone.innerHTML = '';
     if (!couchesDonnees.length) {
         zone.innerHTML = '<div class="couche-vide" style="font-size:.72rem;color:var(--text-3);padding:4px 6px;">' + ((mukmapT && mukmapT('aucune_couche', 'Aucune couche — importez un GeoJSON, SHP, KML, GPX…')) || 'Aucune couche — importez un GeoJSON, SHP, KML, GPX…') + '</div>';
